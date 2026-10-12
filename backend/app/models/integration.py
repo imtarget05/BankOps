@@ -3,6 +3,8 @@
 Import ngoài không bao giờ ghi thẳng ledger: dữ liệu dừng ở staging,
 chờ human confirm rồi mới tạo draft đi qua approval như mọi phiếu khác.
 """
+from datetime import datetime
+
 from sqlalchemy import (
     Boolean,
     Column,
