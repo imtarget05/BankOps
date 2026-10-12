@@ -4,11 +4,12 @@ Import ngoài không bao giờ ghi thẳng ledger: dữ liệu dừng ở stagin
 chờ human confirm rồi mới tạo draft đi qua approval như mọi phiếu khác.
 """
 from sqlalchemy import (
-    JSON,
     Boolean,
     Column,
+    DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     UniqueConstraint,
 )
@@ -23,10 +24,13 @@ class IntegrationConnection(Base, TimestampMixin):
     id: str = Column(UUID(as_uuid=True), primary_key=True)
     type: str = Column(String(64), nullable=False)
     name: str = Column(String(256), nullable=False)
-    status: str = Column(String(32), nullable=False, default="connected")
+    status: str = Column(String(32), nullable=False, default="pending_test")
     secret_ref: str = Column(String(256), nullable=True)
     config_json: dict = Column(JSON, nullable=True)
     owner_id: str = Column(UUID(as_uuid=True), nullable=True)
+    schema_json: dict = Column(JSON, nullable=True)
+    last_tested_at: datetime = Column(DateTime(timezone=True), nullable=True)
+    last_error: str = Column(String(512), nullable=True)
 
 
 class IntegrationRun(Base, TimestampMixin):
@@ -37,11 +41,16 @@ class IntegrationRun(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("integration_connections.id"), nullable=False
     )
     status: str = Column(String(32), nullable=False, default="staged")
-    source_fingerprint: str = Column(String(128), nullable=True)
+    source_fingerprint: str = Column(String(128), nullable=False)
     mapping_version: int = Column(Integer, nullable=False, default=1)
     valid_count: int = Column(Integer, nullable=False, default=0)
     invalid_count: int = Column(Integer, nullable=False, default=0)
     external_event_id: str = Column(String(256), nullable=True)
+    phase: str = Column(String(32), nullable=False, default="staged")
+    finished_at: datetime = Column(DateTime(timezone=True), nullable=True)
+    error_code: str = Column(String(64), nullable=True)
+    message_key: str = Column(String(256), nullable=True)
+    message_params_json: dict = Column(JSON, nullable=True)
 
 
 class IntegrationStagingRow(Base):

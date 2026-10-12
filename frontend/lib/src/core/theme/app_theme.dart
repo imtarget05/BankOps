@@ -74,9 +74,9 @@ class AppStatusColors extends ThemeExtension<AppStatusColors> {
 }
 
 abstract final class AppTheme {
-  static const Color navy = Color(0xFF17365D);
-  static const Color teal = Color(0xFF007F86);
-  static const Color surface = Color(0xFFF6F8FA);
+  static const Color navy = Color(0xFF1E3A8A);
+  static const Color teal = Color(0xFF059669);
+  static const Color surface = Color(0xFFF8FAFC);
 
   static const _seed = navy;
 
@@ -84,15 +84,18 @@ abstract final class AppTheme {
   static ThemeData dark() => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
+    final isLight = brightness == Brightness.light;
     final scheme = ColorScheme.fromSeed(
       seedColor: _seed,
       brightness: brightness,
     ).copyWith(
-      primary: brightness == Brightness.light ? navy : const Color(0xFF9DB8E0),
+      primary: isLight ? navy : const Color(0xFF60A5FA),
       secondary: teal,
-      surface: brightness == Brightness.light
-          ? surface
-          : const Color(0xFF101418),
+      surface: isLight ? surface : const Color(0xFF0B1120),
+      surfaceContainerLowest: isLight ? Colors.white : const Color(0xFF0F172A),
+      surfaceContainerLow: isLight ? Colors.white : const Color(0xFF1E293B),
+      surfaceContainer: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+      outlineVariant: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
     );
     final base = ThemeData(
       useMaterial3: true,
@@ -132,7 +135,7 @@ abstract final class AppTheme {
           borderSide: BorderSide(color: scheme.primary, width: 1.5),
         ),
         filled: true,
-        fillColor: scheme.surfaceContainerLow,
+        fillColor: isLight ? Colors.white : const Color(0xFF0F172A),
         isDense: true,
         hintStyle: TextStyle(color: scheme.onSurfaceVariant),
         contentPadding: const EdgeInsets.symmetric(
@@ -143,10 +146,10 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          side: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
         ),
-        color: scheme.surfaceContainerLow,
+        color: isLight ? Colors.white : const Color(0xFF1E293B),
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,

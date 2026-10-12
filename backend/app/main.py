@@ -17,6 +17,7 @@ from app.api.middleware.correlation import CorrelationIdMiddleware
 from app.api.openapi import custom_openapi
 from app.api.routes import (
     activity,
+    ai,
     approvals,
     auth,
     auth_google,
@@ -163,6 +164,7 @@ async def unhandled_exception_envelope(request: Request, exc: Exception):
 register_error_handlers(app)
 
 def _mount_routes(target: FastAPI | APIRouter, *, include_in_schema: bool = True) -> None:
+    target.include_router(ai.router, tags=["ai"], include_in_schema=include_in_schema)
     target.include_router(health.router, prefix="/health", tags=["health"], include_in_schema=include_in_schema)
     target.include_router(auth.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)
     target.include_router(auth_google.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)

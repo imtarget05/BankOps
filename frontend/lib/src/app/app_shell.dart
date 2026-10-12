@@ -5,8 +5,8 @@ import '../data/models/dtos.dart';
 import '../data/repositories/bankops_repository.dart';
 import '../core/theme/app_tokens.dart';
 import '../core/widgets/app_screen.dart';
-import '../core/widgets/demo_banner.dart';
 import '../core/widgets/user_avatar.dart';
+import 'theme_mode_controller.dart';
 import '../data/repositories/http_bankops_repository.dart';
 import '../features/activity/activity_screen.dart';
 import '../features/approvals/approvals_screen.dart';
@@ -252,57 +252,199 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _navRail({required double width}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isWide = width >= 200;
+
     return Container(
       width: width,
-      color: Theme.of(context).colorScheme.surface,
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-              child: Row(
-                children: [
-                  Icon(Icons.account_balance_wallet_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 6),
-                  Text('BankOps',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  Container(width: 8, height: 8, decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, shape: BoxShape.circle)),
-                  const SizedBox(width: 6),
-                  Text('DEMO', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.primaryContainer, fontWeight: FontWeight.w700)),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        border: Border(
+          right: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E3A8A),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                if (isWide) ...[
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'BankOps',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        Text(
+                          'Enterprise Core',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(radius: 3, backgroundColor: Color(0xFF10B981)),
+                        SizedBox(width: 4),
+                        Text(
+                          'LIVE',
+                          style: TextStyle(
+                            color: Color(0xFF059669),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              itemCount: _items.length,
+              itemBuilder: (context, i) {
                 final item = _items[i];
                 final selected = _index == item.index;
-                final sc = Theme.of(context);
-                return Container(
-                  height: 52,
-                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: selected ? sc.colorScheme.primaryContainer : Colors.transparent, borderRadius: BorderRadius.circular(10)),
+
+                // Category header on wide layout
+                Widget? sectionHeader;
+                if (isWide) {
+                  if (i == 0) {
+                    sectionHeader = _buildNavSectionHeader('VẬN HÀNH KHO QUỸ');
+                  } else if (i == 3) {
+                    sectionHeader = _buildNavSectionHeader('KIỂM SOÁT 4 MẮT');
+                  } else if (i == 5) {
+                    sectionHeader = _buildNavSectionHeader('HỆ THỐNG & ĐỐI SOÁT');
+                  }
+                }
+
+                final navBtn = Container(
+                  height: 44,
+                  margin: const EdgeInsets.symmetric(vertical: 2),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? (isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFEFF6FF))
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: selected
+                        ? Border.all(
+                            color: isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFBFDBFE),
+                            width: 1,
+                          )
+                        : null,
+                  ),
                   child: InkWell(
                     key: Key('nav-${_slugs[item.index]}'),
                     onTap: () => setState(() => _index = item.index),
                     borderRadius: BorderRadius.circular(10),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isWide ? 12 : 8,
+                        vertical: 6,
+                      ),
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: isWide
+                            ? MainAxisAlignment.start
+                            : MainAxisAlignment.center,
                         children: [
-                          Icon(item.icon, size: 22, color: selected ? sc.colorScheme.primary : sc.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 10),
-                          Text(item.label, style: TextStyle(color: selected ? sc.colorScheme.onPrimaryContainer : sc.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                          Icon(
+                            selected ? item.filled : item.icon,
+                            size: 20,
+                            color: selected
+                                ? const Color(0xFF2563EB)
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                          if (isWide) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                item.label,
+                                style: TextStyle(
+                                  color: selected
+                                      ? (isDark ? Colors.white : const Color(0xFF1E3A8A))
+                                      : theme.colorScheme.onSurface,
+                                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                            ),
+                            if (item.index == 4) // Approvals tab badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Text(
+                                  '4-EYES',
+                                  style: TextStyle(
+                                    color: Color(0xFFD97706),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ],
                       ),
                     ),
                   ),
                 );
+
+                if (sectionHeader != null) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      sectionHeader,
+                      navBtn,
+                    ],
+                  );
+                }
+                return navBtn;
               },
-              childCount: _items.length,
             ),
           ),
         ],
@@ -310,51 +452,176 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  Widget _buildNavSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
   PreferredSizeWidget _topBar({SessionScope? session}) {
+    final theme = Theme.of(context);
+    final user = session?.user;
+    final role = user?.roles.isNotEmpty == true ? user!.roles.first.toUpperCase() : 'STAFF';
+
+    Color roleColor;
+    if (role.contains('MAKER')) {
+      roleColor = const Color(0xFF2563EB);
+    } else if (role.contains('CHECKER')) {
+      roleColor = const Color(0xFF7C3AED);
+    } else if (role.contains('ADMIN')) {
+      roleColor = const Color(0xFF059669);
+    } else {
+      roleColor = const Color(0xFF475467);
+    }
+
     return AppBar(
-      title: Text(_titles[_index]),
-      centerTitle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _icons[_index],
+            size: 20,
+            color: const Color(0xFF2563EB),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _titles[_index],
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+          ),
+        ],
+      ),
+      centerTitle: false,
+      backgroundColor: theme.colorScheme.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 1,
       actions: [
-        const DemoBanner(),
-        const SizedBox(width: 8),
         IconButton(
           key: const Key('topbar-refresh-btn'),
-          icon: const Icon(Icons.refresh_outlined),
+          icon: const Icon(Icons.refresh_rounded, size: 20),
           onPressed: _reload,
-          tooltip: 'Làm mới',
+          tooltip: 'Làm mới dữ liệu',
         ),
-        IconButton(icon: const Icon(Icons.settings_outlined), onPressed: _openSettings, tooltip: 'Cài đặt'),
-        const SizedBox(width: 6),
-        PopupMenuButton<String>(
-          key: const Key('topbar-user-menu'),
-          icon: session?.user != null
-              ? UserAvatar(name: session!.user!.displayName, size: 34)
-              : const UserAvatar(size: 34),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          tooltip: session?.user?.displayName ?? 'Người dùng',
-          itemBuilder: (context) => [
-            if (session?.user != null) ...[
-              const PopupMenuItem(
-                value: 'settings',
-                child: ListTile(leading: Icon(Icons.settings, size: 18), title: Text('Cài đặt'), contentPadding: EdgeInsets.zero),
-              ),
-              const PopupMenuDivider(),
-            ],
-            const PopupMenuItem(
-              key: Key('menu-signout'),
-              value: 'signout',
-              child: ListTile(leading: Icon(Icons.exit_to_app, size: 18), title: Text('Đăng xuất'), contentPadding: EdgeInsets.zero),
-            ),
-          ],
-          onSelected: (v) {
-            if (v == 'settings') _openSettings();
-            if (v == 'signout') _signOut();
+        IconButton(
+          icon: Icon(
+            theme.brightness == Brightness.dark
+                ? Icons.light_mode_outlined
+                : Icons.dark_mode_outlined,
+            size: 20,
+          ),
+          tooltip: 'Chuyển giao diện Sáng / Tối',
+          onPressed: () {
+            // ignore: use_build_context_synchronously
+            final ctrl = Provider.of<ThemeModeController?>(context, listen: false);
+            if (ctrl != null) {
+              ctrl.setMode(
+                theme.brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark,
+              );
+            }
           },
         ),
+        IconButton(
+          icon: const Icon(Icons.settings_outlined, size: 20),
+          onPressed: _openSettings,
+          tooltip: 'Cài đặt hệ thống',
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 36,
+          padding: const EdgeInsets.only(left: 8, right: 4),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: roleColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  role,
+                  style: TextStyle(
+                    color: roleColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                user?.displayName ?? 'Khách',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              PopupMenuButton<String>(
+                key: const Key('topbar-user-menu'),
+                icon: user != null
+                    ? UserAvatar(name: user.displayName, size: 26)
+                    : const UserAvatar(size: 26),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                tooltip: user?.displayName ?? 'Tài khoản',
+                itemBuilder: (context) => [
+                  if (user != null) ...[
+                    PopupMenuItem(
+                      enabled: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            user.username,
+                            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'settings',
+                      child: ListTile(
+                        leading: Icon(Icons.settings, size: 18),
+                        title: Text('Cài đặt'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
+                  const PopupMenuItem(
+                    key: Key('menu-signout'),
+                    value: 'signout',
+                    child: ListTile(
+                      leading: Icon(Icons.logout_rounded, size: 18, color: Colors.red),
+                      title: Text('Đăng xuất', style: TextStyle(color: Colors.red)),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+                onSelected: (v) {
+                  if (v == 'settings') _openSettings();
+                  if (v == 'signout') _signOut();
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
       ],
     );
   }
@@ -424,31 +691,7 @@ class _DashboardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sc = Theme.of(context);
-    final auth = context.watch<AuthService>();
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      decoration: BoxDecoration(color: sc.colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(AppRadius.md)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          UserAvatar(name: auth.user?.displayName, size: 36),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Xin chào, ${auth.user?.displayName ?? 'người dùng'}',
-                    style: sc.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                Text('Chức năng của bạn', style: sc.textTheme.bodySmall),
-              ],
-            ),
-          ),
-          const Icon(Icons.keyboard_arrow_down_outlined, size: 20, color: Colors.grey),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 }
 
