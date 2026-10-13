@@ -169,20 +169,36 @@ cp infra/cloudflare-pages/_redirects frontend/build/web/
 
 ---
 
-## BƯỚC 5 — Cấu hình CI/CD GitHub Actions
+## BƯỚC 5 — CI/CD GitHub Actions
 
-Vào **GitHub → Settings → Secrets and variables → Actions**, thêm:
+### 5a. Secrets cần thiết
+
+Vào **GitHub → Settings → Secrets and variables → Actions → New repository secret**:
 
 | Secret | Giá trị |
 |--------|---------|
-| `CLOUDFLARE_API_TOKEN` | Tạo tại https://dash.cloudflare.com/profile/api-tokens (template: "Edit Cloudflare Workers") |
-| `CLOUDFLARE_ACCOUNT_ID` | Xem ở sidebar Cloudflare dashboard |
-| `API_BASE_URL` | `https://bankops-api.<account>.workers.dev` |
+| `CLOUDFLARE_API_TOKEN` | Tạo tại https://dash.cloudflare.com/profile/api-tokens — template **"Edit Cloudflare Workers"** (đủ quyền deploy Worker + Pages). KHÔNG dùng lại token đã từng dán vào code/docs — revoke token cũ trước khi tạo token mới. |
 
-Từ nay, mỗi khi push lên `main`:
-- `backend/**` thay đổi → không deploy (Worker không cần Python)
-- `infra/cloudflare-worker/**` thay đổi → tự deploy Worker
-- `frontend/**` thay đổi → tự build Flutter + deploy Pages
+`CLOUDFLARE_ACCOUNT_ID` và `API_BASE_URL` không cần thêm secret — đã cấu hình
+trong workflow (account `8788242370433563100da7c3623e1b3c`, worker `bankops-api`).
+
+### 5b. Workflow `.github/workflows/deploy.yml`
+
+Deploy chạy theo **tag**, không tự chạy khi push `main`:
+
+| Hành động | Kết quả |
+|-----------|---------|
+| `git tag prod-v1.0.0 && git push origin prod-v1.0.0` | Deploy Worker prod + Pages `bankops-web` |
+| `git tag staging-v1.0.0 && git push origin staging-v1.0.0` | Deploy Worker staging + Pages `bankops-web-staging` |
+| Tab **Actions** → **Deploy** → **Run workflow** | Chọn environment (staging/prod) |
+
+Quy trình mỗi lần chạy: typecheck + lint + `wrangler deploy --dry-run` (validate
+bindings) → build Flutter Web với `--dart-define=API_BASE_URL` đúng môi trường →
+deploy Worker → deploy Pages (kèm `_headers`/`_redirects`) → smoke test
+`/api/v1/health/live`.
+
+CI thường (`ci.yml`) vẫn chạy trên mỗi push/PR vào `main`: ruff, pytest,
+flutter analyze/test, worker typecheck, docker build.
 
 ---
 
