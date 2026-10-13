@@ -6,9 +6,9 @@ không cần PostgreSQL, Docker daemon hay Flutter.
 from __future__ import annotations
 
 import re
+import tomllib
 
 import pytest
-import tomllib
 from conftest import BACKEND_DIR, REPO_DIR, run
 
 try:  # pyyaml không nằm trong dependency của dự án -> không được làm test collection chết

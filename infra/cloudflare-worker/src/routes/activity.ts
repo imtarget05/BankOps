@@ -62,7 +62,6 @@ activityRoutes.get("/stream", async (c) => {
     await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (c as any).executionCtx?.waitUntil(
     (async () => {
       try {

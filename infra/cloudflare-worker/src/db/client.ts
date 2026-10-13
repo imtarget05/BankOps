@@ -30,7 +30,6 @@ export function db<T = Record<string, unknown>>(databaseUrl: string) {
     strings: TemplateStringsArray,
     ...values: unknown[]
   ): Promise<T[]> => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (sql as any)(strings, ...values);
     return result as T[];
   };

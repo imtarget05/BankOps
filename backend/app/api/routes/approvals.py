@@ -101,7 +101,7 @@ async def approval_event_generator(request: Request, user: User) -> AsyncGenerat
             try:
                 payload = await asyncio.wait_for(queue.get(), timeout=15.0)
                 yield f"event: approval_update\ndata: {payload}\n\n"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield ": keepalive ping\n\n"
     finally:
         await approval_event_bus.unsubscribe(queue)
