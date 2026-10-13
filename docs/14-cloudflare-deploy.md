@@ -2,6 +2,13 @@
 
 > **Mục tiêu**: Nhân viên thu chi mở app lúc **bất kỳ giờ nào** đều dùng được ngay, không chờ server khởi động.
 
+## Trạng thái triển khai (2026-10-13)
+
+- Worker config/typecheck/dry-run đã xác minh cho production và staging; chưa deploy thật.
+- Revoke/rotate mọi Cloudflare API token đã từng có trong repository history trước khi cấp credentials mới.
+- Production cần secret `SUPERVISOR_PIN` riêng, Neon `DATABASE_URL`, `JWT_SECRET`; staging secrets phải set tách riêng.
+- Chỉ dùng `123456` khi `APP_ENV=demo`; không dùng PIN demo như production credential.
+
 ## Tổng quan kiến trúc
 
 ```
@@ -61,19 +68,11 @@ npm install  # cài dependencies
 npx wrangler login  # mở browser đăng nhập
 ```
 
-### 3b. Tạo KV namespace
+### 3b. Workers AI và rate limits
 
-```bash
-npx wrangler kv namespace create BANKOPS_KV
-# Copy ID được in ra, ví dụ: abc123...
-```
+`infra/cloudflare-worker/wrangler.toml` đã khai báo Workers AI binding (`AI`) và hai Rate Limiting bindings (`AI_CHAT_LIMIT`, `AI_ASSESSMENT_LIMIT`). Chọn các `namespace_id` dạng số chưa dùng trong account Cloudflare của bạn; production và staging phải dùng namespace IDs riêng. Wrangler v4.36.0 trở lên là bắt buộc cho Rate Limiting bindings.
 
-Cập nhật `infra/cloudflare-worker/wrangler.toml`:
-```toml
-[[kv_namespaces]]
-binding = "BANKOPS_KV"
-id = "abc123..."  # thay PLACEHOLDER_KV_ID bằng ID thực
-```
+Cloudflare Rate Limiting là permissive/eventually consistent và được tính riêng theo Cloudflare location; dùng để giới hạn chi phí AI, không làm ràng buộc kiểm soát nghiệp vụ hay kế toán chính xác.
 
 ### 3c. Đặt secrets
 
@@ -85,15 +84,37 @@ echo "postgresql://user:password@ep-xxx.ap-southeast-1.aws.neon.tech/bankops?ssl
 # JWT secret (tạo ngẫu nhiên)
 openssl rand -hex 32 | npx wrangler secret put JWT_SECRET
 
-# Session secret
+# Session secret (giữ tương thích ứng dụng)
 openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
+
+# High-risk approval PIN: MUST be unique and secret in production.
+# The fixed PIN 123456 is accepted only when APP_ENV=demo.
+read -s "SUPERVISOR_PIN?Enter production supervisor PIN: "
+echo "$SUPERVISOR_PIN" | npx wrangler secret put SUPERVISOR_PIN
+unset SUPERVISOR_PIN
+
+# Secrets for staging must be set separately with --env staging.
 ```
+
+Also configure the required Workers AI REST credentials only on FastAPI deployments that use `AI_PROVIDER=cloudflare` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`). Store them as provider secrets, not in Wrangler vars or source.
 
 ### 3d. Deploy Worker
 
+After replacing the example rate-limit namespace IDs with unused numeric IDs for your Cloudflare account, and setting production secrets:
+
 ```bash
-npx wrangler deploy
+npx wrangler deploy --env=""
 # Output: https://bankops-api.<account-name>.workers.dev
+```
+
+Staging needs its own secrets and namespaces before deployment:
+
+```bash
+npx wrangler secret put DATABASE_URL --env staging
+npx wrangler secret put JWT_SECRET --env staging
+npx wrangler secret put SESSION_SECRET --env staging
+npx wrangler secret put SUPERVISOR_PIN --env staging
+npx wrangler deploy --env staging
 ```
 
 ### 3e. Test
@@ -133,7 +154,7 @@ flutter build web \
 cd infra/cloudflare-worker  # wrangler đang ở đây
 npx wrangler pages project create bankops-web  # lần đầu
 
-npx wrangler pages deploy ../frontend/build/web \
+npx wrangler pages deploy ../../frontend/build/web \
   --project-name=bankops-web
 # URL: https://bankops-web.pages.dev
 ```
@@ -204,7 +225,7 @@ done
 | Vấn đề | Giải pháp |
 |--------|-----------|
 | `DATABASE_URL not set` | Chạy lại `wrangler secret put DATABASE_URL` |
-| `KV namespace not found` | Cập nhật ID trong `wrangler.toml` |
+| Rate limit binding lỗi khi deploy | Dùng wrangler >= 4.36.0; `namespace_id` là số tự chọn (1–9999999999), không phải KV ID |
 | Flutter app không gọi được API | Kiểm tra `API_BASE_URL` trong build args |
 | CORS error | CORS đã cấu hình `*` cho demo; nếu production thêm domain vào `cors()` trong `index.ts` |
 | `bcrypt verify failed` | Password hash từ FastAPI cũ vẫn dùng được vì `bcryptjs` tương thích |
@@ -217,7 +238,6 @@ done
 |---------|-----------|--------------|
 | CF Workers | 100,000 req/ngày | ~1,000 req/ngày (team nhỏ) ✅ |
 | CF Pages | Unlimited bandwidth | ✅ |
-| CF KV | 100,000 reads/ngày | < 1,000 ✅ |
 | Neon PostgreSQL | 0.5 GB, 10 branches | ~50 MB ✅ |
 
 **Tổng chi phí: \$0/tháng** 🎉

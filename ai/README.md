@@ -8,16 +8,14 @@ Tài liệu hướng dẫn triển khai giải pháp AI cho hệ thống Quản 
 
 ## 1. Cloudflare Workers AI
 
-Hệ thống đã được cấu hình sẵn kết nối tới Cloudflare Workers AI với thông số:
-- **Model**: `@cf/meta/llama-3.1-8b-instruct`
-- **Account ID**: `8788242370433563100da7c3623e1b3c`
-- **API Token**: `cfut_YOUR_CLOUDFLARE_API_TOKEN`
+Cloudflare Workers AI is called server-side through the FastAPI assessment endpoint (or the Worker's `AI` binding when deployed). Configure credentials only in the deployment secret manager or a local ignored `.env` file:
 
-### Lưu ý kích hoạt Token:
-Để token hoạt động đầy đủ quyền gọi AI, trên Cloudflare Dashboard (`My Profile` -> `API Tokens`):
-1. Nhấn **Edit** vào token đã tạo.
-2. Tại mục **Permissions**, đảm bảo có quyền: `Account` -> `Workers AI` -> `Read` hoặc `Edit`.
-3. Tại mục **Account Resources**, chọn `Include` -> Account `8788242370433563100da7c3623e1b3c`.
+- `AI_PROVIDER=cloudflare`
+- `CLOUDFLARE_ACCOUNT_ID=<your Cloudflare account id>`
+- `CLOUDFLARE_API_TOKEN=<Workers AI token>`
+- `CLOUDFLARE_MODEL=@cf/meta/llama-3.1-8b-instruct`
+
+Create a scoped API token from Cloudflare Dashboard → Workers AI → Use REST API, granting only the Workers AI permissions required by the account. Never commit API tokens or account credentials. Any token previously placed in source, documentation, environment files, or git history must be revoked and replaced.
 
 ---
 

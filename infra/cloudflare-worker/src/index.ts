@@ -35,12 +35,11 @@ export interface Env {
   // AI model service binding
   AI: Ai;
   AI_MODEL?: string;
+  AI_CHAT_LIMIT: RateLimit;
+  AI_ASSESSMENT_LIMIT: RateLimit;
   // Optional server-side PIN for high-risk approvals; production must set it.
   SUPERVISOR_PIN?: string;
   APP_ENV: string;
-
-  // KV namespace (currently unused)
-  BANKOPS_KV?: KVNamespace;
 
   // Vars
   APP_NAME: string;
@@ -58,6 +57,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5000",
   "http://localhost:8080",
   "http://127.0.0.1:8080",
+  "https://bankops-web.pages.dev",
 ];
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -75,6 +75,7 @@ app.use(
       "X-Request-ID",
       "Idempotency-Key",
       "If-Match",
+      "Last-Event-ID",
     ],
     exposeHeaders: ["X-Request-ID", "X-Correlation-ID"],
     credentials: true,

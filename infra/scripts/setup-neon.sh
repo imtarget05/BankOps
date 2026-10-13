@@ -99,23 +99,9 @@ cd "$WORKER_DIR"
 npm install
 success "npm install OK"
 
-# ─── Tạo KV namespace ────────────────────────────────────────────────────────
-echo ""
-info "=== BƯỚC 6: Tạo Cloudflare KV namespace ==="
-KV_OUTPUT=$(wrangler kv namespace create BANKOPS_KV 2>&1)
-KV_ID=$(echo "$KV_OUTPUT" | grep -oP 'id = "\K[^"]+' || echo "")
-if [[ -z "$KV_ID" ]]; then
-  warn "Không tự động lấy KV ID. Chạy thủ công: wrangler kv namespace create BANKOPS_KV"
-  warn "Rồi cập nhật KV id trong wrangler.toml"
-else
-  # Cập nhật wrangler.toml với KV ID thực
-  sed -i.bak "s/PLACEHOLDER_KV_ID/$KV_ID/" "$WORKER_DIR/wrangler.toml"
-  success "KV namespace tạo xong, id = $KV_ID"
-fi
-
 # ─── Đặt Cloudflare secrets ──────────────────────────────────────────────────
 echo ""
-info "=== BƯỚC 7: Đặt secrets lên Cloudflare Workers ==="
+info "=== BƯỚC 6: Đặt secrets lên Cloudflare Workers ==="
 cd "$WORKER_DIR"
 
 echo "$NEON_URL"     | wrangler secret put DATABASE_URL   && success "DATABASE_URL set"
@@ -129,9 +115,19 @@ if [[ -n "$GOOGLE_CLIENT_ID" ]]; then
   success "GOOGLE_CLIENT_ID set"
 fi
 
+# PIN duyệt giao dịch rủi ro cao — BẮT BUỘC cho production. PIN demo 123456
+# chỉ được chấp nhận khi APP_ENV=demo; production phải dùng PIN riêng, mạnh.
+read -rsp "SUPERVISOR_PIN?Nhập PIN production (ẩn): " SUPERVISOR_PIN
+echo ""
+if [[ -z "$SUPERVISOR_PIN" ]]; then
+  error "SUPERVISOR_PIN không được để trống cho production"
+fi
+echo "$SUPERVISOR_PIN" | wrangler secret put SUPERVISOR_PIN && success "SUPERVISOR_PIN set"
+unset SUPERVISOR_PIN
+
 # ─── Deploy Worker ────────────────────────────────────────────────────────────
 echo ""
-info "=== BƯỚC 8: Deploy Cloudflare Worker ==="
+info "=== BƯỚC 7: Deploy Cloudflare Worker ==="
 npm run deploy
 success "Worker deployed!"
 
@@ -151,10 +147,10 @@ echo "       --dart-define=API_BASE_URL=https://bankops-api.<account>.workers.de
 echo ""
 echo "  2. Deploy Pages:"
 echo "     cd infra/cloudflare-worker"
-echo "     wrangler pages deploy ../frontend/build/web --project-name=bankops-web"
+echo "     wrangler pages deploy ../../frontend/build/web --project-name=bankops-web"
 echo ""
 echo "  3. Thêm secrets GitHub Actions:"
-echo "     CLOUDFLARE_API_TOKEN  = $(wrangler whoami 2>/dev/null | grep -oP 'token.*' || echo '<lấy từ dash.cloudflare.com>')"
-echo "     CLOUDFLARE_ACCOUNT_ID = $(wrangler whoami 2>/dev/null | grep -oP 'account.*' || echo '<lấy từ dash.cloudflare.com>')"
+echo "     CLOUDFLARE_API_TOKEN  = <lấy từ dash.cloudflare.com → My Profile → API Tokens>"
+echo "     CLOUDFLARE_ACCOUNT_ID = $(wrangler whoami 2>/dev/null | grep -oE '[a-f0-9]{32}' | head -1 || echo '<lấy từ dash.cloudflare.com>')"
 echo "     API_BASE_URL          = https://bankops-api.<account>.workers.dev"
 echo ""

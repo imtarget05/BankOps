@@ -16,25 +16,74 @@ AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
 ACCESS_TOKEN_EXPIRE_MINUTES = "30"
 REFRESH_TOKEN_EXPIRE_DAYS = "7"
 
-# Create and bind KV only when rate-limiting/session storage is implemented.
-# Production namespace IDs must be created in the Cloudflare account first.
+# ─── Rate Limiting bindings (Production) ─────────────────────────────────────
+# namespace_id là SỐ TỰ CHỌN (1–9999999999), KHÔNG phải KV namespace ID —
+# không cần tạo KV namespace nào. Chọn số chưa dùng trong account của bạn;
+# production và staging phải dùng số khác nhau. Yêu cầu wrangler >= 4.36.0.
+# Xác minh: npx wrangler deploy --dry-run (binding phải xuất hiện trong output).
 
-# Secrets (cấu hình qua: wrangler secret put <NAME>):
+[[ratelimits]]
+name = "AI_CHAT_LIMIT"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
+[[ratelimits]]
+name = "AI_ASSESSMENT_LIMIT"
+namespace_id = "1002"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
+# ─── Secrets (Production) ─────────────────────────────────────────────────────
+# Set via wrangler CLI — NEVER hardcode values here:
+#
+#   wrangler secret put DATABASE_URL
+#   wrangler secret put JWT_SECRET
+#   wrangler secret put SESSION_SECRET
+#   wrangler secret put GOOGLE_CLIENT_ID
+#   wrangler secret put SUPERVISOR_PIN
+#
 # DATABASE_URL       – Neon connection string (pooled)
 # JWT_SECRET         – key dùng HS256 sign JWT
 # SESSION_SECRET     – Starlette session secret (không dùng trên Worker, để tương thích)
 # GOOGLE_CLIENT_ID   – OAuth audience
 
-# Cron trigger giữ Worker luôn warm (tùy chọn, Workers đã zero cold start)
-[triggers]
-crons = ["*/5 * * * *"]   # Ping health mỗi 5 phút → giữ isolate alive
-
+# ═══════════════════════════════════════════════════════════════════════════════
 # Staging environment
+# ═══════════════════════════════════════════════════════════════════════════════
+
 [env.staging]
 name = "bankops-api-staging"
-vars = { APP_ENV = "staging", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct" }
+vars = { APP_ENV = "staging", APP_NAME = "BankOps-API", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct", ACCESS_TOKEN_EXPIRE_MINUTES = "30", REFRESH_TOKEN_EXPIRE_DAYS = "7" }
 
 [env.staging.ai]
 binding = "AI"
 
+[[env.staging.ratelimits]]
+name = "AI_CHAT_LIMIT"
+namespace_id = "2001"
 
+[env.staging.ratelimits.simple]
+limit = 10
+period = 60
+
+[[env.staging.ratelimits]]
+name = "AI_ASSESSMENT_LIMIT"
+namespace_id = "2002"
+
+[env.staging.ratelimits.simple]
+limit = 10
+period = 60
+
+# ─── Secrets (Staging) ────────────────────────────────────────────────────────
+# Set via wrangler CLI — NEVER hardcode values here:
+#
+#   wrangler secret put DATABASE_URL --env staging
+#   wrangler secret put JWT_SECRET --env staging
+#   wrangler secret put SESSION_SECRET --env staging
+#   wrangler secret put GOOGLE_CLIENT_ID --env staging
+#   wrangler secret put SUPERVISOR_PIN --env staging
