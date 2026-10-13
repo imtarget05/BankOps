@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,7 @@ import '../data/models/dtos.dart';
 import '../data/repositories/bankops_repository.dart';
 import '../core/theme/app_tokens.dart';
 import '../core/widgets/app_screen.dart';
+import '../core/widgets/app_toast.dart';
 import '../core/widgets/global_search.dart';
 import '../core/widgets/user_avatar.dart';
 import 'theme_mode_controller.dart';
@@ -62,6 +65,8 @@ class _AppShellState extends State<AppShell> {
   BankOpsRepository? _repository;
   int _index = 0;
   int _refreshTick = 0;
+  StreamSubscription<String>? _approvalSub;
+  int _pendingApprovalCount = 0;
 
   @override
   void didChangeDependencies() {
@@ -75,7 +80,42 @@ class _AppShellState extends State<AppShell> {
         tokenProvider: auth?.getAccessToken,
       );
     }
+    _initApprovalSubscription();
   }
+
+  @override
+  void dispose() {
+    _approvalSub?.cancel();
+    super.dispose();
+  }
+
+  void _initApprovalSubscription() {
+    _approvalSub?.cancel();
+    final repo = _repository;
+    if (repo != null) {
+      _fetchPendingCount(repo);
+      _approvalSub = repo.approvalNotifications.listen((event) {
+        if (mounted) {
+          _fetchPendingCount(repo);
+          if (event.startsWith('new_request:') && _canAccessApprovals(SessionScope.maybeOf(context))) {
+            AppToast.info(context, '🔔 Yêu cầu mới chờ phê duyệt kiểm soát kép (Dual Control)!');
+          }
+        }
+      });
+    }
+  }
+
+  Future<void> _fetchPendingCount(BankOpsRepository repo) async {
+    try {
+      final items = await repo.getApprovalInbox();
+      if (mounted) {
+        setState(() {
+          _pendingApprovalCount = items.length;
+        });
+      }
+    } catch (_) {}
+  }
+
 
   static const _items = <_Item>[
     _Item(0, 'Tổng quan', Icons.dashboard_outlined, Icons.dashboard),
@@ -479,13 +519,14 @@ class _AppShellState extends State<AppShell> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                  color: (_pendingApprovalCount > 0 ? const Color(0xFFDC2626) : const Color(0xFFF59E0B))
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Text(
-                                  '4-EYES',
+                                child: Text(
+                                  _pendingApprovalCount > 0 ? '$_pendingApprovalCount CHỜ DUYỆT' : '4-EYES',
                                   style: TextStyle(
-                                    color: Color(0xFFD97706),
+                                    color: _pendingApprovalCount > 0 ? const Color(0xFFDC2626) : const Color(0xFFD97706),
                                     fontSize: 9,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -581,6 +622,41 @@ class _AppShellState extends State<AppShell> {
           onPressed: _reload,
           tooltip: 'Làm mới dữ liệu',
         ),
+        if (_canAccessApprovals(session))
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                key: const Key('topbar-approvals-notif-btn'),
+                icon: const Icon(Icons.notifications_outlined, size: 20),
+                tooltip: 'Hộp thư duyệt: $_pendingApprovalCount yêu cầu',
+                onPressed: () => setState(() => _index = 4),
+              ),
+              if (_pendingApprovalCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDC2626),
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '$_pendingApprovalCount',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         IconButton(
           icon: Icon(
             theme.brightness == Brightness.dark

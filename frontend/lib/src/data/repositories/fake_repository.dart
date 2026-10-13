@@ -16,15 +16,24 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   final Random _random;
   final Duration _latency;
+  final _approvalStreamCtrl = StreamController<String>.broadcast();
 
-  Future<T> _delay<T>(T value) => Future<T>.delayed(
+  @override
+  Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
+
+  Future<T> _delay<T>(T value) {
+    if (_latency == Duration.zero) return Future.value(value);
+    return Future<T>.delayed(
       _latency ~/ 2 +
           Duration(
               milliseconds: _random.nextInt(_latency.inMilliseconds ~/ 2 + 1)),
-      () => value);
+      () => value,
+    );
+  }
 
   // ---- users ----
   final _users = <AppUser>[];
+
 
   @override
   Future<List<AppUser>> loadUsers() async {
@@ -223,6 +232,11 @@ class FakeBankOpsRepository implements BankOpsRepository {
       throw ApiException('INVALID_STATE', 'Phiếu đã chốt trạng thái');
     }
     _stockRequests[idx] = _copyStock(r, to);
+    if (to == RequestStatus.pending) {
+      _approvalStreamCtrl.add('new_request:$id:kho');
+    } else {
+      _approvalStreamCtrl.add('processed:$id');
+    }
     return _delay(_stockRequests[idx]);
   }
 
@@ -379,6 +393,11 @@ class FakeBankOpsRepository implements BankOpsRepository {
       approvedByName: r.approvedByName,
       rejectReason: r.rejectReason,
     );
+    if (to == RequestStatus.pending) {
+      _approvalStreamCtrl.add('new_request:$id:quỹ');
+    } else {
+      _approvalStreamCtrl.add('processed:$id');
+    }
     return _delay(_cashRequests[idx]);
   }
 
@@ -409,6 +428,90 @@ class FakeBankOpsRepository implements BankOpsRepository {
         ),
     ];
     return _delay(items);
+  }
+
+  @override
+  Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item) async {
+    final isCash = item.kind.toLowerCase() == 'cash' ||
+        item.kind.toLowerCase().contains('quỹ');
+    var rawImpact = item.impact;
+    final decimalMatch =
+        RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
+    if (decimalMatch != null) {
+      rawImpact = rawImpact.substring(0, decimalMatch.start);
+    }
+    final digits = rawImpact.replaceAll(RegExp(r'[^\d]'), '');
+    final val = int.tryParse(digits) ?? 0;
+
+    String riskLevel = 'low';
+    int riskScore = 20;
+    final flagged = <String>[];
+    final recs = <String>[];
+
+    if (isCash) {
+      if (val >= 500000000) {
+        riskLevel = 'high';
+        riskScore = 88;
+        flagged.add('Giá trị giao dịch vượt ngưỡng kiểm soát kép đặc biệt (≥ 500.000.000 VND).');
+        flagged.add('Bắt buộc xác thực mã PIN Kiểm soát viên (Supervisor PIN) và đóng dấu Audit Stamp SHA-256.');
+        recs.add('Kiểm đếm tiền mặt thực tế tại két và đối chiếu phiếu rút/nộp tiền gốc.');
+        recs.add('Yêu cầu 2 chữ ký Maker và Checker trên biên bản bàn giao tiền mặt.');
+      } else if (val >= 200000000) {
+        riskLevel = 'medium';
+        riskScore = 58;
+        flagged.add('Giao dịch giá trị trung bình lớn (200.000.000 - 500.000.000 VND).');
+        recs.add('Đối chiếu chứng từ ký nhận của khách hàng/GDV trước khi duyệt.');
+      } else {
+        riskLevel = 'low';
+        riskScore = 20;
+        recs.add('Giao dịch trong hạn mức định mức thường lệ của quầy.');
+      }
+    } else {
+      if (val >= 50) {
+        riskLevel = 'high';
+        riskScore = 85;
+        flagged.add('Số lượng xuất/nhập ấn chỉ/phôi thẻ vượt hạn mức (≥ 50 đơn vị).');
+        flagged.add('Nguy cơ thất thoát phôi bảo mật (thẻ chip EMV, sổ séc trắng).');
+        recs.add('Kiểm đếm dải số serial và niêm phong hộp phôi trước khi ký nhận.');
+      } else if (val >= 20) {
+        riskLevel = 'medium';
+        riskScore = 52;
+        flagged.add('Số lượng phôi xuất kho trung bình (20 - 50 đơn vị).');
+        recs.add('Kiểm tra kế hoạch cấp phát ấn chỉ định kỳ của phòng giao dịch.');
+      } else {
+        riskLevel = 'low';
+        riskScore = 18;
+        recs.add('Lệnh xuất nhập vật tư trong định mức ngày.');
+      }
+    }
+
+    if (item.detail.trim().length < 5) {
+      flagged.add('Lý do giao dịch quá ngắn hoặc không nêu rõ mục đích (< 5 ký tự).');
+      riskScore = min(98, riskScore + 15);
+      if (riskLevel == 'low') riskLevel = 'medium';
+      recs.add('Yêu cầu Maker bổ sung diễn giải chi tiết mục đích nghiệp vụ.');
+    }
+
+    final stampSeed = '${item.id}:${item.maker}:${item.impact}:$riskScore';
+    final stampBytes = utf8.encode(stampSeed);
+    final auditStamp = stampBytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join()
+        .padRight(64, '0')
+        .substring(0, 64);
+
+    final summary = 'Đánh giá rủi ro: Mức độ ${riskLevel.toUpperCase()} ($riskScore/100) cho phiếu ${item.id}. '
+        '${riskLevel == 'high' ? 'Cần kiểm soát kép và nhập PIN KSV.' : 'Đủ điều kiện xem xét phê duyệt.'}';
+
+    return _delay(AiRiskAssessment(
+      requestId: item.id,
+      riskLevel: riskLevel,
+      riskScore: riskScore,
+      summary: summary,
+      flaggedRules: flagged,
+      recommendations: recs,
+      auditStamp: auditStamp,
+    ));
   }
 
   final _events = <ActivityEvent>[];

@@ -96,8 +96,11 @@ abstract class BankOpsRepository {
   Future<CashRequest> approveCashRequest(String id);
   Future<CashRequest> rejectCashRequest(String id, String reason);
 
-  // GET /approvals/inbox
+  // GET /approvals/inbox & AI Thẩm định rủi ro
   Future<List<ApprovalItem>> getApprovalInbox();
+  Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item);
+  Stream<String> get approvalNotifications;
+
 
   // GET /activity, GET /events/stream
   Future<List<ActivityEvent>> getActivity({String? cursor});

@@ -320,3 +320,47 @@ class ReconciliationRun {
   final DateTime startedAt;
   final List<String> exceptions;
 }
+
+/// Kết quả thẩm định rủi ro Maker-Checker AI Copilot.
+class AiRiskAssessment {
+  const AiRiskAssessment({
+    required this.requestId,
+    required this.riskLevel,
+    required this.riskScore,
+    required this.summary,
+    this.flaggedRules = const [],
+    this.recommendations = const [],
+    required this.auditStamp,
+  });
+
+  final String requestId;
+  final String riskLevel; // 'low' | 'medium' | 'high'
+  final int riskScore; // 0 - 100
+  final String summary;
+  final List<String> flaggedRules;
+  final List<String> recommendations;
+  final String auditStamp;
+
+  bool get isHighRisk => riskLevel == 'high' || riskScore >= 70;
+  bool get isMediumRisk => riskLevel == 'medium';
+  bool get isLowRisk => riskLevel == 'low';
+
+  factory AiRiskAssessment.fromJson(Map<String, dynamic> json) {
+    return AiRiskAssessment(
+      requestId: json['request_id'] as String? ?? '',
+      riskLevel: (json['risk_level'] as String? ?? 'low').toLowerCase(),
+      riskScore: (json['risk_score'] as num?)?.toInt() ?? 20,
+      summary: json['summary'] as String? ?? '',
+      flaggedRules: (json['flagged_rules'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      recommendations: (json['recommendations'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      auditStamp: json['audit_stamp'] as String? ?? '',
+    );
+  }
+}
+

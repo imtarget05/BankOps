@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -29,6 +30,11 @@ class HttpBankOpsRepository implements BankOpsRepository {
   final String _baseUrl;
   final http.Client _client;
   final Future<String?> Function()? _tokenProvider;
+  final _approvalStreamCtrl = StreamController<String>.broadcast();
+
+  @override
+  Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
+
 
   Uri _uri(String path, [Map<String, String>? query]) => Uri.parse('$_baseUrl$path')
       .replace(queryParameters: query == null || query.isEmpty ? null : query);
@@ -461,28 +467,37 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StockRequest> submitStockRequest(String id) async =>
-      _parseStockRequest(await _post(
-        '/inventory/requests/$id/submit',
-        {},
-        extraHeaders: {'Idempotency-Key': _idemKey()},
-      ));
+  Future<StockRequest> submitStockRequest(String id) async {
+    final res = _parseStockRequest(await _post(
+      '/inventory/requests/$id/submit',
+      {},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('new_request:$id:kho');
+    return res;
+  }
 
   @override
-  Future<StockRequest> approveStockRequest(String id) async =>
-      _parseStockRequest(await _post(
-        '/inventory/requests/$id/approve',
-        {},
-        extraHeaders: {'Idempotency-Key': _idemKey()},
-      ));
+  Future<StockRequest> approveStockRequest(String id) async {
+    final res = _parseStockRequest(await _post(
+      '/inventory/requests/$id/approve',
+      {},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('processed:$id');
+    return res;
+  }
 
   @override
-  Future<StockRequest> rejectStockRequest(String id, String reason) async =>
-      _parseStockRequest(await _post(
-        '/inventory/requests/$id/reject',
-        {'reason': reason},
-        extraHeaders: {'Idempotency-Key': _idemKey()},
-      ));
+  Future<StockRequest> rejectStockRequest(String id, String reason) async {
+    final res = _parseStockRequest(await _post(
+      '/inventory/requests/$id/reject',
+      {'reason': reason},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('processed:$id');
+    return res;
+  }
 
   // ---- cash-sim ----
 
@@ -629,28 +644,37 @@ class HttpBankOpsRepository implements BankOpsRepository {
       _delete('/cash-sim/requests/$id');
 
   @override
-  Future<CashRequest> submitCashRequest(String id) async =>
-      _parseCashRequest(await _post(
-        '/cash-sim/requests/$id/submit',
-        {},
-        extraHeaders: {'Idempotency-Key': _idemKey()},
-      ));
+  Future<CashRequest> submitCashRequest(String id) async {
+    final res = _parseCashRequest(await _post(
+      '/cash-sim/requests/$id/submit',
+      {},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('new_request:$id:quỹ');
+    return res;
+  }
 
   @override
-  Future<CashRequest> approveCashRequest(String id) async =>
-      _parseCashRequest(await _post(
-        '/cash-sim/requests/$id/approve',
-        {},
-        extraHeaders: {'Idempotency-Key': _idemKey()},
-      ));
+  Future<CashRequest> approveCashRequest(String id) async {
+    final res = _parseCashRequest(await _post(
+      '/cash-sim/requests/$id/approve',
+      {},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('processed:$id');
+    return res;
+  }
 
   @override
-  Future<CashRequest> rejectCashRequest(String id, String reason) async =>
-      _parseCashRequest(await _post(
-        '/cash-sim/requests/$id/reject',
-        {'reason': reason},
-        extraHeaders: {'Idempotency-Key': _idemKey()},
-      ));
+  Future<CashRequest> rejectCashRequest(String id, String reason) async {
+    final res = _parseCashRequest(await _post(
+      '/cash-sim/requests/$id/reject',
+      {'reason': reason},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('processed:$id');
+    return res;
+  }
 
   // ---- approvals ----
 
@@ -667,6 +691,35 @@ class HttpBankOpsRepository implements BankOpsRepository {
         detail: _str(m, 'detail', id),
       );
     }).toList();
+  }
+
+  @override
+  Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item) async {
+    try {
+      final res = await _post('/ai/assess-request', {
+        'request_id': item.id,
+        'kind': item.kind,
+        'amount_or_qty': item.impact,
+        'maker': item.maker,
+        'reason': item.detail,
+      });
+      return AiRiskAssessment.fromJson(res);
+    } catch (_) {
+      final isCash = item.kind.toLowerCase() == 'cash' ||
+          item.kind.toLowerCase().contains('quỹ');
+      final digits = item.impact.replaceAll(RegExp(r'[^\d]'), '');
+      final val = int.tryParse(digits) ?? 0;
+      final isHigh = (isCash && val >= 500000000) || (!isCash && val >= 50);
+      return AiRiskAssessment(
+        requestId: item.id,
+        riskLevel: isHigh ? 'high' : 'low',
+        riskScore: isHigh ? 88 : 20,
+        summary: 'Thẩm định ngoại tuyến cho phiếu ${item.id}',
+        flaggedRules: isHigh ? ['Giao dịch vượt hạn mức kiểm soát kép (≥ 500 triệu VND)'] : [],
+        recommendations: ['Kiểm tra đối chiếu chứng từ gốc và nhập PIN KSV'],
+        auditStamp: 'offline-audit-stamp-${item.id}',
+      );
+    }
   }
 
   // ---- activity ----

@@ -73,3 +73,67 @@ async def test_disabled_does_not_call_provider():
         with pytest.raises(HTTPException) as error:
             await generate('test', Settings(database_url='sqlite://', ai_provider='disabled'), client)
     assert error.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_assess_request_high_cash():
+    from app.services.ai import assess_request
+    data = {
+        'request_id': 'cr-9999',
+        'kind': 'cash',
+        'amount_or_qty': '600.000.000',
+        'maker': 'GDV Nguyen Van A',
+        'reason': 'Chi tiền mặt tiếp quỹ ATM khẩn cấp',
+    }
+    async with httpx.AsyncClient() as client:
+        result = await assess_request(data, config(), client)
+    assert result['risk_level'] == 'high'
+    assert result['risk_score'] >= 80
+    assert len(result['flagged_rules']) >= 2
+    assert len(result['audit_stamp']) == 64  # SHA-256 hex length
+    assert 'cr-9999' in result['summary']
+
+
+@pytest.mark.asyncio
+async def test_assess_request_low_cash_and_inventory():
+    from app.services.ai import assess_request
+    data = {
+        'request_id': 'cr-1000',
+        'kind': 'cash',
+        'amount_or_qty': '35.000.000',
+        'maker': 'GDV Nguyen Van B',
+        'reason': 'Nạp tiền mặt đầu ngày',
+    }
+    async with httpx.AsyncClient() as client:
+        result = await assess_request(data, config(), client)
+    assert result['risk_level'] == 'low'
+    assert result['risk_score'] < 50
+
+    inv_high = {
+        'request_id': 'sr-5000',
+        'kind': 'inventory',
+        'amount_or_qty': '100',
+        'maker': 'Thu kho',
+        'reason': 'Xuất phôi thẻ Visa Debit',
+    }
+    async with httpx.AsyncClient() as client:
+        result_inv = await assess_request(inv_high, config(), client)
+    assert result_inv['risk_level'] == 'high'
+    assert result_inv['risk_score'] >= 80
+
+
+@pytest.mark.asyncio
+async def test_assess_request_short_reason_penalty():
+    from app.services.ai import assess_request
+    data = {
+        'request_id': 'cr-2000',
+        'kind': 'cash',
+        'amount_or_qty': '50.000.000',
+        'maker': 'GDV Nguyen Van C',
+        'reason': '',  # empty reason
+    }
+    async with httpx.AsyncClient() as client:
+        result = await assess_request(data, config(), client)
+    assert any('quá ngắn' in rule for rule in result['flagged_rules'])
+    assert result['risk_score'] > 20
+

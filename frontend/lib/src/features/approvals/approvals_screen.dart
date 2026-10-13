@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
@@ -5,6 +7,7 @@ import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
+import '../../data/repositories/bankops_repository.dart';
 
 /// Màn duyệt — approval inbox (Maker != Checker) chuẩn ngân hàng 4-Eyes Principle.
 class ApprovalsScreen extends StatefulWidget {
@@ -18,18 +21,52 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   Future<List<ApprovalItem>>? _future;
   bool _busy = false;
   final Set<String> _selected = {};
+  final Map<String, AiRiskAssessment> _assessments = {};
+  StreamSubscription<String>? _approvalSub;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final repo = RepositoryScope.of(context);
-    _future ??= repo.getApprovalInbox();
+    if (_future == null) {
+      _future = repo.getApprovalInbox().then((items) {
+        _loadAiAssessments(items, repo);
+        return items;
+      });
+      _approvalSub?.cancel();
+      _approvalSub = repo.approvalNotifications.listen((_) {
+        if (mounted) _reload();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _approvalSub?.cancel();
+    super.dispose();
+  }
+
+  void _loadAiAssessments(List<ApprovalItem> items, BankOpsRepository repo) {
+    for (final item in items) {
+      if (!_assessments.containsKey(item.id)) {
+        repo.assessApprovalItem(item).then((assessment) {
+          if (mounted) {
+            setState(() {
+              _assessments[item.id] = assessment;
+            });
+          }
+        }).catchError((_) {});
+      }
+    }
   }
 
   void _reload() {
     final repo = RepositoryScope.of(context);
     setState(() {
-      _future = repo.getApprovalInbox();
+      _future = repo.getApprovalInbox().then((items) {
+        _loadAiAssessments(items, repo);
+        return items;
+      });
     });
   }
 
@@ -37,8 +74,167 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       item.kind.toLowerCase() == 'cash' ||
       item.kind.toLowerCase().contains('quỹ');
 
+  bool _isHighRisk(ApprovalItem item) {
+    final assessment = _assessments[item.id];
+    if (assessment != null) return assessment.isHighRisk;
+    var rawImpact = item.impact;
+    final decimalMatch =
+        RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
+    if (decimalMatch != null) {
+      rawImpact = rawImpact.substring(0, decimalMatch.start);
+    }
+    final digits = rawImpact.replaceAll(RegExp(r'[^\d]'), '');
+    final val = int.tryParse(digits) ?? 0;
+    if (_isCash(item) && val >= 500000000) return true;
+    if (!_isCash(item) && val >= 50) return true;
+    return false;
+  }
+
+  Future<bool> _showDualControlPinDialog(
+    ApprovalItem item,
+    AiRiskAssessment? assessment, {
+    bool isBatch = false,
+    int batchCount = 1,
+  }) async {
+    final pinCtrl = TextEditingController();
+    String? errorText;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isBatch
+                      ? 'Xác Thực Kiểm Soát Kép Lô $batchCount Phiếu'
+                      : 'Xác Thực Kiểm Soát Kép (4 Mắt)',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isBatch
+                              ? 'Lô duyệt có phiếu giá trị lớn hoặc rủi ro cao. Bắt buộc Kiểm soát viên nhập PIN để cấp phép.'
+                              : 'Phiếu ${item.id} có mức độ RỦI RO CAO (${item.impact}). Bắt buộc xác thực PIN Kiểm soát viên và sinh mã Audit Stamp SHA-256.',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (assessment != null) ...[
+                  Text(
+                    'Audit Stamp Hash (SHA-256):',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SelectableText(
+                      assessment.auditStamp,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                const Text(
+                  'Nhập mã PIN Kiểm soát viên (Mặc định demo: 123456):',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('supervisor-pin-input'),
+                  controller: pinCtrl,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    hintText: 'Nhập 6 số PIN',
+                    border: const OutlineInputBorder(),
+                    errorText: errorText,
+                    prefixIcon: const Icon(Icons.pin_outlined),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Huỷ bỏ'),
+            ),
+            FilledButton(
+              key: const Key('confirm-supervisor-pin-btn'),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              onPressed: () {
+                if (pinCtrl.text.trim() == '123456') {
+                  Navigator.of(ctx).pop(true);
+                } else {
+                  setDialogState(() {
+                    errorText = 'Mã PIN không đúng (Demo: 123456)';
+                  });
+                }
+              },
+              child: const Text('Ký Số & Phê Duyệt'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return result == true;
+  }
+
   Future<void> _approve(ApprovalItem item) async {
     final repo = RepositoryScope.of(context);
+    final assessment = _assessments[item.id];
+    final highRisk = _isHighRisk(item);
+
+    if (highRisk) {
+      final verified = await _showDualControlPinDialog(item, assessment);
+      if (!verified || !mounted) return;
+    }
+
     setState(() => _busy = true);
     try {
       if (_isCash(item)) {
@@ -47,7 +243,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await repo.approveStockRequest(item.id);
       }
       if (!mounted) return;
-      AppToast.success(context, 'Đã duyệt & ghi sổ thành công phiếu ${item.id}');
+      final stampMsg = assessment != null ? ' (Audit Stamp: ${assessment.auditStamp.substring(0, 10)}...)' : '';
+      AppToast.success(context, 'Đã duyệt & ghi sổ thành công phiếu ${item.id}$stampMsg');
       _reload();
     } catch (e) {
       if (!mounted) return;
@@ -122,20 +319,33 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   }
 
   /// Duyệt hàng loạt: mỗi phiếu duyệt & ghi sổ độc lập, phiếu lỗi không
-  /// chặn phiếu khác. Tóm tắt kết quả bằng toast, từ chối hàng loạt không
-  /// hỗ trợ (mỗi phiếu cần lý do riêng).
+  /// chặn phiếu khác. Nếu có phiếu rủi ro cao, yêu cầu xác thực PIN một lần cho cả lô.
   Future<void> _approveSelected(List<ApprovalItem> items) async {
     final targets = items.where((i) => _selected.contains(i.id)).toList();
     if (targets.isEmpty) return;
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Duyệt hàng loạt ${targets.length} phiếu',
-      message:
-          'Mỗi phiếu được thẩm định Maker ≠ Checker và ghi sổ độc lập. '
-          'Phiếu lỗi không chặn các phiếu còn lại.',
-      confirmLabel: 'Duyệt ${targets.length} phiếu',
-    );
-    if (!confirmed || !mounted) return;
+
+    final hasHighRisk = targets.any(_isHighRisk);
+    if (hasHighRisk) {
+      final highRiskItem = targets.firstWhere(_isHighRisk);
+      final verified = await _showDualControlPinDialog(
+        highRiskItem,
+        _assessments[highRiskItem.id],
+        isBatch: true,
+        batchCount: targets.length,
+      );
+      if (!verified || !mounted) return;
+    } else {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Duyệt hàng loạt ${targets.length} phiếu',
+        message:
+            'Mỗi phiếu được thẩm định Maker ≠ Checker và ghi sổ độc lập. '
+            'Phiếu lỗi không chặn các phiếu còn lại.',
+        confirmLabel: 'Duyệt ${targets.length} phiếu',
+      );
+      if (!confirmed || !mounted) return;
+    }
+
     final repo = RepositoryScope.of(context);
     setState(() => _busy = true);
     var ok = 0;
@@ -165,6 +375,246 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           'Đã duyệt $ok/${targets.length} phiếu; lỗi: ${failed.join(', ')}');
     }
     _reload();
+  }
+
+  Color _riskColor(AiRiskAssessment? assessment) {
+    if (assessment == null) return const Color(0xFF64748B);
+    if (assessment.isHighRisk) return const Color(0xFFDC2626);
+    if (assessment.isMediumRisk) return const Color(0xFFD97706);
+    return const Color(0xFF059669);
+  }
+
+  Widget _buildRiskLevelBadge(AiRiskAssessment? assessment) {
+    final color = _riskColor(assessment);
+    final label = assessment == null
+        ? 'AI ĐANG THẨM ĐỊNH'
+        : 'AI RỦI RO ${assessment.riskLevel.toUpperCase()} (${assessment.riskScore}/100)';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            assessment?.isHighRisk == true
+                ? Icons.shield_rounded
+                : Icons.verified_user_outlined,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAiAssessmentSheet(ApprovalItem item) {
+    final assessment = _assessments[item.id];
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: Color(0xFF2563EB), size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AI Maker-Checker Copilot Thẩm Định Rủi Ro',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Phiếu: ${item.id} · Người lập: ${item.maker}',
+                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                if (assessment != null) _buildRiskLevelBadge(assessment),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Đóng',
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+            const Divider(height: 28),
+            if (assessment == null)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: LoadingView()),
+              )
+            else
+              Expanded(
+                child: ListView(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _riskColor(assessment).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _riskColor(assessment).withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _riskColor(assessment),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  '${assessment.riskScore}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
+                                ),
+                                const Text(
+                                  'ĐIỂM RỦI RO',
+                                  style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              assessment.summary,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Quy tắc kiểm soát nội bộ cảnh báo:',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    if (assessment.flaggedRules.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.check_circle_outline, color: Color(0xFF059669), size: 18),
+                            SizedBox(width: 8),
+                            Text('Không vi phạm ngưỡng cảnh báo quy chế.', style: TextStyle(fontSize: 12.5, color: Color(0xFF059669))),
+                          ],
+                        ),
+                      )
+                    else
+                      for (final rule in assessment.flaggedRules)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.report_problem_outlined, color: Color(0xFFDC2626), size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(rule, style: const TextStyle(fontSize: 12.5))),
+                            ],
+                          ),
+                        ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Kiến nghị hành động cho Kiểm soát viên:',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    for (final rec in assessment.recommendations)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.lightbulb_outline, color: Color(0xFFD97706), size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(rec, style: const TextStyle(fontSize: 12.5))),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Dấu kiểm toán số (Audit Stamp SHA-256):',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(
+                        assessment.auditStamp,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -519,6 +969,45 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                               ),
                                             ),
                                           ],
+                                          const SizedBox(height: 10),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 6,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              _buildRiskLevelBadge(_assessments[item.id]),
+                                              InkWell(
+                                                key: Key('btn-ai-assess-${item.id}'),
+                                                onTap: () => _showAiAssessmentSheet(item),
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(
+                                                      color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                                    ),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.auto_awesome, size: 12, color: Color(0xFF2563EB)),
+                                                      SizedBox(width: 4),
+                                                      Text(
+                                                        'Thẩm định AI Copilot',
+                                                        style: TextStyle(
+                                                          fontSize: 10.5,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Color(0xFF2563EB),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ),
