@@ -35,6 +35,13 @@ export interface Env {
   // AI model service binding
   AI: Ai;
   AI_MODEL?: string;
+  // Backend LLM tự host (Hugging Face Space llama.cpp, OpenAI-compatible).
+  // Khi HF_LLM_BASE_URL được set, AI requests ưu tiên backend này; Workers AI là fallback.
+  HF_LLM_BASE_URL?: string;
+  HF_LLM_API_KEY?: string;
+  HF_LLM_MODEL?: string;
+  HF_LLM_TIMEOUT_MS?: string;
+  HF_LLM_MAX_TOKENS?: string;
   AI_CHAT_LIMIT: RateLimit;
   AI_ASSESSMENT_LIMIT: RateLimit;
   // Optional server-side PIN for high-risk approvals; production must set it.

@@ -13,6 +13,11 @@ binding = "AI"
 APP_ENV = "production"
 APP_NAME = "BankOps-API"
 AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+# Backend LLM tự host (Hugging Face Space llama.cpp, OpenAI-compatible).
+# Để rỗng "" = dùng Workers AI; khi đã tạo Space, thay bằng URL dạng
+# "https://<user>-bankops-llm.hf.space" rồi deploy lại. Workers AI tự thành fallback.
+# Xem docs/17-hf-llm-space.md.
+HF_LLM_BASE_URL = ""
 ACCESS_TOKEN_EXPIRE_MINUTES = "30"
 REFRESH_TOKEN_EXPIRE_DAYS = "7"
 
@@ -58,7 +63,7 @@ period = 60
 
 [env.staging]
 name = "bankops-api-staging"
-vars = { APP_ENV = "staging", APP_NAME = "BankOps-API", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct", ACCESS_TOKEN_EXPIRE_MINUTES = "30", REFRESH_TOKEN_EXPIRE_DAYS = "7" }
+vars = { APP_ENV = "staging", APP_NAME = "BankOps-API", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct", HF_LLM_BASE_URL = "", ACCESS_TOKEN_EXPIRE_MINUTES = "30", REFRESH_TOKEN_EXPIRE_DAYS = "7" }
 
 [env.staging.ai]
 binding = "AI"
