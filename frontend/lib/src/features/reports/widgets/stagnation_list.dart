@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/csv_export.dart';
+import '../../../core/util/report_excel.dart';
+import '../../../core/util/report_share.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../data/models/dtos.dart';
 
@@ -26,31 +28,40 @@ class StagnationList extends StatelessWidget {
       children: [
         Align(
           alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
-            key: const Key('export-stagnation-csv-btn'),
-            onPressed: () => CsvExport.copyToClipboard(
-              context,
-              label: 'tồn đọng',
-              headers: const [
-                'sku',
-                'name',
-                'quantity',
-                'days_since_last_issue',
-                'severity'
-              ],
-              rows: [
-                for (final item in items)
-                  [
-                    item.sku,
-                    item.name,
-                    item.quantity,
-                    item.daysSinceLastIssue,
-                    item.severity
+          child: Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('export-stagnation-csv-btn'),
+                onPressed: () => CsvExport.copyToClipboard(
+                  context,
+                  label: 'tồn đọng',
+                  headers: ReportExcel.stagnationHeaders,
+                  rows: [
+                    for (final item in items)
+                      [
+                        item.sku,
+                        item.name,
+                        item.quantity,
+                        item.daysSinceLastIssue,
+                        item.severity
+                      ],
                   ],
-              ],
-            ),
-            icon: const Icon(Icons.content_copy_outlined, size: 18),
-            label: const Text('Sao chép CSV'),
+                ),
+                icon: const Icon(Icons.content_copy_outlined, size: 18),
+                label: const Text('Sao chép CSV'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('export-stagnation-xlsx-btn'),
+                onPressed: () => ReportShare.shareXlsx(
+                  context,
+                  filename: 'ton-dong.xlsx',
+                  bytes: ReportExcel.encodeStagnation(items),
+                ),
+                icon: const Icon(Icons.download_outlined, size: 18),
+                label: const Text('Tải Excel'),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),

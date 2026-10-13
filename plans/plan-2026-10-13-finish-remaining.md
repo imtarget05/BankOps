@@ -82,7 +82,10 @@ Expected: PASS + 0 error.
 
 ---
 
-## Work-package B — Bottom-bar compact theo role + badge
+## Work-package B — Bottom-bar compact theo role + badge ✅ DONE (2026-10-13)
+
+Kết quả: `flutter test` 20/20 + `flutter analyze` 0 issues.
+Làm thêm ngoài plan: topbar responsive (ẩn refresh/theme/settings + tên/role ở màn <600px, title ellipsis) vì test compact phát hiện tràn 226px → 10px → 0.
 
 ### Task B1: Ẩn slot Yêu cầu với auditor + badge Duyệt ở bottom-bar
 
@@ -122,7 +125,10 @@ git commit -m "feat: role-aware compact bottom bar with approval badge"
 
 ---
 
-## Work-package C — Xuất Excel/PDF thật
+## Work-package C — Xuất Excel/PDF thật ✅ DONE (2026-10-13)
+
+Kết quả: `flutter test` 25/25 + `flutter analyze` 0 issues. Deps thêm: `excel ^4.0.6`, `printing ^5.14.3`, `pdf ^3.12.0`.
+Lưu ý: font PDF built-in thiếu glyph TV → text PDF qua `VnAscii.strip` (không dấu); XLSX giữ nguyên tiếng Việt có dấu. XLSX trên Web fallback về Sao chép CSV (không có FileSaver).
 
 ### Task C1: Thêm dep + nút Xuất Excel ở 3 tab Báo cáo
 
@@ -160,7 +166,10 @@ test('ReportExcel.encodeInventory produces non-empty xlsx bytes', () {
 
 ---
 
-## Work-package D — Timeline audit chi tiết phiếu
+## Work-package D — Timeline audit chi tiết phiếu ✅ DONE (2026-10-13)
+
+Kết quả: `flutter test` 28/28 + `flutter analyze` 0 issues.
+Khác plan: không có detail sheet sẵn → gắn nút lịch sử trên mỗi thẻ phiếu, mở bottom-sheet `RequestTimeline` (lọc `getActivity()` theo `subjectId`, sort thời gian, vẽ dot-line, nhãn TV cho 8 messageKey).
 
 ### Task D1: Đọc activity theo phiếu + UI timeline
 

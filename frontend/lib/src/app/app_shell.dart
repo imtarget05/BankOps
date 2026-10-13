@@ -286,16 +286,21 @@ class _AppShellState extends State<AppShell> {
     if (mounted) setState(() => _index = 0);
   }
 
-  /// Bar chỉ có 5 slot: 0-2 map thẳng _index, slot 3 = Duyệt (nếu có quyền) hoặc Yêu cầu.
-  int _bottomSelected(bool canApprove) {
-    if (canApprove) {
-      if (_index >= 0 && _index <= 2) return _index;
-      if (_index == 4) return 3;
-      return 4;
-    } else {
-      if (_index >= 0 && _index <= 3) return _index;
-      return 4;
-    }
+  /// Slot 3 của bottom-bar compact: Duyệt (có quyền duyệt) -> Yêu cầu
+  /// (có quyền tạo) -> Hoạt động (auditor thuần, chỉ xem).
+  int _compactSlot3(SessionScope? session) {
+    if (_canAccessApprovals(session)) return 4;
+    final roles = RoleVisibility.rolesOf(session?.user);
+    if (RoleVisibility.canCreate(roles)) return 3;
+    return 6;
+  }
+
+  /// Bar chỉ có 5 slot: 0-2 map thẳng _index, slot 3 = tab _compactSlot3,
+  /// slot 4 = Thêm (mở sheet).
+  int _bottomSelected(SessionScope? session) {
+    if (_index >= 0 && _index <= 2) return _index;
+    if (_index == _compactSlot3(session)) return 3;
+    return 4;
   }
 
   Widget _destination(String label, int index,
@@ -309,19 +314,15 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _bottomBar({SessionScope? session}) {
-    final canApprove = _canAccessApprovals(session);
+    final slot3 = _compactSlot3(session);
     return NavigationBar(
-      selectedIndex: _bottomSelected(canApprove),
+      selectedIndex: _bottomSelected(session),
       onDestinationSelected: (i) {
         if (i == 4) {
           _openMoreSheet(session: session);
           return;
         }
-        if (canApprove) {
-          setState(() => _index = i == 3 ? 4 : i);
-        } else {
-          setState(() => _index = i);
-        }
+        setState(() => _index = i == 3 ? slot3 : i);
       },
       height: 64,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -329,16 +330,40 @@ class _AppShellState extends State<AppShell> {
         _destination('Tổng quan', 0, key: const Key('nav-bottom-dashboard')),
         _destination('Kho', 1, key: const Key('nav-bottom-inventory')),
         _destination('Quỹ', 2, key: const Key('nav-bottom-cash')),
-        if (canApprove)
-          _destination('Duyệt', 4, key: const Key('nav-bottom-approvals'))
-        else
-          _destination('Yêu cầu', 3, key: const Key('nav-bottom-requests')),
+        _slot3Destination(slot3),
         _destination('Thêm', 4,
             icon: Icons.more_horiz_outlined,
             selectedIcon: Icons.expand_more,
             key: const Key('nav-bottom-more')),
       ],
     );
+  }
+
+  /// Slot 3 hiển thị đúng nhãn/icon/key theo tab + badge số chờ duyệt.
+  Widget _slot3Destination(int slot3) {
+    if (slot3 == 4) {
+      final badgeCount = _pendingApprovalCount;
+      Widget badge(IconData icon) {
+        final ic = Icon(icon, size: 22);
+        if (badgeCount <= 0) return ic;
+        return Badge(
+          label: Text('$badgeCount'),
+          child: ic,
+        );
+      }
+      return NavigationDestination(
+        key: const Key('nav-bottom-approvals'),
+        icon: badge(_icons[4]),
+        selectedIcon: badge(_filled[4]),
+        label: 'Duyệt',
+      );
+    }
+    if (slot3 == 3) {
+      return _destination('Yêu cầu', 3,
+          key: const Key('nav-bottom-requests'));
+    }
+    return _destination('Hoạt động', 6,
+        key: const Key('nav-bottom-activity'));
   }
 
   void _openMoreSheet({SessionScope? session}) {
@@ -613,9 +638,12 @@ class _AppShellState extends State<AppShell> {
       roleColor = const Color(0xFF475467);
     }
 
+    // Màn hẹp (<600): chỉ giữ search + chuông + avatar để AppBar không tràn.
+    // Refresh dùng kéo-thả, theme/cài đặt vào qua More sheet và menu avatar.
+    final compact = MediaQuery.sizeOf(context).width < 600;
+
     return AppBar(
       title: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             _icons[_index],
@@ -623,9 +651,13 @@ class _AppShellState extends State<AppShell> {
             color: const Color(0xFF2563EB),
           ),
           const SizedBox(width: 8),
-          Text(
-            _titles[_index],
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+          Flexible(
+            child: Text(
+              _titles[_index],
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -682,29 +714,31 @@ class _AppShellState extends State<AppShell> {
                 ),
             ],
           ),
-        IconButton(
-          icon: Icon(
-            theme.brightness == Brightness.dark
-                ? Icons.light_mode_outlined
-                : Icons.dark_mode_outlined,
-            size: 20,
+        if (!compact)
+          IconButton(
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+              size: 20,
+            ),
+            tooltip: 'Chuyển giao diện Sáng / Tối',
+            onPressed: () {
+              // ignore: use_build_context_synchronously
+              final ctrl = Provider.of<ThemeModeController?>(context, listen: false);
+              if (ctrl != null) {
+                ctrl.setMode(
+                  theme.brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark,
+                );
+              }
+            },
           ),
-          tooltip: 'Chuyển giao diện Sáng / Tối',
-          onPressed: () {
-            // ignore: use_build_context_synchronously
-            final ctrl = Provider.of<ThemeModeController?>(context, listen: false);
-            if (ctrl != null) {
-              ctrl.setMode(
-                theme.brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark,
-              );
-            }
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.settings_outlined, size: 20),
-          onPressed: _openSettings,
-          tooltip: 'Cài đặt hệ thống',
-        ),
+        if (!compact)
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 20),
+            onPressed: _openSettings,
+            tooltip: 'Cài đặt hệ thống',
+          ),
         const SizedBox(width: 8),
         Container(
           height: 36,
@@ -718,26 +752,30 @@ class _AppShellState extends State<AppShell> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: roleColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  role,
-                  style: TextStyle(
-                    color: roleColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+              if (!compact) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: roleColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    role,
+                    style: TextStyle(
+                      color: roleColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                user?.displayName ?? 'Khách',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
+                const SizedBox(width: 6),
+                Text(
+                  user?.displayName ?? 'Khách',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ],
               PopupMenuButton<String>(
                 key: const Key('topbar-user-menu'),
                 icon: user != null

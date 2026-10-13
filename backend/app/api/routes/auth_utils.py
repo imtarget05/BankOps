@@ -143,7 +143,7 @@ async def authenticate_user(db: AsyncSession, username: str, password: str) -> U
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
-    ) -> User:
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -168,6 +168,10 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+async def get_user_from_token_string(token: str, db: AsyncSession) -> User:
+    return await get_current_user(token, db)
 
 
 async def get_current_user_with_capabilities(

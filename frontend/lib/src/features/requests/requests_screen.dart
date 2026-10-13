@@ -5,6 +5,7 @@ import '../../core/util/formatting.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import 'request_timeline.dart';
 
 /// Màn yêu cầu — tạo mới và gửi duyệt phiếu kho (stock) + phiếu quỹ (cash).
 class RequestsScreen extends StatefulWidget {
@@ -30,6 +31,19 @@ class _RequestsScreenState extends State<RequestsScreen> {
     setState(() {
       _future = _load(repo);
     });
+  }
+
+  void _showHistory(String requestId) {
+    // Lấy repo TRƯỚC khi mở sheet: context trong bottom-sheet overlay
+    // không còn nằm dưới RepositoryScope.
+    final repo = RepositoryScope.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => RequestTimeline(requestId: requestId, repo: repo),
+    );
   }
 
   Future<void> _submitStock(String id) async {
@@ -568,6 +582,13 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   _statusChip(r.status),
+                                  const Spacer(),
+                                  IconButton(
+                                    key: Key('request-history-stock-${r.id}'),
+                                    icon: const Icon(Icons.history_outlined, size: 20),
+                                    tooltip: 'Lịch sử phiếu ${r.id}',
+                                    onPressed: () => _showHistory(r.id),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 4),
@@ -665,6 +686,13 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   _statusChip(r.status),
+                                  const Spacer(),
+                                  IconButton(
+                                    key: Key('request-history-cash-${r.id}'),
+                                    icon: const Icon(Icons.history_outlined, size: 20),
+                                    tooltip: 'Lịch sử phiếu ${r.id}',
+                                    onPressed: () => _showHistory(r.id),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 4),

@@ -25,18 +25,73 @@ class HttpBankOpsRepository implements BankOpsRepository {
                   defaultValue: 'http://localhost:8000/api/v1'),
         ),
         _client = client ?? http.Client(),
-        _tokenProvider = tokenProvider;
+        _tokenProvider = tokenProvider {
+    _approvalStreamCtrl = StreamController<String>.broadcast(
+      onListen: _startSse,
+      onCancel: _stopSse,
+    );
+  }
 
   final String _baseUrl;
   final http.Client _client;
   final Future<String?> Function()? _tokenProvider;
-  final _approvalStreamCtrl = StreamController<String>.broadcast();
+  late final StreamController<String> _approvalStreamCtrl;
+  bool _sseActive = false;
+  bool _disposed = false;
+
+  void _startSse() {
+    if (_sseActive || _disposed) return;
+    _sseActive = true;
+    _runSseLoop();
+  }
+
+  void _stopSse() {
+    _sseActive = false;
+  }
+
+  Future<void> _runSseLoop() async {
+    while (_sseActive && !_disposed) {
+      try {
+        final token = await _tokenProvider?.call();
+        if (token == null || token.isEmpty) {
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        }
+
+        final uri = _uri('/approvals/stream', {'token': token});
+        final request = http.Request('GET', uri);
+        request.headers['Accept'] = 'text/event-stream';
+        request.headers['Cache-Control'] = 'no-cache';
+
+        final streamedResponse = await _client.send(request);
+        if (streamedResponse.statusCode == 200) {
+          await for (final line in streamedResponse.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
+            if (!_sseActive || _disposed) break;
+            if (line.startsWith('data: ')) {
+              final payload = line.substring(6).trim();
+              if (payload.isNotEmpty && !_approvalStreamCtrl.isClosed) {
+                _approvalStreamCtrl.add(payload);
+              }
+            }
+          }
+        }
+      } catch (_) {
+        // SSE network disconnect or error: wait before retry
+      }
+      if (!_sseActive || _disposed) break;
+      await Future.delayed(const Duration(seconds: 3));
+    }
+  }
 
   String get baseUrl => _baseUrl;
   Future<String?> get accessToken => _tokenProvider?.call() ?? Future.value(null);
 
   @override
   void dispose() {
+    _disposed = true;
+    _sseActive = false;
     _approvalStreamCtrl.close();
     _client.close();
   }

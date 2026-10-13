@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/csv_export.dart';
+import '../../../core/util/report_excel.dart';
+import '../../../core/util/report_share.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../data/models/dtos.dart';
 
@@ -56,14 +58,7 @@ class InventoryChart extends StatelessWidget {
               onPressed: () => CsvExport.copyToClipboard(
                 context,
                 label: 'nhập/xuất kho',
-                headers: const [
-                  'bucket',
-                  'inbound_qty',
-                  'outbound_qty',
-                  'net_qty',
-                  'receipt_count',
-                  'issue_count'
-                ],
+                headers: ReportExcel.inventoryHeaders,
                 rows: [
                   for (final b in buckets)
                     [
@@ -75,6 +70,16 @@ class InventoryChart extends StatelessWidget {
                       b.issueCount
                     ],
                 ],
+              ),
+            ),
+            IconButton(
+              key: const Key('export-inventory-xlsx-btn'),
+              icon: const Icon(Icons.download_outlined, size: 20),
+              tooltip: 'Tải file Excel nhập/xuất kho',
+              onPressed: () => ReportShare.shareXlsx(
+                context,
+                filename: 'nhap-xuat-kho.xlsx',
+                bytes: ReportExcel.encodeInventory(buckets),
               ),
             ),
           ],

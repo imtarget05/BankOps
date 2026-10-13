@@ -24,6 +24,7 @@ from app.models.cash_sim import (
 )
 from app.services import idempotency
 from app.services.approval_controls import verify_supervisor_pin
+from app.services.approval_events import broadcast_approval_event
 
 router = APIRouter()
 
@@ -456,6 +457,14 @@ async def submit_cash_request(
     req.submitted_at = _now()
     await db.commit()
     await db.refresh(req)
+    await broadcast_approval_event(
+        action="submitted",
+        request_id=str(req.id),
+        kind="cash",
+        status="submitted",
+        message=f"Phiếu quỹ {req.kind} ({req.id}) đã được gửi duyệt",
+        meta={"sub_kind": req.kind, "maker_id": str(user.id), "amount": str(req.amount)},
+    )
     return _cash_req_out(req)
 
 
@@ -550,6 +559,14 @@ async def approve_cash_request(
         raise AppError(409, "VERSION_CONFLICT", "Phiếu đã bị thay đổi giữa các concurrent approve (A2)") from None
 
     await db.refresh(req)
+    await broadcast_approval_event(
+        action="approved",
+        request_id=str(req.id),
+        kind="cash",
+        status="posted",
+        message=f"Phiếu quỹ {req.kind} ({req.id}) đã được phê duyệt",
+        meta={"sub_kind": req.kind, "approver_id": str(user.id), "amount": str(req.amount)},
+    )
     return _cash_req_out(req, {"journal_id": str(journal.id)})
 
 
@@ -584,6 +601,14 @@ async def reject_cash_request(
     req.approver_id = user.id
     await db.commit()
     await db.refresh(req)
+    await broadcast_approval_event(
+        action="rejected",
+        request_id=str(req.id),
+        kind="cash",
+        status="rejected",
+        message=f"Phiếu quỹ {req.kind} ({req.id}) đã bị từ chối",
+        meta={"sub_kind": req.kind, "approver_id": str(user.id), "reason": req.reason},
+    )
     return _cash_req_out(req)
 
 

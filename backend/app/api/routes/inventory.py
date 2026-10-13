@@ -33,6 +33,7 @@ from app.models.inventory import (
 )
 from app.services import idempotency
 from app.services.approval_controls import verify_supervisor_pin
+from app.services.approval_events import broadcast_approval_event
 
 router = APIRouter()
 
@@ -687,6 +688,14 @@ async def submit_request(
     await _outbox(db, "inventory.request.submitted", req, {})
     await db.commit()
     await db.refresh(req)
+    await broadcast_approval_event(
+        action="submitted",
+        request_id=str(req.id),
+        kind="inventory",
+        status="submitted",
+        message=f"Phiếu kho {req.kind} ({req.id}) đã được gửi duyệt",
+        meta={"sub_kind": req.kind, "maker_id": str(user.id)},
+    )
     return _req_out(req, await _load_lines(db, req.id))
 
 
@@ -820,6 +829,14 @@ async def approve_request(
     await _outbox(db, "inventory.request.approved", req, {})
     await db.commit()
     await db.refresh(req)
+    await broadcast_approval_event(
+        action="approved",
+        request_id=str(req.id),
+        kind="inventory",
+        status="posted",
+        message=f"Phiếu kho {req.kind} ({req.id}) đã được phê duyệt",
+        meta={"sub_kind": req.kind, "approver_id": str(user.id)},
+    )
     body = _req_out(req)
     idempotency.remember(db, key, idempotency.payload_hash({"approve": str(req.id)}), 200, body)
     return body
@@ -852,6 +869,14 @@ async def reject_request(
     await _outbox(db, "inventory.request.rejected", req, {})
     await db.commit()
     await db.refresh(req)
+    await broadcast_approval_event(
+        action="rejected",
+        request_id=str(req.id),
+        kind="inventory",
+        status="rejected",
+        message=f"Phiếu kho {req.kind} ({req.id}) đã bị từ chối",
+        meta={"sub_kind": req.kind, "approver_id": str(user.id), "reason": req.reason},
+    )
     return _req_out(req)
 
 

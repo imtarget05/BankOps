@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/csv_export.dart';
+import '../../../core/util/report_excel.dart';
+import '../../../core/util/report_share.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../data/models/dtos.dart';
 
@@ -56,17 +58,21 @@ class CashflowChart extends StatelessWidget {
               onPressed: () => CsvExport.copyToClipboard(
                 context,
                 label: 'dòng tiền mô phỏng',
-                headers: const [
-                  'bucket',
-                  'total_in',
-                  'total_out',
-                  'net',
-                  'journal_count'
-                ],
+                headers: ReportExcel.cashflowHeaders,
                 rows: [
                   for (final b in buckets)
                     [b.bucket, b.totalIn, b.totalOut, b.net, b.journalCount],
                 ],
+              ),
+            ),
+            IconButton(
+              key: const Key('export-cashflow-xlsx-btn'),
+              icon: const Icon(Icons.download_outlined, size: 20),
+              tooltip: 'Tải file Excel dòng tiền',
+              onPressed: () => ReportShare.shareXlsx(
+                context,
+                filename: 'dong-tien-mo-phong.xlsx',
+                bytes: ReportExcel.encodeCashflow(buckets),
               ),
             ),
           ],

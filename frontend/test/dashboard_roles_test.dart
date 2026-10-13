@@ -97,6 +97,43 @@ void main() {
   );
 
   testWidgets(
+    'Compact auditor bottom bar hides requests slot, keeps more',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      const auditor = AppUser(
+        id: 'u-aud',
+        username: 'demo_auditor',
+        displayName: 'Lê Khánh Chi (KTNB)',
+        roles: ['auditor'],
+      );
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AuthService>(
+          create: (_) => AuthService(baseUrl: 'http://localhost:8000'),
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: SessionScope(
+              user: auditor,
+              onSignOut: () async {},
+              child: AppShell(
+                repository: FakeBankOpsRepository(latency: Duration.zero),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('nav-bottom-requests')), findsNothing);
+      expect(find.byKey(const Key('nav-bottom-approvals')), findsNothing);
+      expect(find.byKey(const Key('nav-bottom-dashboard')), findsOneWidget);
+      expect(find.byKey(const Key('nav-bottom-more')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'Activity live bar shows and refreshes',
     (WidgetTester tester) async {
       await pumpShell(

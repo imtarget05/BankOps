@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/util/approval_pdf.dart';
+import '../../core/util/report_share.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/state_views.dart';
@@ -912,6 +914,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                     Wrap(
                                       spacing: 8,
                                       children: [
+                                        IconButton(
+                                          key: Key('print-approval-${item.id}'),
+                                          onPressed: () =>
+                                              ReportShare.printPdf(
+                                            context,
+                                            filename: 'phieu-${item.id}.pdf',
+                                            build: () =>
+                                                ApprovalPdf.encode(item),
+                                          ),
+                                          icon: const Icon(
+                                              Icons.print_outlined,
+                                              size: 20),
+                                          tooltip: 'In phiếu ${item.id} (PDF)',
+                                        ),
                                         OutlinedButton.icon(
                                           key: Key('btn-reject-${item.id}'),
                                           onPressed: _busy ? null : () => _reject(item),

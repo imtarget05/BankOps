@@ -1,0 +1,136 @@
+name: Deploy
+
+# Tag-based deploys: prod-* → production, staging-* → staging.
+# Manual runs via workflow_dispatch (chọn environment).
+# Requires repo secret: CLOUDFLARE_API_TOKEN (least-privilege: Workers Scripts: Edit + Pages: Edit).
+
+on:
+  push:
+    tags:
+      - 'prod-*'
+      - 'staging-*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - prod
+
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
+  FLUTTER_VERSION: '3.47.7'
+  WORKER_DIR: infra/cloudflare-worker
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.set.outputs.target }}
+    steps:
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref_name }}" == prod-* ]]; then
+            echo "target=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=staging" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    needs: resolve
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKER_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.WORKER_DIR }}/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Dry-run deploy (binding validation)
+        run: |
+          if [ "${{ needs.resolve.outputs.target }}" = "prod" ]; then
+            npx wrangler deploy --dry-run
+          else
+            npx wrangler deploy --dry-run --env staging
+          fi
+
+  deploy:
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.target == 'prod' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.WORKER_DIR }}/package-lock.json
+      - name: Install worker dependencies
+        working-directory: ${{ env.WORKER_DIR }}
+        run: npm ci
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+      - name: Resolve API base URL
+        id: apiurl
+        run: |
+          if [ "${{ needs.resolve.outputs.target }}" = "prod" ]; then
+            echo "url=https://bankops-api.tanmainguyenbinh.workers.dev" >> "$GITHUB_OUTPUT"
+            echo "pages=bankops-web" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://bankops-api-staging.tanmainguyenbinh.workers.dev" >> "$GITHUB_OUTPUT"
+            echo "pages=bankops-web-staging" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build Flutter Web (API_BASE_URL=${{ steps.apiurl.outputs.url }})
+        working-directory: frontend
+        run: |
+          flutter build web --release \
+            --dart-define=API_BASE_URL=${{ steps.apiurl.outputs.url }}
+      - name: Copy _headers/_redirects into build
+        run: cp infra/cloudflare-pages/_headers infra/cloudflare-pages/_redirects frontend/build/web/
+      - name: Deploy Worker (${{ needs.resolve.outputs.target }})
+        working-directory: ${{ env.WORKER_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ "${{ needs.resolve.outputs.target }}" = "prod" ]; then
+            npx wrangler deploy
+          else
+            npx wrangler deploy --env staging
+          fi
+      - name: Ensure Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        working-directory: ${{ env.WORKER_DIR }}
+        run: npx wrangler pages project create ${{ steps.apiurl.outputs.pages }} --production-branch=main 2>/dev/null || true
+      - name: Deploy Pages (${{ steps.apiurl.outputs.pages }})
+        working-directory: ${{ env.WORKER_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler pages deploy ../../frontend/build/web --project-name=${{ steps.apiurl.outputs.pages }}
+      - name: Smoke test (health/live)
+        run: |
+          curl -fsS -m 30 "${{ steps.apiurl.outputs.url }}/api/v1/health/live" | grep -q '"status":"alive"'
+          echo "Health check passed for ${{ needs.resolve.outputs.target }}"
