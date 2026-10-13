@@ -2,7 +2,7 @@
 
 **Vai trò:** QA reviewer độc lập — chỉ viết test, **không sửa tệp tính năng**.
 **Phạm vi:** B01–B15 (`docs/13-backlog.md`), ca bắt buộc A1–A4 / I1–I3 / C1–C3 / R1 / G1–G2 / E1 / S1 (`docs/10-qa.md`), hợp đồng `docs/04`, `docs/06`, `docs/08`.
-**Snapshot cuối:** 10/12/2026 · **Vòng 8**: feature hoàn thành — 101 test passed, ruff 0, flutter 8/8, worker tsc, Docker build OK, compose up, demo login OK.
+**Snapshot cuối:** 13/10/2026 · **Vòng 9**: Nghiệm thu toàn diện — 136 tests backend passed, ruff 0, Flutter 28/28 passed (analyze 0 issues), worker tsc 0, Docker 4/4 healthy, live E2E 100% OK.
 
 > ⚠️ AI coding agent sửa mã song song trong suốt 9 giờ (15:39 → 22:50). Trạng thái đổi **7 lần**. Mọi khẳng định gắn với timestamp.
 >
@@ -26,8 +26,9 @@ Số vòng 3 cao hơn vòng 2 vì cộng thêm **3 test mới** phát hiện l�
 **Vòng 4 — 82 test:** `52 failed · 28 passed · 2 skipped · 0 error` (đồng nhất Python 3.11 và 3.14)
 **Vòng 5 — 85 test:** `55 failed · 28 passed · 2 skipped · 0 error` (đồng nhất 2 venv; +3 test mới đỏ, +1 test cũ lật đỏ sau khi vá xanh giả)
 **Vòng 6 — 87 test:** `57 failed · 28 passed · 2 skipped · 0 error` (đồng nhất 2 venv; +2 test auth mới đỏ)
-**8** — 101 passed · 2 skipped · 0 error (all acceptance A1-A4, I1-I3, C1-C3, R1, E1, S1 + contract green; Flutter 8/8, worker tsc, Docker build ok) | feature hoàn thành, compose up, demo login ok
-**Lint:** `ruff check app` = **All checks passed!** · `ruff check tests` = **All checks passed!**
+**Vòng 8 (12/10):** 101 passed · 2 skipped · 0 error (all acceptance A1-A4, I1-I3, C1-C3, R1, E1, S1 + contract green; Flutter 8/8, worker tsc, Docker build ok)
+**Vòng 9 (13/10 — Nghiệm thu toàn diện):** **136 passed · 2 skipped · 0 error** (bổ sung toàn diện SSE approval events, AI assessment & PIN verification tests, live E2E); **Flutter: 28/28 passed**, `flutter analyze` 0 issues; **Worker:** `tsc --noEmit` exit 0; **Docker Compose:** 4/4 container healthy; **Live Docker E2E:** 100% OK.
+**Lint:** `ruff check backend/ ai/` = **All checks passed!** · `flutter analyze` = **No issues found!**
 
 ### Cách tái lập
 

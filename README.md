@@ -103,17 +103,22 @@ python3 backend/tests/verify_live_e2e.py
 ```
 *Kết quả:* Tự động thực hiện luồng Maker đăng nhập $\to$ Tạo phiếu 600 triệu $\to$ Gửi duyệt $\to$ Checker xem thẩm định AI (Điểm 88/100, High Risk) $\to$ Thử sai PIN bị từ chối 403 $\to$ Nhập đúng PIN 123456 duyệt thành công $\to$ Xác nhận số dư két sắt tăng chính xác +600,000,000 VND.
 
-### 5.2. Chạy Toàn Bộ Test Suite Backend & Frontend
+### 5.2. Chạy Toàn Bộ Test Suite Backend & Frontend (1-Click)
 ```bash
-# 1. Kiểm tra tĩnh & linter
-ruff check backend/ ai/
-cd frontend && flutter analyze .
+# Kiểm tra toàn bộ linter, typecheck và tests của cả Backend + Frontend + Worker
+make check-all
 
-# 2. Chạy unit & widget tests Frontend (14/14 passed)
+# Hoặc chạy từng phân hệ thủ công:
+# 1. Kiểm tra tĩnh & linter
+python3 -m ruff check backend/ ai/
+cd frontend && flutter analyze .
+cd infra/cloudflare-worker && npm run typecheck
+
+# 2. Chạy unit & widget tests Frontend (28/28 passed)
 cd frontend && flutter test --no-pub
 
-# 3. Chạy unit & integration tests Backend (132 passed)
-PYTHONPATH=backend python3 -m pytest backend/tests/
+# 3. Chạy unit & integration tests Backend (136 passed)
+PYTHONPATH=backend python3 -m pytest backend/tests/ -q
 ```
 
 ---
@@ -125,12 +130,13 @@ BankOps/
 ├── ai/                          # Small LLM Pipeline (Qwen2.5-1.5B, Colab Notebook, Dataset)
 ├── backend/                     # FastAPI Backend (Clean Architecture, Async SQLAlchemy)
 │   ├── app/api/routes/          # API Routers (auth, cash_sim, inventory, approvals, ai, reports)
-│   ├── app/services/            # AI services, ledger, approval controls (PIN validation)
-│   └── tests/                   # Test suite (132 tests: E2E, QA acceptance, contracts, AI)
+│   ├── app/services/            # AI services, ledger, approval controls, SSE approval events
+│   └── tests/                   # Test suite (136 tests: E2E, QA acceptance, contracts, AI, SSE)
 ├── frontend/                    # Flutter Web Client (Material 3, Responsive Desktop/Mobile)
-│   ├── lib/src/features/        # Các phân hệ (auth, approvals, cash, inventory, reports, ai)
-│   └── test/                    # Widget & Unit test suite (14 tests)
+│   ├── lib/src/features/        # Các phân hệ (auth, approvals, cash, inventory, reports, ai, timeline)
+│   └── test/                    # Widget & Unit test suite (28 tests: roles, exports, timeline, charts)
 ├── infra/cloudflare-worker/     # Edge API Gateway (Hono + TypeScript)
+├── infra/hf-llm-space/          # Self-hosted llama.cpp Docker Space cho Hugging Face
 ├── sample-data/                 # Dữ liệu mẫu ban đầu (users, cashboxes, items, locations)
 └── docker-compose.yml           # Cấu hình cụm Docker 4 containers
 ```
