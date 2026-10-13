@@ -13,6 +13,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+uv.lock
 
 # Flutter
 frontend/.dart_tool/
