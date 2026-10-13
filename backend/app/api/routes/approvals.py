@@ -55,7 +55,8 @@ async def get_approval_inbox(
                 "status": r.status,
                 "maker_id": maker_id,
                 "maker": users.get(maker_id, maker_id),
-                "impact": f"Kho ({r.kind}) · {line_count} dòng vật tư",
+                "impact": f"Kho ({r.kind}) · {line_count} đơn vị",
+                "approval_detail": {"kind": r.kind, "total_quantity": str(line_count)},
                 "detail": r.reason or f"Phiếu kho {r.kind}",
             }
         )

@@ -5,7 +5,7 @@
 
 import { Hono } from "hono";
 import { Env } from "../index";
-import { assessRequestRisk } from "./ai";
+import { assessRequestRisk, requireSupervisorPin } from "./ai";
 import { db } from "../db/client";
 import { JwtPayload } from "../middleware/auth";
 
@@ -253,7 +253,7 @@ cashSimRoutes.post("/requests/:id/approve", async (c) => {
   }) === "high";
   if (needsPin) {
     try {
-      if (!(await supervisorPinOk(body.supervisor_pin, c.env))) {
+      if (!(await requireSupervisorPin(body.supervisor_pin, c.env))) {
         return c.json({ error: { code: "SUPERVISOR_PIN_INVALID", message: "Mã PIN kiểm soát viên không đúng." } }, 403);
       }
     } catch {

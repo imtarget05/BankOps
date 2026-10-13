@@ -9,7 +9,6 @@ import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 import '../../data/repositories/fake_repository.dart';
-import '../../data/repositories/http_bankops_repository.dart';
 
 /// Màn duyệt — approval inbox (Maker != Checker) chuẩn ngân hàng 4-Eyes Principle.
 class ApprovalsScreen extends StatefulWidget {
@@ -97,144 +96,19 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     AiRiskAssessment? assessment, {
     bool isBatch = false,
     int batchCount = 1,
-  }) async {
-    final pinCtrl = TextEditingController();
-    String? errorText;
+  }) {
     final isDemoRepository = RepositoryScope.of(context) is FakeBankOpsRepository;
-
-    final result = await showDialog<String?>(
+    return showDialog<String?>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDC2626).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isBatch
-                      ? 'Xác Thực Kiểm Soát Kép Lô $batchCount Phiếu'
-                      : 'Xác Thực Kiểm Soát Kép (4 Mắt)',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFFCA5A5)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          isBatch
-                              ? 'Lô duyệt có phiếu giá trị lớn hoặc rủi ro cao. Bắt buộc Kiểm soát viên nhập PIN để cấp phép.'
-                              : 'Phiếu ${item.id} có mức độ RỦI RO CAO (${item.impact}). Bắt buộc xác thực PIN Kiểm soát viên và sinh mã Audit Stamp SHA-256.',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                if (assessment != null) ...[
-                  Text(
-                    'Audit Stamp Hash (SHA-256):',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: SelectableText(
-                      assessment.auditStamp,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                Text(
-                  isDemoRepository
-                      ? 'Nhập PIN demo Kiểm soát viên (123456):'
-                      : 'Nhập PIN Kiểm soát viên được cấu hình bảo mật:',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  key: const Key('supervisor-pin-input'),
-                  controller: pinCtrl,
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    hintText: 'Nhập 6 số PIN',
-                    border: const OutlineInputBorder(),
-                    errorText: errorText,
-                    prefixIcon: const Icon(Icons.pin_outlined),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Huỷ bỏ'),
-            ),
-            FilledButton(
-              key: const Key('confirm-supervisor-pin-btn'),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-              onPressed: () {
-                if (isDemoRepository && pinCtrl.text.trim() == '123456') {
-                  Navigator.of(ctx).pop(pinCtrl.text.trim());
-                } else if (isDemoRepository) {
-                  setDialogState(() {
-                    errorText = 'Mã PIN không đúng (Demo: 123456)';
-                  });
-                } else if (pinCtrl.text.trim().isNotEmpty) {
-                  Navigator.of(ctx).pop(pinCtrl.text.trim());
-                } else {
-                  setDialogState(() {
-                    errorText = 'Vui lòng nhập PIN Kiểm soát viên.';
-                  });
-                }
-              },
-              child: const Text('Ký Số & Phê Duyệt'),
-            ),
-          ],
-        ),
+      builder: (ctx) => _DualControlPinDialog(
+        item: item,
+        assessment: assessment,
+        isBatch: isBatch,
+        batchCount: batchCount,
+        isDemoRepository: isDemoRepository,
       ),
     );
-
-    pinCtrl.dispose();
-    return result;
   }
 
   Future<void> _approve(ApprovalItem item) async {
@@ -1140,6 +1014,172 @@ class _SelectionBar extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _DualControlPinDialog extends StatefulWidget {
+  const _DualControlPinDialog({
+    required this.item,
+    required this.assessment,
+    required this.isBatch,
+    required this.batchCount,
+    required this.isDemoRepository,
+  });
+
+  final ApprovalItem item;
+  final AiRiskAssessment? assessment;
+  final bool isBatch;
+  final int batchCount;
+  final bool isDemoRepository;
+
+  @override
+  State<_DualControlPinDialog> createState() => _DualControlPinDialogState();
+}
+
+class _DualControlPinDialogState extends State<_DualControlPinDialog> {
+  late final TextEditingController _pinCtrl;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _pinCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _pinCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onConfirm() {
+    if (widget.isDemoRepository && _pinCtrl.text.trim() == '123456') {
+      Navigator.of(context).pop(_pinCtrl.text.trim());
+    } else if (widget.isDemoRepository) {
+      setState(() {
+        _errorText = 'Mã PIN không đúng (Demo: 123456)';
+      });
+    } else if (_pinCtrl.text.trim().isNotEmpty) {
+      Navigator.of(context).pop(_pinCtrl.text.trim());
+    } else {
+      setState(() {
+        _errorText = 'Vui lòng nhập PIN Kiểm soát viên.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 22),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              widget.isBatch
+                  ? 'Xác Thực Kiểm Soát Kép Lô ${widget.batchCount} Phiếu'
+                  : 'Xác Thực Kiểm Soát Kép (4 Mắt)',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.isBatch
+                          ? 'Lô duyệt có phiếu giá trị lớn hoặc rủi ro cao. Bắt buộc Kiểm soát viên nhập PIN để cấp phép.'
+                          : 'Phiếu ${widget.item.id} có mức độ RỦI RO CAO (${widget.item.impact}). Bắt buộc xác thực PIN Kiểm soát viên và sinh mã Audit Stamp SHA-256.',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (widget.assessment != null) ...[
+              Text(
+                'Audit Stamp Hash (SHA-256):',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: SelectableText(
+                  widget.assessment!.auditStamp,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            Text(
+              widget.isDemoRepository
+                  ? 'Nhập PIN demo Kiểm soát viên (123456):'
+                  : 'Nhập PIN Kiểm soát viên được cấu hình bảo mật:',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const Key('supervisor-pin-input'),
+              controller: _pinCtrl,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'Nhập 6 số PIN',
+                border: const OutlineInputBorder(),
+                errorText: _errorText,
+                prefixIcon: const Icon(Icons.pin_outlined),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Huỷ bỏ'),
+        ),
+        FilledButton(
+          key: const Key('confirm-supervisor-pin-btn'),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+          onPressed: _onConfirm,
+          child: const Text('Ký Số & Phê Duyệt'),
+        ),
+      ],
     );
   }
 }

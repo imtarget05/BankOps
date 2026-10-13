@@ -45,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _copy(BuildContext context, String label, String text) async {
+  Future<void> _copy(String label, String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     AppToast.success(context, 'Đã sao chép $label');
@@ -143,7 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.content_copy_outlined, size: 20),
                       tooltip: 'Sao chép ${account.$1}',
                       onPressed: () =>
-                          _copy(context, 'tên đăng nhập', account.$1),
+                          _copy('tên đăng nhập', account.$1),
                     ),
                   ),
               ],
@@ -204,7 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 size: 20),
                             tooltip: 'Sao chép địa chỉ API',
                             onPressed: () =>
-                                _copy(context, 'địa chỉ API', apiUrl),
+                                _copy('địa chỉ API', apiUrl),
                           ),
                           IconButton(
                             key: const Key('settings-health-refresh-btn'),
@@ -230,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     icon: const Icon(Icons.content_copy_outlined),
                     tooltip: 'Sao chép lệnh reset',
                     onPressed: () => _copy(
-                        context, 'lệnh reset', SettingsScreen.resetCommand),
+                        'lệnh reset', SettingsScreen.resetCommand),
                   ),
                 ),
               ],

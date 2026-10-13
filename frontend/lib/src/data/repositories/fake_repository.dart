@@ -23,6 +23,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     _approvalStreamCtrl.close();
   }
 
+  @override
   Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
 
   Future<T> _delay<T>(T value) {
@@ -421,8 +422,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
           id: r.id,
           kind: 'inventory',
           maker: r.createdByName,
-          impact: 'Kho (${r.kind.name})',
+          impact: 'Kho (${r.kind.name}) · ${r.items.fold<num>(0, (total, line) => total + (num.tryParse(line.quantity) ?? 0))} đơn vị',
           detail: r.reason.isEmpty ? r.id : r.reason,
+          approvalDetail: {
+            'kind': r.kind.name,
+            'total_quantity': r.items.fold<num>(0, (total, line) => total + (num.tryParse(line.quantity) ?? 0)).toString(),
+          },
         ),
       for (final r
           in _cashRequests.where((x) => x.status == RequestStatus.pending))

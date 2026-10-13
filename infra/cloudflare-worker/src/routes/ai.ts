@@ -44,18 +44,14 @@ function enforceRateLimit(
   return true;
 }
 
-export async function supervisorPinOk(provided: string | undefined, env: Env): Promise<boolean> {
-  let expected: string;
-  if (env.APP_ENV === "demo") expected = "123456";
-  else {
-    if (!env.SUPERVISOR_PIN) throw new Error("Supervisor PIN is not configured");
-    expected = env.SUPERVISOR_PIN;
-  }
+export async function requireSupervisorPin(provided: string | undefined, env: Env): Promise<boolean> {
+  if (env.APP_ENV === "demo") return provided === "123456";
+  if (!env.SUPERVISOR_PIN) throw new Error("Supervisor PIN is not configured");
   const [providedDigest, expectedDigest] = await Promise.all([
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(provided ?? "")),
-    crypto.subtle.digest("SHA-256", new TextEncoder().encode(expected)),
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.SUPERVISOR_PIN)),
   ]);
-  let mismatch = (provided ?? "").length ^ expected.length;
+  let mismatch = (provided ?? "").length ^ env.SUPERVISOR_PIN.length;
   const actual = new Uint8Array(providedDigest);
   const required = new Uint8Array(expectedDigest);
   for (let index = 0; index < actual.length; index++) mismatch |= actual[index] ^ required[index];
@@ -101,8 +97,8 @@ function parseAssessment(value: unknown): Assessment | null {
 }
 
 function policyAssessment(data: RequestAssessment): Assessment {
-  const cleaned = data.amount_or_qty.replace(/[.,]\\d{1,2}(?=\\s|[a-zA-Z]|$)/g, "");
-  const value = Number(cleaned.replace(/[^\\d]/g, "")) || 0;
+  const cleaned = data.amount_or_qty.replace(/[.,]\d{1,2}(?=\s|[a-zA-Z]|$)/g, "");
+  const value = Number(cleaned.replace(/[^\d]/g, "")) || 0;
   const cash = data.kind.toLowerCase().includes("cash") || data.kind.toLowerCase().includes("quỹ");
   let risk_level: RiskLevel = "low";
   let risk_score = cash ? 20 : 18;

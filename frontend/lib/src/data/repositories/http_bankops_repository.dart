@@ -41,6 +41,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
     _client.close();
   }
 
+  @override
   Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
 
 
@@ -697,23 +698,46 @@ class HttpBankOpsRepository implements BankOpsRepository {
         maker: _str(m, 'maker'),
         impact: _str(m, 'impact', _str(m, 'status')),
         detail: _str(m, 'detail', id),
+        approvalDetail: m['approval_detail'] is Map
+            ? Map<String, dynamic>.from(m['approval_detail'] as Map)
+            : (m['approval_detail'] is String
+                ? _decodeMap(m['approval_detail'] as String)
+                : null),
       );
     }).toList();
   }
 
+  Map<String, dynamic>? _decodeMap(String source) {
+    try {
+      final decoded = json.decode(source);
+      return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
   String _assessmentAmount(ApprovalItem item) {
+    final structuredQuantity = item.approvalDetail?['total_quantity'];
+    if (structuredQuantity != null) return structuredQuantity.toString();
     final raw = item.impact;
-    final decimalMatch = RegExp(r'[\d,.]+').firstMatch(raw);
+    final decimalMatch = RegExp(r'-?[\d,.]+').firstMatch(raw);
     if (decimalMatch == null) return raw;
-    return decimalMatch.group(0)!.replaceAll(',', '');
+    var amount = decimalMatch.group(0)!;
+    if (amount.contains('.') && amount.contains(',')) {
+      amount = amount.replaceAll(',', '');
+    } else if (amount.contains(',')) {
+      amount = amount.replaceAll(',', '.');
+    }
+    return amount;
   }
 
   @override
   Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item) async {
     try {
+      final structuredKind = item.approvalDetail?['kind']?.toString();
       final res = await _post('/ai/assess-request', {
         'request_id': item.id,
-        'kind': item.kind,
+        'kind': structuredKind ?? item.kind,
         'amount_or_qty': _assessmentAmount(item),
         'maker': item.maker,
         'reason': item.detail,

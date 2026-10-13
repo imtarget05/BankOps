@@ -230,6 +230,7 @@ class ApprovalItem {
     required this.maker,
     required this.impact,
     required this.detail,
+    this.approvalDetail,
   });
 
   final String id;
@@ -237,6 +238,7 @@ class ApprovalItem {
   final String maker;
   final String impact;
   final String detail;
+  final Map<String, dynamic>? approvalDetail;
 }
 
 /// Activity event.

@@ -30,6 +30,33 @@ void main() {
     );
   });
 
+  test('assessmentAmount preserves decimal amounts and strips inventory labels', () async {
+    final parsed = <Map<String, dynamic>>[];
+    final testClient = MockClient((request) async {
+      parsed.add(json.decode(request.body) as Map<String, dynamic>);
+      return http.Response.bytes(
+        utf8.encode(json.encode({
+          'request_id': 'cash-1', 'risk_level': 'low', 'risk_score': 20,
+          'summary': 'Check documents', 'flagged_rules': <String>[],
+          'recommendations': <String>[], 'audit_stamp': 'a' * 64,
+          'assessment_source': 'cloudflare',
+        })),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final repository = HttpBankOpsRepository(
+      baseUrl: 'http://localhost:8000',
+      client: testClient,
+      tokenProvider: () async => 'token',
+    );
+    await repository.assessApprovalItem(const ApprovalItem(
+      id: 'cash-1', kind: 'cash', maker: 'Maker', impact: '-500000000.00 VND', detail: 'Cash payout',
+    ));
+    expect(parsed.single['amount_or_qty'], '-500000000.00');
+    repository.dispose();
+  });
+
   test(
     'HttpBankOpsRepository calls /api/v1 endpoints, maps submitted/issue, and sends Idempotency-Key',
     () async {

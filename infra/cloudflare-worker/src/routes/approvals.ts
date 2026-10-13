@@ -63,6 +63,10 @@ approvalsRoutes.get("/inbox", async (c) => {
       maker_id: r.maker_id,
       maker: r.maker_name ?? r.maker_id,
       impact: `Kho (${r.kind}) · ${r.total_quantity} đơn vị`,
+      approval_detail: JSON.stringify({
+        kind: r.kind,
+        total_quantity: r.total_quantity,
+      }),
       detail: r.reason || r.id,
     })),
     ...cashRows.map((r) => {

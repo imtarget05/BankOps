@@ -24,6 +24,11 @@ def test_production_requires_configured_pin():
     assert error.value.status_code == 503
 
 
+def test_pin_is_not_required_for_low_risk_requests():
+    settings = Settings(database_url='sqlite://', app_env='production')
+    verify_supervisor_pin(None, settings, required=False)
+
+
 def test_production_checks_secret_pin():
     settings = Settings(
         database_url='sqlite://', app_env='production', supervisor_pin='654321'

@@ -4,7 +4,7 @@
 
 import { Hono } from "hono";
 import { Env } from "../index";
-import { assessRequestRisk } from "./ai";
+import { assessRequestRisk, requireSupervisorPin } from "./ai";
 import { db } from "../db/client";
 import { JwtPayload } from "../middleware/auth";
 
@@ -305,11 +305,27 @@ inventoryRoutes.post("/requests/:id/approve", async (c) => {
       403
     );
   }
+  if (!user.caps.includes("inventory:approve_request")) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Missing inventory:approve_request" } }, 403);
+  }
 
   const lines = await db<InvLineRow>(c.env.DATABASE_URL)`
     SELECT id, request_id, item_id, quantity, serial
     FROM inv_request_lines WHERE request_id = ${id}::uuid
   `;
+  const needsPin = req.kind === "issue" || req.kind === "transfer"
+    ? lines.reduce((total, line) => total + Number(line.quantity), 0) >= 50
+    : false;
+  if (needsPin) {
+    try {
+      const body = await c.req.json<{ supervisor_pin?: string }>().catch(() => ({} as { supervisor_pin?: string }));
+      if (!(await requireSupervisorPin(body.supervisor_pin, c.env))) {
+        return c.json({ error: { code: "SUPERVISOR_PIN_INVALID", message: "Mã PIN kiểm soát viên không đúng." } }, 403);
+      }
+    } catch {
+      return c.json({ error: { code: "SUPERVISOR_PIN_UNCONFIGURED", message: "Xác thực kiểm soát viên chưa được cấu hình." } }, 503);
+    }
+  }
   const sql = db(c.env.DATABASE_URL);
 
   for (const line of lines) {
