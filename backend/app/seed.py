@@ -128,13 +128,13 @@ async def seed_demo():
             {
                 "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",
                 "username": "demo_admin",
-                "display_name_demo": "Phạm Quản Trị (giả)",
+                "display_name_demo": "Phạm Minh Trị (Admin)",
                 "roles": ["admin", "staff", "approver"],
             },
             {
                 "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5",
                 "username": "demo_approver2",
-                "display_name_demo": "Hoàng Duyệt 2 (giả)",
+                "display_name_demo": "Hoàng Quốc Việt (Trưởng KSV)",
                 "roles": ["approver"],
             },
         ]

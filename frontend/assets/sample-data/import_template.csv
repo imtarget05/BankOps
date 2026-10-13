@@ -1,0 +1,3 @@
+sku,location_code,quantity,source_row_key
+DEMO-PAPER-A4,DEMO-HN,10,template-001
+DEMO-LAPTOP,DEMO-HCM,2,template-002

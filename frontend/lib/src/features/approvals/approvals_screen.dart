@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 
@@ -15,6 +17,7 @@ class ApprovalsScreen extends StatefulWidget {
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   Future<List<ApprovalItem>>? _future;
   bool _busy = false;
+  final Set<String> _selected = {};
 
   @override
   void didChangeDependencies() {
@@ -44,29 +47,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await repo.approveStockRequest(item.id);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Expanded(child: Text('Đã duyệt & ghi sổ thành công phiếu ${item.id}')),
-            ],
-          ),
-        ),
-      );
+      AppToast.success(context, 'Đã duyệt & ghi sổ thành công phiếu ${item.id}');
       _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFFB42318),
-          behavior: SnackBarBehavior.floating,
-          content: Text('Không thể duyệt: $e'),
-        ),
-      );
+      AppToast.error(context, 'Không thể duyệt: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -126,26 +111,60 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await repo.rejectStockRequest(item.id, reason);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFFD97706),
-          behavior: SnackBarBehavior.floating,
-          content: Text('Đã từ chối phiếu ${item.id}'),
-        ),
-      );
+      AppToast.info(context, 'Đã từ chối phiếu ${item.id}');
       _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFFB42318),
-          behavior: SnackBarBehavior.floating,
-          content: Text('Không thể từ chối: $e'),
-        ),
-      );
+      AppToast.error(context, 'Không thể từ chối: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Duyệt hàng loạt: mỗi phiếu duyệt & ghi sổ độc lập, phiếu lỗi không
+  /// chặn phiếu khác. Tóm tắt kết quả bằng toast, từ chối hàng loạt không
+  /// hỗ trợ (mỗi phiếu cần lý do riêng).
+  Future<void> _approveSelected(List<ApprovalItem> items) async {
+    final targets = items.where((i) => _selected.contains(i.id)).toList();
+    if (targets.isEmpty) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Duyệt hàng loạt ${targets.length} phiếu',
+      message:
+          'Mỗi phiếu được thẩm định Maker ≠ Checker và ghi sổ độc lập. '
+          'Phiếu lỗi không chặn các phiếu còn lại.',
+      confirmLabel: 'Duyệt ${targets.length} phiếu',
+    );
+    if (!confirmed || !mounted) return;
+    final repo = RepositoryScope.of(context);
+    setState(() => _busy = true);
+    var ok = 0;
+    final failed = <String>[];
+    for (final item in targets) {
+      try {
+        if (_isCash(item)) {
+          await repo.approveCashRequest(item.id);
+        } else {
+          await repo.approveStockRequest(item.id);
+        }
+        ok++;
+      } catch (_) {
+        failed.add(item.id);
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _selected.clear();
+    });
+    if (failed.isEmpty) {
+      AppToast.success(
+          context, 'Đã duyệt & ghi sổ thành công $ok/${targets.length} phiếu');
+    } else {
+      AppToast.error(context,
+          'Đã duyệt $ok/${targets.length} phiếu; lỗi: ${failed.join(', ')}');
+    }
+    _reload();
   }
 
   @override
@@ -253,6 +272,22 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              if (items.isNotEmpty)
+                _SelectionBar(
+                  allIds: [for (final i in items) i.id],
+                  selected: _selected,
+                  busy: _busy,
+                  onToggleAll: (selectAll) {
+                    setState(() {
+                      _selected.clear();
+                      if (selectAll) {
+                        _selected.addAll([for (final i in items) i.id]);
+                      }
+                    });
+                  },
+                  onApproveSelected: () => _approveSelected(items),
+                ),
 
               if (items.isEmpty)
                 Container(
@@ -391,6 +426,19 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    Checkbox(
+                                      key: Key('approval-select-${item.id}'),
+                                      value: _selected.contains(item.id),
+                                      onChanged: _busy
+                                          ? null
+                                          : (v) => setState(() {
+                                                if (v == true) {
+                                                  _selected.add(item.id);
+                                                } else {
+                                                  _selected.remove(item.id);
+                                                }
+                                              }),
+                                    ),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,6 +568,65 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Thanh chọn + duyệt hàng loạt phía trên danh sách phiếu chờ.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({
+    required this.allIds,
+    required this.selected,
+    required this.busy,
+    required this.onToggleAll,
+    required this.onApproveSelected,
+  });
+
+  final List<String> allIds;
+  final Set<String> selected;
+  final bool busy;
+  final ValueChanged<bool> onToggleAll;
+  final VoidCallback onApproveSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final allSelected =
+        selected.isNotEmpty && selected.length == allIds.length;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Checkbox(
+            key: const Key('approval-select-all'),
+            tristate: true,
+            value: selected.isEmpty ? false : (allSelected ? true : null),
+            onChanged: busy ? null : (v) => onToggleAll(v == true),
+          ),
+          Text(
+            selected.isEmpty
+                ? 'Chọn để duyệt hàng loạt'
+                : 'Đã chọn ${selected.length}/${allIds.length}',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const Spacer(),
+          if (selected.isNotEmpty)
+            FilledButton.icon(
+              key: const Key('approve-selected-btn'),
+              onPressed: busy ? null : onApproveSelected,
+              icon: const Icon(Icons.verified_rounded, size: 16),
+              label: Text('Duyệt ${selected.length} phiếu'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

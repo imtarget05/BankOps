@@ -53,8 +53,12 @@ void main() {
       );
       expect(enabledBtn.onPressed, isNotNull);
 
-      // 3. Confirm -> creates draft request
+      // 3. Confirm -> dialog xác nhận -> creates draft request
       await tester.tap(find.byKey(const Key('import-confirm-btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Xác nhận tạo phiếu nháp'), findsWidgets);
+      await tester.tap(find.byKey(const Key('confirm_dialog_confirm')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('import-confirmed-banner')), findsOneWidget);

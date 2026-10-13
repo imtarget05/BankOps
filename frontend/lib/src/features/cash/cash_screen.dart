@@ -32,6 +32,188 @@ class _CashScreenState extends State<CashScreen> {
     });
   }
 
+  Future<void> _showCreateCashboxDialog() async {
+    final codeCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final balanceCtrl = TextEditingController(text: '0');
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.savings_rounded, color: Color(0xFF059669)),
+            SizedBox(width: 8),
+            Text('Thêm Két Sắt Mới', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: codeCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Mã Két Sắt *',
+                hintText: 'Ví dụ: CB-TELLER-03',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Tên Két Sắt *',
+                hintText: 'Ví dụ: Két Quầy GDV 3',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: balanceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Số Dư Ban Đầu (VND)',
+                hintText: '0',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Hủy')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF059669)),
+            onPressed: () {
+              if (codeCtrl.text.trim().isEmpty || nameCtrl.text.trim().isEmpty) return;
+              Navigator.of(ctx).pop(true);
+            },
+            child: const Text('Thêm két'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.createCashbox(
+          code: codeCtrl.text.trim(),
+          name: nameCtrl.text.trim(),
+          openingBalance: balanceCtrl.text.trim().isEmpty ? '0.00' : balanceCtrl.text.trim(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã thêm két sắt "${nameCtrl.text.trim()}"!'), behavior: SnackBarBehavior.floating),
+          );
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showEditCashboxDialog(Cashbox box) async {
+    final nameCtrl = TextEditingController(text: box.name);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.edit_outlined, color: Color(0xFF059669)),
+            const SizedBox(width: 8),
+            Text('Đổi Tên Két: ${box.code}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Tên Két Sắt Mới *',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Hủy')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF059669)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Lưu thay đổi'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.updateCashbox(id: box.id, name: nameCtrl.text.trim());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã cập nhật tên két sắt!'), behavior: SnackBarBehavior.floating),
+          );
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteCashbox(Cashbox box) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Xác nhận đóng két sắt', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Bạn có chắc chắn muốn xóa két sắt "${box.name}" (${box.code}) khỏi hệ thống?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Hủy')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Đóng & Xóa'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.deleteCashbox(box.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã xóa két sắt "${box.name}"!'), behavior: SnackBarBehavior.floating),
+          );
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_CashData>(
@@ -87,21 +269,37 @@ class _CashScreenState extends State<CashScreen> {
                       ),
                     ],
                   ),
-                  FilledButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          behavior: SnackBarBehavior.floating,
-                          content: Text('Vui lòng vào tab "Yêu cầu" để lập phiếu nộp/rút quỹ mới.'),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const Key('btn-add-cashbox'),
+                        onPressed: () => _showCreateCashboxDialog(),
+                        icon: const Icon(Icons.add_box_outlined, size: 18),
+                        label: const Text('Thêm két sắt mới'),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Lập phiếu quỹ mới'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF059669),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+                      ),
+                      FilledButton.icon(
+                        key: const Key('btn-create-cash-request'),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              behavior: SnackBarBehavior.floating,
+                              content: Text('Vui lòng vào tab "Yêu cầu" để lập phiếu nộp/rút quỹ mới.'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Lập phiếu quỹ mới'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -277,6 +475,37 @@ class _CashScreenState extends State<CashScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(width: 8),
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert, size: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit_outlined, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Đổi tên két'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                    SizedBox(width: 8),
+                                    Text('Đóng & Xóa két', style: TextStyle(color: Colors.red)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (v) {
+                              if (v == 'edit') _showEditCashboxDialog(box);
+                              if (v == 'delete') _confirmDeleteCashbox(box);
+                            },
                           ),
                         ],
                       ),

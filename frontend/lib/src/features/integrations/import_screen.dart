@@ -2,10 +2,14 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/demo_banner.dart';
+import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 
 /// Màn nhập dữ liệu ngoại vi (CSV / JSON / Google Sheets) qua staging -> preview -> confirm -> draft.
@@ -151,9 +155,37 @@ class _ImportScreenState extends State<ImportScreen> {
     }
   }
 
+  /// Mẫu CSV trong `assets/sample-data/import_template.csv` (khớp seed demo).
+  static const _templateAsset = 'assets/sample-data/import_template.csv';
+
+  Future<void> _copyTemplate() async {
+    try {
+      final csv = await rootBundle.loadString(_templateAsset);
+      await Clipboard.setData(ClipboardData(text: csv));
+      if (!mounted) return;
+      AppToast.success(
+        context,
+        'Đã sao chép mẫu CSV — dán vào file .csv để dùng ngay',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Không tải được file mẫu: $e');
+    }
+  }
+
   Future<void> _confirmStaging() async {
     final preview = _preview;
     if (preview == null || !preview.canConfirm) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xác nhận tạo phiếu nháp',
+      message:
+          'Sẽ tạo phiếu nháp (Draft) từ ${preview.validCount} dòng hợp lệ '
+          'của lượt chạy ${preview.runId}. Phiếu tiếp tục đi qua quy trình '
+          'Maker-Checker chuẩn trước khi ghi sổ.',
+      confirmLabel: 'Xác nhận tạo nháp',
+    );
+    if (!confirmed || !mounted) return;
     final repo = RepositoryScope.of(context);
     setState(() {
       _busy = true;
@@ -165,12 +197,14 @@ class _ImportScreenState extends State<ImportScreen> {
       setState(() {
         _confirmed = result;
       });
+      AppToast.success(context, 'Xác nhận staging thành công');
       widget.onConfirmed?.call(result);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
       });
+      AppToast.error(context, 'Xác nhận thất bại: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -232,7 +266,20 @@ class _ImportScreenState extends State<ImportScreen> {
                       icon: const Icon(Icons.bug_report_outlined),
                       label: const Text('Mẫu CSV có dòng lỗi'),
                     ),
+                    OutlinedButton.icon(
+                      key: const Key('import-copy-template-btn'),
+                      onPressed: _busy ? null : _copyTemplate,
+                      icon: const Icon(Icons.content_copy_outlined),
+                      label: const Text('Sao chép mẫu CSV'),
+                    ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Định dạng: sku, location_code, quantity, source_row_key — '
+                  'SKU và mã kho phải tồn tại trong danh mục demo '
+                  '(vd: DEMO-PAPER-A4, DEMO-HN). Tối đa 5MB / 10.000 dòng.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const Divider(height: 28),
                 Row(
@@ -312,6 +359,20 @@ class _ImportScreenState extends State<ImportScreen> {
             busy: _busy,
             confirmed: _confirmed != null,
             onConfirm: _confirmStaging,
+          ),
+        ] else if (!_busy && _error == null && _confirmed == null) ...[
+          const SizedBox(height: 24),
+          EmptyView(
+            title: 'Chưa có dữ liệu staging',
+            subtitle:
+                'Tải file CSV/JSON, kéo từ Google Sheets, hoặc thử ngay nút "Mẫu CSV hợp lệ" ở trên.',
+            icon: Icons.cloud_upload_outlined,
+            action: OutlinedButton.icon(
+              key: const Key('import-empty-try-sample-btn'),
+              onPressed: () => _loadSampleCsv(includeInvalidRow: false),
+              icon: const Icon(Icons.play_arrow_outlined),
+              label: const Text('Thử mẫu CSV hợp lệ'),
+            ),
           ),
         ],
       ],

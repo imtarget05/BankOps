@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/util/csv_export.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../data/models/dtos.dart';
 
@@ -13,7 +14,12 @@ class CashflowChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (buckets.isEmpty) {
-      return const EmptyView(title: 'Chưa có dữ liệu dòng tiền mô phỏng');
+      return const EmptyView(
+        title: 'Chưa có dữ liệu dòng tiền mô phỏng',
+        subtitle:
+            'Tạo phiếu quỹ và được Checker duyệt — biểu đồ thu/chi sẽ hiện ở đây.',
+        icon: Icons.savings_outlined,
+      );
     }
     final statusColors = context.statusColors;
     final scheme = Theme.of(context).colorScheme;
@@ -27,14 +33,42 @@ class CashflowChart extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 16,
-          runSpacing: 8,
+        Row(
           children: [
-            _LegendDot(
-                color: statusColors.success, label: 'Thu quỹ mô phỏng (VND)'),
-            _LegendDot(
-                color: statusColors.danger, label: 'Chi quỹ mô phỏng (VND)'),
+            Expanded(
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _LegendDot(
+                      color: statusColors.success,
+                      label: 'Thu quỹ mô phỏng (VND)'),
+                  _LegendDot(
+                      color: statusColors.danger,
+                      label: 'Chi quỹ mô phỏng (VND)'),
+                ],
+              ),
+            ),
+            IconButton(
+              key: const Key('export-cashflow-csv-btn'),
+              icon: const Icon(Icons.content_copy_outlined, size: 20),
+              tooltip: 'Sao chép CSV dòng tiền',
+              onPressed: () => CsvExport.copyToClipboard(
+                context,
+                label: 'dòng tiền mô phỏng',
+                headers: const [
+                  'bucket',
+                  'total_in',
+                  'total_out',
+                  'net',
+                  'journal_count'
+                ],
+                rows: [
+                  for (final b in buckets)
+                    [b.bucket, b.totalIn, b.totalOut, b.net, b.journalCount],
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),

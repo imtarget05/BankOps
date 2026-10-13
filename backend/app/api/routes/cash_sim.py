@@ -52,6 +52,13 @@ async def _balance_for_box(db: AsyncSession, cashbox_id: uuid.UUID):
     return rows[0] if rows else None
 
 
+def _uuid(val: str, field: str = "id") -> uuid.UUID:
+    try:
+        return uuid.UUID(str(val))
+    except (ValueError, TypeError):
+        raise AppError(422, "INVALID_UUID", f"{field} không hợp lệ") from None
+
+
 async def _load_request(db: AsyncSession, request_id: uuid.UUID):
     return (await db.execute(select(CashRequest).where(CashRequest.id == request_id))).scalar_one_or_none()
 
@@ -131,6 +138,91 @@ async def list_cashboxes(
             for b in boxes
         ],
     }
+
+
+@router.post("/cash-sim/boxes", status_code=201)
+async def create_cashbox(
+    payload: dict,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    code = str(payload.get("code", "")).strip().upper()
+    name = str(payload.get("name", "")).strip()
+    currency = str(payload.get("currency", "VND")).strip().upper() or "VND"
+    opening_balance = str(payload.get("opening_balance", "0.00")).strip() or "0.00"
+    if not code:
+        raise AppError(422, "MISSING_CODE", "Mã két không được để trống")
+    if not name:
+        raise AppError(422, "MISSING_NAME", "Tên két không được để trống")
+    existing = (await db.execute(select(CashBox).where(CashBox.code == code))).scalars().first()
+    if existing:
+        raise AppError(409, "DUPLICATE_CODE", f"Mã két {code} đã tồn tại")
+    box = CashBox(
+        id=uuid.uuid4(),
+        code=code,
+        name=name,
+        currency=currency,
+        active=True,
+    )
+    db.add(box)
+    await db.flush()
+    balance = CashBalance(
+        cashbox_id=box.id,
+        amount=Decimal(opening_balance),
+        version=1,
+    )
+    db.add(balance)
+    await db.commit()
+    await db.refresh(box)
+    return {
+        "id": str(box.id),
+        "code": box.code,
+        "name": box.name,
+        "currency": box.currency,
+        "opening_balance": str(balance.amount),
+        "active": box.active,
+    }
+
+
+@router.put("/cash-sim/boxes/{cashbox_id}")
+async def update_cashbox(
+    cashbox_id: str,
+    payload: dict,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    cid = _uuid(cashbox_id, "cashbox_id")
+    box = (await db.execute(select(CashBox).where(CashBox.id == cid))).scalars().first()
+    if not box:
+        raise AppError(404, "CASHBOX_NOT_FOUND", "Không tìm thấy két sắt")
+    if "name" in payload and payload["name"]:
+        box.name = str(payload["name"]).strip()
+    if "active" in payload:
+        box.active = bool(payload["active"])
+    await db.commit()
+    await db.refresh(box)
+    return {
+        "id": str(box.id),
+        "code": box.code,
+        "name": box.name,
+        "currency": box.currency,
+        "active": box.active,
+    }
+
+
+@router.delete("/cash-sim/boxes/{cashbox_id}")
+async def delete_cashbox(
+    cashbox_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    cid = _uuid(cashbox_id, "cashbox_id")
+    box = (await db.execute(select(CashBox).where(CashBox.id == cid))).scalars().first()
+    if not box:
+        raise AppError(404, "CASHBOX_NOT_FOUND", "Không tìm thấy két sắt")
+    box.active = False
+    await db.commit()
+    return {"status": "deleted", "id": str(box.id)}
 
 
 @router.get("/cash-sim/balances")
@@ -260,6 +352,23 @@ async def list_cash_requests(
         "currency": "VND",
         "requests": [_cash_req_out(r) for r in rows],
     }
+
+
+@router.delete("/cash-sim/requests/{request_id}")
+async def delete_cash_request(
+    request_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    rid = _uuid(request_id, "request_id")
+    req = (await db.execute(select(CashRequest).where(CashRequest.id == rid))).scalars().first()
+    if not req:
+        raise AppError(404, "REQUEST_NOT_FOUND", "Không tìm thấy phiếu quỹ")
+    if req.status != "draft":
+        raise AppError(409, "CANNOT_DELETE_NON_DRAFT", "Chỉ có thể xoá phiếu ở trạng thái nháp (draft)")
+    await db.delete(req)
+    await db.commit()
+    return {"status": "deleted", "id": str(rid)}
 
 
 # --------------------------------------------------------------------------

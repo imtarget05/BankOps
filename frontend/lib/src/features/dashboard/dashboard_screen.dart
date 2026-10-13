@@ -66,6 +66,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverToBoxAdapter(
+                  child: _buildCashboxDistribution(context, data),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                sliver: SliverToBoxAdapter(
                   child: _buildQuickActions(context),
                 ),
               ),
@@ -104,6 +110,242 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCashboxDistribution(BuildContext context, DashboardData data) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final colors = [
+      const Color(0xFF2563EB),
+      const Color(0xFF059669),
+      const Color(0xFFD97706),
+      const Color(0xFF7C3AED),
+      const Color(0xFF0891B2),
+    ];
+
+    final boxAmounts = <String, double>{};
+    for (final b in data.cashBalances) {
+      boxAmounts[b.cashboxId] = double.tryParse(b.amount) ?? 0;
+    }
+
+    final totalCash = boxAmounts.values.fold<double>(0, (sum, v) => sum + v);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_rounded,
+                        color: Color(0xFF059669),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Cơ cấu & Phân bổ Tồn Quỹ Tiền Mặt',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Theo dõi hạn mức an toàn của từng két sắt chi nhánh',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF059669).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.2)),
+                ),
+                child: Text(
+                  'Tổng: ${AppFormat.money(totalCash.toStringAsFixed(0))}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF059669),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 10,
+              child: totalCash > 0
+                  ? Row(
+                      children: [
+                        for (int i = 0; i < data.cashboxes.length; i++) ...[
+                          if ((boxAmounts[data.cashboxes[i].id] ?? 0) > 0)
+                            Expanded(
+                              flex: (((boxAmounts[data.cashboxes[i].id] ?? 0) / totalCash) * 1000).round().clamp(1, 1000),
+                              child: Container(
+                                color: colors[i % colors.length],
+                              ),
+                            ),
+                        ],
+                      ],
+                    )
+                  : Container(color: Colors.grey.shade300),
+            ),
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 950;
+              final items = [
+                for (int i = 0; i < data.cashboxes.length; i++) ...[
+                  Builder(
+                    builder: (context) {
+                      final box = data.cashboxes[i];
+                      final amt = boxAmounts[box.id] ?? 0;
+                      final pct = totalCash > 0 ? (amt / totalCash * 100).toStringAsFixed(1) : '0.0';
+                      final color = colors[i % colors.length];
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    box.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12.5,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$pct%',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11.5,
+                                    color: color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    AppFormat.money(amt.toStringAsFixed(0)),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 13,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'An toàn',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF059669),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ];
+
+              if (isWide) {
+                return Row(
+                  children: [
+                    for (int i = 0; i < items.length; i++) ...[
+                      Expanded(child: items[i]),
+                      if (i < items.length - 1) const SizedBox(width: 12),
+                    ],
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  for (int i = 0; i < items.length; i++) ...[
+                    items[i],
+                    if (i < items.length - 1) const SizedBox(height: 10),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 

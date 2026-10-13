@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/util/csv_export.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../data/models/dtos.dart';
 
@@ -12,13 +13,47 @@ class StagnationList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const EmptyView(title: 'Không có hàng tồn đọng cần cảnh báo');
+      return const EmptyView(
+        title: 'Không có hàng tồn đọng cần cảnh báo',
+        subtitle: 'Mọi vật tư đều luân chuyển tốt trong ngưỡng 30/60/90 ngày.',
+        icon: Icons.check_circle_outline,
+      );
     }
     final statusColors = context.statusColors;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            key: const Key('export-stagnation-csv-btn'),
+            onPressed: () => CsvExport.copyToClipboard(
+              context,
+              label: 'tồn đọng',
+              headers: const [
+                'sku',
+                'name',
+                'quantity',
+                'days_since_last_issue',
+                'severity'
+              ],
+              rows: [
+                for (final item in items)
+                  [
+                    item.sku,
+                    item.name,
+                    item.quantity,
+                    item.daysSinceLastIssue,
+                    item.severity
+                  ],
+              ],
+            ),
+            icon: const Icon(Icons.content_copy_outlined, size: 18),
+            label: const Text('Sao chép CSV'),
+          ),
+        ),
+        const SizedBox(height: 8),
         for (final item in items)
           Card(
             key: Key('stagnation-item-${item.sku}'),

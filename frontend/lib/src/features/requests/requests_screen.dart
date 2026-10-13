@@ -88,6 +88,62 @@ class _RequestsScreenState extends State<RequestsScreen> {
     }
   }
 
+  Future<void> _deleteStock(String id) async {
+    final repo = RepositoryScope.of(context);
+    setState(() => _busy = true);
+    try {
+      await repo.deleteStockRequest(id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+          content: Text('Đã xoá phiếu kho nháp $id'),
+        ),
+      );
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFB42318),
+          behavior: SnackBarBehavior.floating,
+          content: Text('Lỗi xoá phiếu: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteCash(String id) async {
+    final repo = RepositoryScope.of(context);
+    setState(() => _busy = true);
+    try {
+      await repo.deleteCashRequest(id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+          content: Text('Đã xoá phiếu quỹ nháp $id'),
+        ),
+      );
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFB42318),
+          behavior: SnackBarBehavior.floating,
+          content: Text('Lỗi xoá phiếu: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _openCreateStockDialog(_RequestsData data) async {
     if (data.locations.isEmpty || data.items.isEmpty) return;
     final repo = RepositoryScope.of(context);
@@ -526,15 +582,27 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           ),
                         ),
                         if (r.status == RequestStatus.draft)
-                          FilledButton.icon(
-                            key: Key('btn-submit-stock-${r.id}'),
-                            onPressed: _busy ? null : () => _submitStock(r.id),
-                            icon: const Icon(Icons.send_rounded, size: 16),
-                            label: const Text('Gửi duyệt'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                key: Key('btn-delete-stock-${r.id}'),
+                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                tooltip: 'Xoá phiếu nháp',
+                                onPressed: _busy ? null : () => _deleteStock(r.id),
+                              ),
+                              const SizedBox(width: 4),
+                              FilledButton.icon(
+                                key: Key('btn-submit-stock-${r.id}'),
+                                onPressed: _busy ? null : () => _submitStock(r.id),
+                                icon: const Icon(Icons.send_rounded, size: 16),
+                                label: const Text('Gửi duyệt'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ],
                           )
                         else
                           _statusBadge(r.status),
@@ -611,15 +679,27 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           ),
                         ),
                         if (r.status == RequestStatus.draft)
-                          FilledButton.icon(
-                            key: Key('btn-submit-cash-${r.id}'),
-                            onPressed: _busy ? null : () => _submitCash(r.id),
-                            icon: const Icon(Icons.send_rounded, size: 16),
-                            label: const Text('Gửi duyệt'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF059669),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                key: Key('btn-delete-cash-${r.id}'),
+                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                tooltip: 'Xoá phiếu nháp',
+                                onPressed: _busy ? null : () => _deleteCash(r.id),
+                              ),
+                              const SizedBox(width: 4),
+                              FilledButton.icon(
+                                key: Key('btn-submit-cash-${r.id}'),
+                                onPressed: _busy ? null : () => _submitCash(r.id),
+                                icon: const Icon(Icons.send_rounded, size: 16),
+                                label: const Text('Gửi duyệt'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF059669),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ],
                           )
                         else
                           _statusBadge(r.status),

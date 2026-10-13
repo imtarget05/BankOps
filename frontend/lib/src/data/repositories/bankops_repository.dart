@@ -28,6 +28,31 @@ abstract class BankOpsRepository {
   Future<List<AssetRecord>> getAssets({String? locationId});
   Future<List<StockMovement>> getMovements({String? itemId});
 
+  // CRUD Inventory Items & Locations
+  Future<InventoryItem> createItem({
+    required String sku,
+    required String name,
+    required String unit,
+    bool trackedSerial = false,
+  });
+  Future<InventoryItem> updateItem({
+    required String id,
+    String? name,
+    String? unit,
+    bool? trackedSerial,
+  });
+  Future<void> deleteItem(String id);
+
+  Future<InventoryLocation> createLocation({
+    required String code,
+    required String name,
+  });
+  Future<InventoryLocation> updateLocation({
+    required String id,
+    String? name,
+  });
+  Future<void> deleteLocation(String id);
+
   // GET /inventory/requests, POST /inventory/requests
   Future<List<StockRequest>> getStockRequests();
   Future<StockRequest> createStockRequest({
@@ -37,6 +62,7 @@ abstract class BankOpsRepository {
     required List<StockRequestLine> lines,
     String? reason,
   });
+  Future<void> deleteStockRequest(String id);
   // POST /inventory/requests/{id}/submit|approve|reject
   Future<StockRequest> submitStockRequest(String id);
   Future<StockRequest> approveStockRequest(String id);
@@ -44,6 +70,18 @@ abstract class BankOpsRepository {
 
   // GET /cash-sim/boxes, /balances, /journals, /requests
   Future<List<Cashbox>> getCashboxes();
+  Future<Cashbox> createCashbox({
+    required String code,
+    required String name,
+    String currency = 'VND',
+    String openingBalance = '0.00',
+  });
+  Future<Cashbox> updateCashbox({
+    required String id,
+    String? name,
+  });
+  Future<void> deleteCashbox(String id);
+
   Future<List<CashBalance>> getCashBalances();
   Future<List<JournalEntry>> getJournals();
   Future<List<CashRequest>> getCashRequests();
@@ -53,6 +91,7 @@ abstract class BankOpsRepository {
     required String amount,
     String? reason,
   });
+  Future<void> deleteCashRequest(String id);
   Future<CashRequest> submitCashRequest(String id);
   Future<CashRequest> approveCashRequest(String id);
   Future<CashRequest> rejectCashRequest(String id, String reason);
@@ -65,6 +104,20 @@ abstract class BankOpsRepository {
 
   // GET /integrations/connections, /integration-runs
   Future<List<IntegrationConnection>> getConnections();
+  Future<IntegrationConnection> createConnection({
+    required String name,
+    required String type,
+    String? endpoint,
+    Map<String, dynamic>? config,
+  });
+  Future<IntegrationConnection> updateConnection({
+    required String id,
+    String? name,
+    String? endpoint,
+    String? status,
+  });
+  Future<void> deleteConnection(String id);
+  Future<Map<String, dynamic>> testConnection(String id);
   Future<List<IntegrationRun>> getIntegrationRuns();
   Future<StagingPreview> uploadImportFile({
     required String filename,

@@ -20,12 +20,16 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
         model = settings.cloudflare_model
         url = f'https://api.cloudflare.com/client/v4/accounts/{settings.cloudflare_account_id}/ai/run/{model}'
         headers['Authorization'] = f'Bearer {settings.cloudflare_api_token.get_secret_value()}'
-        payload = dict(messages=messages, max_tokens=512, temperature=0.2, stream=False)
+        payload = {'messages': messages, 'max_tokens': 512, 'temperature': 0.2, 'stream': False}
     elif provider == 'ollama':
         model = settings.ollama_model
         url = f'{settings.ollama_base_url.rstrip("/")}/api/chat'
-        payload = dict(model=model, messages=messages, stream=False,
-                       options=dict(temperature=0.2, num_predict=512, num_ctx=2048, num_gpu=0))
+        payload = {
+            'model': model,
+            'messages': messages,
+            'stream': False,
+            'options': {'temperature': 0.2, 'num_predict': 512, 'num_ctx': 2048, 'num_gpu': 0},
+        }
     else:
         raise HTTPException(503, UNAVAILABLE)
     try:
@@ -43,4 +47,4 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
         # Never expose upstream bodies, credentials or prompts in logs/errors.
         raise HTTPException(503, UNAVAILABLE) from None
-    return dict(answer=answer.strip(), provider=provider, model=model, simulation=True)
+    return {'answer': answer.strip(), 'provider': provider, 'model': model, 'simulation': True}

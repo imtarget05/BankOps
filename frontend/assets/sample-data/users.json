@@ -2,7 +2,7 @@
   {
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
     "username": "demo_maker",
-    "display_name_demo": "Nguyễn An (giả)",
+    "display_name_demo": "Nguyễn Hoàng An (GDV)",
     "roles": [
       "staff"
     ]
@@ -10,7 +10,7 @@
   {
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
     "username": "demo_checker",
-    "display_name_demo": "Trần Bình (giả)",
+    "display_name_demo": "Trần Tuấn Bình (KSV)",
     "roles": [
       "approver"
     ]
@@ -18,7 +18,7 @@
   {
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
     "username": "demo_auditor",
-    "display_name_demo": "Lê Chi (giả)",
+    "display_name_demo": "Lê Khánh Chi (KTNB)",
     "roles": [
       "auditor"
     ]

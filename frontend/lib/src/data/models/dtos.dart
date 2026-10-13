@@ -267,12 +267,16 @@ class IntegrationConnection {
     required this.name,
     required this.endpoint,
     required this.status,
+    this.lastTestedAt,
+    this.lastError,
   });
 
   final String id;
   final String name;
   final String endpoint;
   final String status;
+  final DateTime? lastTestedAt;
+  final String? lastError;
 }
 
 /// Integration run.
@@ -282,18 +286,24 @@ class IntegrationRun {
     required this.connectionId,
     required this.status,
     required this.startedAt,
+    required this.phase,
     this.processed,
+    this.errorCount,
     this.total,
     this.error,
+    this.endedAt,
   });
 
   final String id;
   final String connectionId;
   final String status;
+  final String phase;
   final DateTime startedAt;
   final int? processed;
+  final int? errorCount;
   final int? total;
   final String? error;
+  final DateTime? endedAt;
 }
 
 /// Reconciliation run.

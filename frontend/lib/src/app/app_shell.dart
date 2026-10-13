@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models/dtos.dart';
 import '../data/repositories/bankops_repository.dart';
 import '../core/theme/app_tokens.dart';
 import '../core/widgets/app_screen.dart';
+import '../core/widgets/global_search.dart';
 import '../core/widgets/user_avatar.dart';
 import 'theme_mode_controller.dart';
 import '../data/repositories/http_bankops_repository.dart';
@@ -18,6 +20,7 @@ import '../features/integrations/integrations_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/requests/requests_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/ai/ai_assistant_dialog.dart';
 
 class SessionScope extends InheritedWidget {
   const SessionScope({super.key, required super.child, this.user, this.onSignOut});
@@ -134,7 +137,45 @@ class _AppShellState extends State<AppShell> {
     Icons.settings,
   ];
 
-  Widget _screenFor(int i) {
+  bool _canAccessApprovals(SessionScope? session) {
+    final user = session?.user;
+    if (user == null) return true; // Giữ nguyên cho unauthenticated & widget tests
+    return user.roles.any((r) =>
+        ['approver', 'checker', 'admin', 'supervisor'].contains(r.toLowerCase()));
+  }
+
+  Widget _screenFor(int i, SessionScope? session) {
+    if (i == 4 && !_canAccessApprovals(session)) {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.gpp_bad_outlined, size: 64, color: Color(0xFFF59E0B)),
+              const SizedBox(height: 16),
+              const Text(
+                'Từ chối quyền truy cập',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tài khoản của bạn không có vai trò Kiểm soát viên (Checker) hoặc Quản trị viên để truy cập danh sách phê duyệt chứng từ.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Quay lại Tổng quan'),
+                onPressed: () => setState(() => _index = 0),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     switch (i) {
       case 0:
         return const DashboardScreen();
@@ -178,17 +219,28 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  Future<void> _openSearch() async {
+    final repo = _repository;
+    if (repo == null) return;
+    final tab = await showGlobalSearch(context, repo);
+    if (tab != null && mounted) setState(() => _index = tab);
+  }
+
   Future<void> _signOut() async {
     await SessionScope.maybeOf(context)?.onSignOut?.call();
     if (mounted) setState(() => _index = 0);
   }
 
-  /// Bar chỉ có 5 slot: 0-2 map thẳng _index, slot 3 = Duyệt (_index 4),
-  /// slot 4 = Thêm (mở sheet, không phải destination điều hướng).
-  int _bottomSelected() {
-    if (_index >= 0 && _index <= 2) return _index;
-    if (_index == 4) return 3;
-    return 4;
+  /// Bar chỉ có 5 slot: 0-2 map thẳng _index, slot 3 = Duyệt (nếu có quyền) hoặc Yêu cầu.
+  int _bottomSelected(bool canApprove) {
+    if (canApprove) {
+      if (_index >= 0 && _index <= 2) return _index;
+      if (_index == 4) return 3;
+      return 4;
+    } else {
+      if (_index >= 0 && _index <= 3) return _index;
+      return 4;
+    }
   }
 
   Widget _destination(String label, int index,
@@ -201,15 +253,20 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Widget _bottomBar() {
+  Widget _bottomBar({SessionScope? session}) {
+    final canApprove = _canAccessApprovals(session);
     return NavigationBar(
-      selectedIndex: _bottomSelected(),
+      selectedIndex: _bottomSelected(canApprove),
       onDestinationSelected: (i) {
         if (i == 4) {
-          _openMoreSheet();
+          _openMoreSheet(session: session);
           return;
         }
-        setState(() => _index = i == 3 ? 4 : i);
+        if (canApprove) {
+          setState(() => _index = i == 3 ? 4 : i);
+        } else {
+          setState(() => _index = i);
+        }
       },
       height: 64,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -217,7 +274,10 @@ class _AppShellState extends State<AppShell> {
         _destination('Tổng quan', 0, key: const Key('nav-bottom-dashboard')),
         _destination('Kho', 1, key: const Key('nav-bottom-inventory')),
         _destination('Quỹ', 2, key: const Key('nav-bottom-cash')),
-        _destination('Duyệt', 4, key: const Key('nav-bottom-approvals')),
+        if (canApprove)
+          _destination('Duyệt', 4, key: const Key('nav-bottom-approvals'))
+        else
+          _destination('Yêu cầu', 3, key: const Key('nav-bottom-requests')),
         _destination('Thêm', 4,
             icon: Icons.more_horiz_outlined,
             selectedIcon: Icons.expand_more,
@@ -226,7 +286,9 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  void _openMoreSheet() {
+  void _openMoreSheet({SessionScope? session}) {
+    final canApprove = _canAccessApprovals(session);
+    final visibleItems = _items.where((it) => it.index != 4 || canApprove).toList();
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -237,13 +299,13 @@ class _AppShellState extends State<AppShell> {
         children: [
           const ListTile(title: Text('Chọn màn'), leading: Icon(Icons.list_alt_outlined)),
           const Divider(),
-          ..._items.asMap().entries.map((e) => ListTile(
+          ...visibleItems.map((it) => ListTile(
                 leading: const Icon(Icons.arrow_forward_ios, size: 16),
-                title: Text(_titles[e.key]),
+                title: Text(_titles[it.index]),
                 dense: true,
                 onTap: () {
                   Navigator.of(context).pop();
-                  setState(() => _index = e.key);
+                  setState(() => _index = it.index);
                 },
               )),
         ],
@@ -251,10 +313,12 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Widget _navRail({required double width}) {
+  Widget _navRail({required double width, SessionScope? session}) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isWide = width >= 200;
+    final canApprove = _canAccessApprovals(session);
+    final visibleItems = _items.where((it) => it.index != 4 || canApprove).toList();
 
     return Container(
       width: width,
@@ -340,19 +404,19 @@ class _AppShellState extends State<AppShell> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              itemCount: _items.length,
+              itemCount: visibleItems.length,
               itemBuilder: (context, i) {
-                final item = _items[i];
+                final item = visibleItems[i];
                 final selected = _index == item.index;
 
                 // Category header on wide layout
                 Widget? sectionHeader;
                 if (isWide) {
-                  if (i == 0) {
+                  if (item.index == 0) {
                     sectionHeader = _buildNavSectionHeader('VẬN HÀNH KHO QUỸ');
-                  } else if (i == 3) {
+                  } else if (item.index == 3) {
                     sectionHeader = _buildNavSectionHeader('KIỂM SOÁT 4 MẮT');
-                  } else if (i == 5) {
+                  } else if (item.index == 5) {
                     sectionHeader = _buildNavSectionHeader('HỆ THỐNG & ĐỐI SOÁT');
                   }
                 }
@@ -506,6 +570,12 @@ class _AppShellState extends State<AppShell> {
       scrolledUnderElevation: 1,
       actions: [
         IconButton(
+          key: const Key('topbar-search-btn'),
+          icon: const Icon(Icons.search_rounded, size: 20),
+          onPressed: _openSearch,
+          tooltip: 'Tìm kiếm toàn cục (Ctrl+K)',
+        ),
+        IconButton(
           key: const Key('topbar-refresh-btn'),
           icon: const Icon(Icons.refresh_rounded, size: 20),
           onPressed: _reload,
@@ -634,22 +704,41 @@ class _AppShellState extends State<AppShell> {
     final body = AppScreen(
       body: KeyedSubtree(
         key: ValueKey('screen-$_index-$_refreshTick-${session?.user?.id ?? ''}'),
-        child: _screenFor(_index),
+        child: _screenFor(_index, session),
       ),
       header: _index == 0 ? const _DashboardHeader() : null,
       onRefresh: _reload,
     );
 
-    if (layout.isWide) return _wide(session, body);
-    if (layout.isMedium) return _medium(session, body);
-    return _compact(session, body);
+    if (layout.isWide) return _shortcutWrapper(_wide(session, body));
+    if (layout.isMedium) return _shortcutWrapper(_medium(session, body));
+    return _shortcutWrapper(_compact(session, body));
+  }
+
+  /// Phím tắt toàn cục: `Ctrl+K` mở tìm kiếm từ mọi màn.
+  Widget _shortcutWrapper(Widget page) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _openSearch,
+      },
+      child: Focus(autofocus: true, child: page),
+    );
   }
 
   Widget _wide(SessionScope? session, Widget body) {
     return RepositoryScope(repository: _repository!, child: Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('btn-ai-assistant'),
+        onPressed: () => AiAssistantDialog.show(context),
+        icon: const Icon(Icons.psychology_outlined),
+        label: const Text('Trợ lý AI'),
+        backgroundColor: const Color(0xFF2563EB),
+        foregroundColor: Colors.white,
+      ),
       body: Row(
         children: [
-          _navRail(width: 256),
+          _navRail(width: 256, session: session),
           const VerticalDivider(width: 8, thickness: 1),
           Expanded(
             child: Column(
@@ -666,10 +755,18 @@ class _AppShellState extends State<AppShell> {
 
   Widget _medium(SessionScope? session, Widget body) {
     return RepositoryScope(repository: _repository!, child: Scaffold(
+      floatingActionButton: FloatingActionButton(
+        key: const Key('btn-ai-assistant'),
+        onPressed: () => AiAssistantDialog.show(context),
+        backgroundColor: const Color(0xFF2563EB),
+        foregroundColor: Colors.white,
+        tooltip: 'Trợ lý AI',
+        child: const Icon(Icons.psychology_outlined),
+      ),
       appBar: _topBar(session: session),
       body: Row(
         children: [
-          _navRail(width: 88),
+          _navRail(width: 88, session: session),
           const VerticalDivider(width: 8, thickness: 1),
           Expanded(child: body),
         ],
@@ -679,9 +776,17 @@ class _AppShellState extends State<AppShell> {
 
   Widget _compact(SessionScope? session, Widget body) {
     return RepositoryScope(repository: _repository!, child: Scaffold(
+      floatingActionButton: FloatingActionButton(
+        key: const Key('btn-ai-assistant'),
+        onPressed: () => AiAssistantDialog.show(context),
+        backgroundColor: const Color(0xFF2563EB),
+        foregroundColor: Colors.white,
+        tooltip: 'Trợ lý AI',
+        child: const Icon(Icons.psychology_outlined),
+      ),
       appBar: _topBar(session: session),
       body: body,
-      bottomNavigationBar: _bottomBar(),
+      bottomNavigationBar: _bottomBar(session: session),
     ));
   }
 }

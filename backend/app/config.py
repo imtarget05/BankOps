@@ -1,7 +1,6 @@
 """Application configuration."""
 import os
 import secrets
-
 from typing import Literal
 
 from pydantic import Field, SecretStr
@@ -59,8 +58,8 @@ class Settings(BaseSettings):
     rate_limit_login_attempts: int = Field(default=5)
     rate_limit_login_window_minutes: int = Field(default=15)
 
-    ai_provider: Literal['disabled', 'cloudflare', 'ollama'] = 'disabled'
-    cloudflare_account_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{32})?$')
+    ai_provider: Literal['disabled', 'cloudflare', 'ollama'] = 'cloudflare'
+    cloudflare_account_id: str = Field(default='8788242370433563100da7c3623e1b3c', pattern=r'^([a-fA-F0-9]{32})?$')
     cloudflare_api_token: SecretStr = SecretStr('')
     cloudflare_model: str = '@cf/meta/llama-3.1-8b-instruct'
     ollama_base_url: str = 'http://localhost:11434'

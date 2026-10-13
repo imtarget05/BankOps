@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/util/csv_export.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../data/models/dtos.dart';
 
@@ -13,7 +14,12 @@ class InventoryChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (buckets.isEmpty) {
-      return const EmptyView(title: 'Chưa có dữ liệu nhập/xuất kho');
+      return const EmptyView(
+        title: 'Chưa có dữ liệu nhập/xuất kho',
+        subtitle:
+            'Tạo phiếu kho và được Checker duyệt — biểu đồ nhập/xuất sẽ hiện ở đây.',
+        icon: Icons.inventory_2_outlined,
+      );
     }
     final statusColors = context.statusColors;
     final scheme = Theme.of(context).colorScheme;
@@ -27,12 +33,50 @@ class InventoryChart extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 16,
-          runSpacing: 8,
+        Row(
           children: [
-            _LegendDot(color: statusColors.success, label: 'Nhập kho (Inbound)'),
-            _LegendDot(color: statusColors.warning, label: 'Xuất kho (Outbound)'),
+            Expanded(
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _LegendDot(
+                      color: statusColors.success,
+                      label: 'Nhập kho (Inbound)'),
+                  _LegendDot(
+                      color: statusColors.warning,
+                      label: 'Xuất kho (Outbound)'),
+                ],
+              ),
+            ),
+            IconButton(
+              key: const Key('export-inventory-csv-btn'),
+              icon: const Icon(Icons.content_copy_outlined, size: 20),
+              tooltip: 'Sao chép CSV nhập/xuất kho',
+              onPressed: () => CsvExport.copyToClipboard(
+                context,
+                label: 'nhập/xuất kho',
+                headers: const [
+                  'bucket',
+                  'inbound_qty',
+                  'outbound_qty',
+                  'net_qty',
+                  'receipt_count',
+                  'issue_count'
+                ],
+                rows: [
+                  for (final b in buckets)
+                    [
+                      b.bucket,
+                      b.inboundQty,
+                      b.outboundQty,
+                      b.netQty,
+                      b.receiptCount,
+                      b.issueCount
+                    ],
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),

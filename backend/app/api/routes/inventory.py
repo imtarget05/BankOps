@@ -259,6 +259,90 @@ async def list_items(
     }
 
 
+@router.post("/inventory/items", status_code=201)
+async def create_item(
+    payload: dict,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    sku = str(payload.get("sku", "")).strip().upper()
+    name = str(payload.get("name", "")).strip()
+    unit = str(payload.get("unit", "")).strip() or "đơn vị"
+    tracked_serial = bool(payload.get("tracked_serial", False))
+    if not sku:
+        raise AppError(422, "MISSING_SKU", "SKU không được để trống")
+    if not name:
+        raise AppError(422, "MISSING_NAME", "Tên vật tư/ấn chỉ không được để trống")
+    existing = (await db.execute(select(Item).where(Item.sku == sku))).scalars().first()
+    if existing:
+        raise AppError(409, "DUPLICATE_SKU", f"SKU {sku} đã tồn tại")
+    item = Item(
+        id=uuid.uuid4(),
+        sku=sku,
+        name=name,
+        unit=unit,
+        tracked_serial=tracked_serial,
+        active=True,
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return {
+        "id": str(item.id),
+        "sku": item.sku,
+        "name": item.name,
+        "unit": item.unit,
+        "tracked_serial": item.tracked_serial,
+        "active": item.active,
+    }
+
+
+@router.put("/inventory/items/{item_id}")
+async def update_item(
+    item_id: str,
+    payload: dict,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    iid = _uuid(item_id, "item_id")
+    item = (await db.execute(select(Item).where(Item.id == iid))).scalars().first()
+    if not item:
+        raise AppError(404, "ITEM_NOT_FOUND", "Không tìm thấy vật tư")
+    if "name" in payload and payload["name"]:
+        item.name = str(payload["name"]).strip()
+    if "unit" in payload and payload["unit"]:
+        item.unit = str(payload["unit"]).strip()
+    if "tracked_serial" in payload:
+        item.tracked_serial = bool(payload["tracked_serial"])
+    if "active" in payload:
+        item.active = bool(payload["active"])
+    await db.commit()
+    await db.refresh(item)
+    return {
+        "id": str(item.id),
+        "sku": item.sku,
+        "name": item.name,
+        "unit": item.unit,
+        "tracked_serial": item.tracked_serial,
+        "active": item.active,
+    }
+
+
+@router.delete("/inventory/items/{item_id}")
+async def delete_item(
+    item_id: str,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    iid = _uuid(item_id, "item_id")
+    item = (await db.execute(select(Item).where(Item.id == iid))).scalars().first()
+    if not item:
+        raise AppError(404, "ITEM_NOT_FOUND", "Không tìm thấy vật tư")
+    item.active = False
+    await db.commit()
+    return {"status": "deleted", "id": str(item.id)}
+
+
 @router.get("/inventory/locations")
 async def list_locations(
     current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
@@ -271,6 +355,68 @@ async def list_locations(
             for loc in locations
         ]
     }
+
+
+@router.post("/inventory/locations", status_code=201)
+async def create_location(
+    payload: dict,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    code = str(payload.get("code", "")).strip().upper()
+    name = str(payload.get("name", "")).strip()
+    if not code:
+        raise AppError(422, "MISSING_CODE", "Mã kho không được để trống")
+    if not name:
+        raise AppError(422, "MISSING_NAME", "Tên kho không được để trống")
+    existing = (await db.execute(select(Location).where(Location.code == code))).scalars().first()
+    if existing:
+        raise AppError(409, "DUPLICATE_CODE", f"Mã kho {code} đã tồn tại")
+    loc = Location(
+        id=uuid.uuid4(),
+        code=code,
+        name=name,
+        active=True,
+    )
+    db.add(loc)
+    await db.commit()
+    await db.refresh(loc)
+    return {"id": str(loc.id), "code": loc.code, "name": loc.name, "active": loc.active}
+
+
+@router.put("/inventory/locations/{location_id}")
+async def update_location(
+    location_id: str,
+    payload: dict,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    lid = _uuid(location_id, "location_id")
+    loc = (await db.execute(select(Location).where(Location.id == lid))).scalars().first()
+    if not loc:
+        raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho")
+    if "name" in payload and payload["name"]:
+        loc.name = str(payload["name"]).strip()
+    if "active" in payload:
+        loc.active = bool(payload["active"])
+    await db.commit()
+    await db.refresh(loc)
+    return {"id": str(loc.id), "code": loc.code, "name": loc.name, "active": loc.active}
+
+
+@router.delete("/inventory/locations/{location_id}")
+async def delete_location(
+    location_id: str,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    lid = _uuid(location_id, "location_id")
+    loc = (await db.execute(select(Location).where(Location.id == lid))).scalars().first()
+    if not loc:
+        raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho")
+    loc.active = False
+    await db.commit()
+    return {"status": "deleted", "id": str(loc.id)}
 
 
 @router.get("/inventory/balances")
@@ -424,6 +570,26 @@ async def get_request(
 ):
     req = await _load_request_for_read(db, request_id, current_user)
     return _req_out(req, await _load_lines(db, req.id))
+
+
+@router.delete("/inventory/requests/{request_id}")
+async def delete_request(
+    request_id: str,
+    user=Depends(require_any_capability("inventory:create_request")),
+    db: AsyncSession = Depends(get_db),
+):
+    rid = _uuid(request_id, "request_id")
+    req = (await db.execute(select(InventoryRequest).where(InventoryRequest.id == rid))).scalars().first()
+    if not req:
+        raise AppError(404, "REQUEST_NOT_FOUND", "Không tìm thấy phiếu yêu cầu")
+    if req.status != "draft":
+        raise AppError(409, "CANNOT_DELETE_NON_DRAFT", "Chỉ có thể xoá phiếu ở trạng thái nháp (draft)")
+    lines = (await db.execute(select(InventoryRequestLine).where(InventoryRequestLine.request_id == rid))).scalars().all()
+    for line in lines:
+        await db.delete(line)
+    await db.delete(req)
+    await db.commit()
+    return {"status": "deleted", "id": str(rid)}
 
 
 

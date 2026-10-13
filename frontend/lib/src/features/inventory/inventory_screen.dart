@@ -32,6 +32,229 @@ class _InventoryScreenState extends State<InventoryScreen> {
     });
   }
 
+  Future<void> _showCreateItemDialog() async {
+    final skuCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final unitCtrl = TextEditingController(text: 'Cái');
+    bool trackedSerial = true;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.inventory_2_outlined, color: Color(0xFF2563EB)),
+              SizedBox(width: 8),
+              Text('Thêm Mặt Hàng / Ấn Chỉ Mới', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: skuCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Mã SKU *',
+                    hintText: 'Ví dụ: PHOI-THE-VISA-01',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Tên Mặt Hàng / Ấn Chỉ *',
+                    hintText: 'Ví dụ: Phôi Thẻ Visa Platinum EMV',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: unitCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Đơn Vị Tính',
+                    hintText: 'Cái / Cuốn / Tờ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  title: const Text('Theo dõi định danh từng Serial (Tracked by Serial)'),
+                  value: trackedSerial,
+                  onChanged: (v) => setDlgState(() => trackedSerial = v ?? true),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (skuCtrl.text.trim().isEmpty || nameCtrl.text.trim().isEmpty) return;
+                Navigator.of(ctx).pop(true);
+              },
+              child: const Text('Thêm mới'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true && mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.createItem(
+          sku: skuCtrl.text.trim(),
+          name: nameCtrl.text.trim(),
+          unit: unitCtrl.text.trim().isEmpty ? 'Cái' : unitCtrl.text.trim(),
+          trackedSerial: trackedSerial,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã thêm mặt hàng "${nameCtrl.text.trim()}" thành công!'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showEditItemDialog(InventoryItem item) async {
+    final nameCtrl = TextEditingController(text: item.name);
+    final unitCtrl = TextEditingController(text: item.unit);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.edit_outlined, color: Color(0xFF2563EB)),
+            const SizedBox(width: 8),
+            Text('Sửa: ${item.sku}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Tên Mặt Hàng / Ấn Chỉ *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: unitCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Đơn Vị Tính',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Lưu thay đổi'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.updateItem(
+          id: item.id,
+          name: nameCtrl.text.trim(),
+          unit: unitCtrl.text.trim(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã cập nhật thông tin mặt hàng!'), behavior: SnackBarBehavior.floating),
+          );
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteItem(InventoryItem item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Xác nhận xóa mặt hàng', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Bạn có chắc chắn muốn xóa mặt hàng "${item.name}" (SKU: ${item.sku}) không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xóa vĩnh viễn'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.deleteItem(item.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã xóa mặt hàng "${item.name}"!'), behavior: SnackBarBehavior.floating),
+          );
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_InventoryData>(
@@ -86,21 +309,37 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ),
                     ],
                   ),
-                  FilledButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          behavior: SnackBarBehavior.floating,
-                          content: Text('Vui lòng vào tab "Yêu cầu" để lập phiếu nhập/xuất kho ấn chỉ.'),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const Key('btn-add-item'),
+                        onPressed: () => _showCreateItemDialog(),
+                        icon: const Icon(Icons.add_box_outlined, size: 18),
+                        label: const Text('Thêm mặt hàng'),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Lập phiếu kho mới'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+                      ),
+                      FilledButton.icon(
+                        key: const Key('btn-create-stock-request'),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              behavior: SnackBarBehavior.floating,
+                              content: Text('Vui lòng vào tab "Yêu cầu" để lập phiếu nhập/xuất kho ấn chỉ.'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Lập phiếu kho mới'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -267,6 +506,39 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                     ),
                                   ],
                                 ),
+                                if (item != null) ...[
+                                  const SizedBox(width: 8),
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert, size: 18),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    itemBuilder: (ctx) => [
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit_outlined, size: 16),
+                                            SizedBox(width: 8),
+                                            Text('Sửa thông tin'),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                            SizedBox(width: 8),
+                                            Text('Xóa mặt hàng', style: TextStyle(color: Colors.red)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    onSelected: (v) {
+                                      if (v == 'edit') _showEditItemDialog(item);
+                                      if (v == 'delete') _confirmDeleteItem(item);
+                                    },
+                                  ),
+                                ],
                               ],
                             ),
                           );

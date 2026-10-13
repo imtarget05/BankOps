@@ -28,6 +28,12 @@ services:
       - DATABASE_URL=postgresql+asyncpg://bankops:bankops@postgres:5432/bankops
       - APP_ENV=demo
       - ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:8080","http://127.0.0.1:8080"]
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-8788242370433563100da7c3623e1b3c}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+      - CLOUDFLARE_MODEL=${CLOUDFLARE_MODEL:-@cf/meta/llama-3.1-8b-instruct}
+      - AI_PROVIDER=${AI_PROVIDER:-cloudflare}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b}
     ports:
       - "8000:8000"
     volumes:

@@ -62,7 +62,7 @@ async def test_timeout():
     def respond(request):
         raise httpx.ReadTimeout('upstream secret', request=request)
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        with pytest.raises(HTTPException, match='') as error:
+        with pytest.raises(HTTPException) as error:
             await generate('test', config(), client)
     assert error.value.status_code == 503
 
@@ -71,5 +71,5 @@ async def test_timeout():
 async def test_disabled_does_not_call_provider():
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: pytest.fail('unexpected network'))) as client:
         with pytest.raises(HTTPException) as error:
-            await generate('test', Settings(database_url='sqlite://'), client)
+            await generate('test', Settings(database_url='sqlite://', ai_provider='disabled'), client)
     assert error.value.status_code == 503

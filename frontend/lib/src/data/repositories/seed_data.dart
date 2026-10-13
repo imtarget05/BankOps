@@ -4,27 +4,35 @@ part of 'fake_repository.dart';
 /// Các hàm này được fake_repository.dart gọi qua part directive.
 
 List<AppUser> _seedUsers() => const [
-  AppUser(id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', username: 'demo_maker', displayName: 'Nguyễn An (giả)', roles: ['staff']),
-  AppUser(id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', username: 'demo_checker', displayName: 'Trần Bình (giả)', roles: ['approver']),
-  AppUser(id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', username: 'demo_auditor', displayName: 'Lê Chi (giả)', roles: ['auditor']),
+  AppUser(id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', username: 'demo_maker', displayName: 'Nguyễn Hoàng An (GDV)', roles: ['staff']),
+  AppUser(id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', username: 'demo_checker', displayName: 'Trần Tuấn Bình (KSV)', roles: ['approver']),
+  AppUser(id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', username: 'demo_auditor', displayName: 'Lê Khánh Chi (KTNB)', roles: ['auditor']),
 ];
 
 List<InventoryLocation> _seedLocations() => const [
-  InventoryLocation(id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', code: 'DEMO-HN', name: 'Kho demo Hà Nội'),
-  InventoryLocation(id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', code: 'DEMO-HCM', name: 'Kho demo TP.HCM'),
+  InventoryLocation(id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', code: 'DEMO-HN', name: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính'),
+  InventoryLocation(id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', code: 'DEMO-HCM', name: 'Kho Quỹ Chi Nhánh Sở Giao Dịch TP.HCM'),
+  InventoryLocation(id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3', code: 'KHO-DNG-01', name: 'Kho Ấn Chỉ Chi Nhánh Đà Nẵng'),
 ];
 
 List<InventoryItem> _seedItems() => const [
-  InventoryItem(id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', sku: 'DEMO-PAPER-A4', name: 'Giấy A4 giả lập', unit: 'ram', trackedSerial: false),
-  InventoryItem(id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', sku: 'DEMO-LAPTOP', name: 'Laptop mẫu', unit: 'cái', trackedSerial: true),
+  InventoryItem(id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', sku: 'DEMO-PAPER-A4', name: 'Sổ Séc Bảo Chi Ngân Hàng (50 tờ/cuốn)', unit: 'cuốn', trackedSerial: false),
+  InventoryItem(id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', sku: 'DEMO-LAPTOP', name: 'Phôi Thẻ Ghi Nợ Quốc Tế Visa Debit EMV Chip', unit: 'chiếc', trackedSerial: true),
+  InventoryItem(id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3', sku: 'STK-PASSBOOK', name: 'Sổ Tiết Kiệm Có Kỳ Hạn Tích Hợp QR Bảo Mật', unit: 'quyển', trackedSerial: true),
+  InventoryItem(id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc4', sku: 'CARD-NAPAS', name: 'Phôi Thẻ Chip Không Tiếp Xúc Napas Contactless', unit: 'chiếc', trackedSerial: true),
 ];
 
 List<StockBalance> _seedBalances() => const [
-  StockBalance(locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', quantity: '100.000'),
+  StockBalance(locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', quantity: '250.000'),
+  StockBalance(locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', quantity: '1000.000'),
+  StockBalance(locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3', quantity: '500.000'),
+  StockBalance(locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', quantity: '120.000'),
 ];
 
 List<AssetRecord> _seedAssets() => const [
-  AssetRecord(serial: 'DEMO-ASSET-0001', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
+  AssetRecord(serial: 'EMV-VISA-2026-000101', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
+  AssetRecord(serial: 'EMV-VISA-2026-000102', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
+  AssetRecord(serial: 'STK-QR-2026-880001', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
 ];
 
 List<StockMovement> _seedMovements() => [
@@ -32,26 +40,30 @@ List<StockMovement> _seedMovements() => [
 ];
 
 List<StockRequest> _seedStockRequests() => [
-  StockRequest(id: 'sr-0001', kind: RequestKind.receipt, status: RequestStatus.draft, version: 1, createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', createdByName: 'Nguyễn An (giả)', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', items: const [StockRequestLine(itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', quantity: '10.000')], reason: 'Nạp kho demo', createdAt: DateTime.utc(2026, 10, 5)),
-  StockRequest(id: 'sr-0002', kind: RequestKind.payment, status: RequestStatus.pending, version: 1, createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', createdByName: 'Trần Bình (giả)', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', items: const [StockRequestLine(itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', quantity: '1.000')], reason: 'Xuất kho laptop', createdAt: DateTime.utc(2026, 10, 6)),
+  StockRequest(id: 'sr-0001', kind: RequestKind.receipt, status: RequestStatus.draft, version: 1, createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', createdByName: 'Nguyễn Hoàng An (GDV)', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', items: const [StockRequestLine(itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1', quantity: '10.000')], reason: 'Nhập kho bổ sung séc bảo chi quý 4', createdAt: DateTime.utc(2026, 10, 5)),
+  StockRequest(id: 'sr-0002', kind: RequestKind.payment, status: RequestStatus.pending, version: 1, createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', createdByName: 'Trần Tuấn Bình (KSV)', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', items: const [StockRequestLine(itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', quantity: '1.000')], reason: 'Xuất phôi thẻ Visa cấp mới cho KH VIP', createdAt: DateTime.utc(2026, 10, 6)),
 ];
 
 List<Cashbox> _seedCashboxes() => const [
-  Cashbox(id: '11111111-1111-4111-8111-111111111111', code: 'DEMO-CASH-01', name: 'Quỹ thử nghiệm', openingBalance: '0.00'),
+  Cashbox(id: '11111111-1111-4111-8111-111111111111', code: 'DEMO-CASH-01', name: 'Két Sắt Đại Quỹ Hội Sở Chính (Main Vault)', openingBalance: '25000000000.00'),
+  Cashbox(id: '11111111-1111-4111-8111-111111111112', code: 'TELLER-BOX-01', name: 'Két Quầy Giao Dịch Số 01 - Hội Sở', openingBalance: '500000000.00'),
+  Cashbox(id: '11111111-1111-4111-8111-111111111113', code: 'ATM-VAULT-01', name: 'Hộp Tiền Cây ATM Trung Tâm Hội Sở', openingBalance: '1200000000.00'),
 ];
 
 List<CashBalance> _seedCashBalances() => const [
-  CashBalance(cashboxId: '11111111-1111-4111-8111-111111111111', amount: '750000.00', currency: 'VND'),
+  CashBalance(cashboxId: '11111111-1111-4111-8111-111111111111', amount: '25850000000.00', currency: 'VND'),
+  CashBalance(cashboxId: '11111111-1111-4111-8111-111111111112', amount: '480000000.00', currency: 'VND'),
+  CashBalance(cashboxId: '11111111-1111-4111-8111-111111111113', amount: '1150000000.00', currency: 'VND'),
 ];
 
 List<JournalEntry> _seedJournals() => [
-  JournalEntry(id: 'je-0001', cashboxId: '11111111-1111-4111-8111-111111111111', kind: 'receipt', amount: '1000000.00', currency: 'VND', reason: 'Nạp quỹ', createdAt: DateTime.utc(2026, 10, 1)),
-  JournalEntry(id: 'je-0002', cashboxId: '11111111-1111-4111-8111-111111111111', kind: 'payment', amount: '250000.00', currency: 'VND', reason: 'Chi phí tiếp khách', createdAt: DateTime.utc(2026, 10, 3)),
+  JournalEntry(id: 'je-0001', cashboxId: '11111111-1111-4111-8111-111111111111', kind: 'receipt', amount: '850000000.00', currency: 'VND', reason: 'Nộp tiền tiếp quỹ từ Ngân hàng Nhà nước', createdAt: DateTime.utc(2026, 10, 1)),
+  JournalEntry(id: 'je-0002', cashboxId: '11111111-1111-4111-8111-111111111112', kind: 'payment', amount: '20000000.00', currency: 'VND', reason: 'Chi tiền mặt giải ngân khoản vay cá nhân', createdAt: DateTime.utc(2026, 10, 3)),
 ];
 
 List<CashRequest> _seedCashRequests() => [
-  CashRequest(id: 'cr-0001', kind: RequestKind.receipt, status: RequestStatus.draft, version: 1, cashboxId: '11111111-1111-4111-8111-111111111111', amount: '1000000.00', currency: 'VND', reason: 'Nạp quỹ mô phỏng', createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', createdByName: 'Nguyễn An (giả)', createdAt: DateTime.utc(2026, 10, 5)),
-  CashRequest(id: 'cr-0002', kind: RequestKind.payment, status: RequestStatus.pending, version: 1, cashboxId: '11111111-1111-4111-8111-111111111111', amount: '250000.00', currency: 'VND', reason: 'Chi phí tiếp khách', createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', createdByName: 'Trần Bình (giả)', createdAt: DateTime.utc(2026, 10, 6)),
+  CashRequest(id: 'cr-0001', kind: RequestKind.receipt, status: RequestStatus.draft, version: 1, cashboxId: '11111111-1111-4111-8111-111111111111', amount: '50000000.00', currency: 'VND', reason: 'Nộp điều chuyển tiền mặt từ chi nhánh', createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', createdByName: 'Nguyễn Hoàng An (GDV)', createdAt: DateTime.utc(2026, 10, 5)),
+  CashRequest(id: 'cr-0002', kind: RequestKind.payment, status: RequestStatus.pending, version: 1, cashboxId: '11111111-1111-4111-8111-111111111111', amount: '35000000.00', currency: 'VND', reason: 'Tiếp quỹ đầu ngày cho Quầy số 01', createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', createdByName: 'Trần Tuấn Bình (KSV)', createdAt: DateTime.utc(2026, 10, 6)),
 ];
 
 List<ActivityEvent> _seedActivity() => [
@@ -60,11 +72,14 @@ List<ActivityEvent> _seedActivity() => [
 ];
 
 List<IntegrationConnection> _seedConnections() => const [
-  IntegrationConnection(id: 'ic-0001', name: 'SAP sandbox', endpoint: 'https://sap.example/api', status: 'connected'),
+  IntegrationConnection(id: 'ic-0001', name: 'Core Banking T24 Gateway (ISO 8583)', endpoint: 'https://core.bankops.internal/api/v2', status: 'connected', lastTestedAt: null, lastError: null),
+  IntegrationConnection(id: 'ic-0002', name: 'Cổng Chuyển Mạch Tài Chính Quốc Gia NAPAS', endpoint: 'https://napas.gateway.vn/switch/v1', status: 'connected', lastTestedAt: null, lastError: null),
+  IntegrationConnection(id: 'ic-0003', name: 'Sổ Cái Kế Toán Tổng Hợp Oracle GL ERP', endpoint: 'https://gl.erp.internal/soap/v1', status: 'connected', lastTestedAt: null, lastError: null),
 ];
 
 List<IntegrationRun> _seedRuns() => [
-  IntegrationRun(id: 'ir-0001', connectionId: 'ic-0001', status: 'succeeded', startedAt: DateTime.utc(2026, 10, 8, 8, 0), processed: 42, total: 42),
+  IntegrationRun(id: 'ir-0001', connectionId: 'ic-0001', status: 'succeeded', phase: 'completed', startedAt: DateTime.utc(2026, 10, 8, 8, 0), processed: 1250, errorCount: 0, total: 1250, endedAt: DateTime.utc(2026, 10, 8, 8, 2)),
+  IntegrationRun(id: 'ir-0002', connectionId: 'ic-0002', status: 'succeeded', phase: 'completed', startedAt: DateTime.utc(2026, 10, 8, 12, 0), processed: 840, errorCount: 0, total: 840, endedAt: DateTime.utc(2026, 10, 8, 12, 1)),
 ];
 
 List<ReconciliationRun> _seedReconciliations() => [

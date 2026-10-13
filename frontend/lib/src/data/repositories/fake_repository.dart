@@ -7,18 +7,21 @@ import 'bankops_repository.dart';
 
 part 'seed_data.dart';
 
-
 /// Repository demo: đọc sample-data/ + mô phỏng latency và SSE trong bộ nhớ.
 class FakeBankOpsRepository implements BankOpsRepository {
-  FakeBankOpsRepository({Random? random, Duration latency = const Duration(milliseconds: 350)})
+  FakeBankOpsRepository(
+      {Random? random, Duration latency = const Duration(milliseconds: 350)})
       : _random = random ?? Random(7),
         _latency = latency;
 
   final Random _random;
   final Duration _latency;
 
-  Future<T> _delay<T>(T value) =>
-      Future<T>.delayed(_latency ~/ 2 + Duration(milliseconds: _random.nextInt(_latency.inMilliseconds ~/ 2 + 1)), () => value);
+  Future<T> _delay<T>(T value) => Future<T>.delayed(
+      _latency ~/ 2 +
+          Duration(
+              milliseconds: _random.nextInt(_latency.inMilliseconds ~/ 2 + 1)),
+      () => value);
 
   // ---- users ----
   final _users = <AppUser>[];
@@ -30,16 +33,109 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<AppUser> login(String username) =>
-      _delay(_users.firstWhere((u) => u.username == username,
-          orElse: () => throw ApiException('NOT_FOUND', 'Không tìm thấy user')));
+  Future<AppUser> login(String username) => _delay(_users.firstWhere(
+      (u) => u.username == username,
+      orElse: () => throw ApiException('NOT_FOUND', 'Không tìm thấy user')));
 
   // ---- inventory ----
-  @override
-  Future<List<InventoryLocation>> getLocations() => _delay(_seedLocations());
+  final _locations = <InventoryLocation>[];
 
   @override
-  Future<List<InventoryItem>> getItems() => _delay(_seedItems());
+  Future<List<InventoryLocation>> getLocations() async {
+    if (_locations.isEmpty) _locations.addAll(_seedLocations());
+    return _delay(List.of(_locations));
+  }
+
+  @override
+  Future<InventoryLocation> createLocation({
+    required String code,
+    required String name,
+    String? address,
+  }) async {
+    if (_locations.isEmpty) _locations.addAll(_seedLocations());
+    final loc = InventoryLocation(
+      id: 'loc-000${_locations.length + 1}',
+      code: code,
+      name: name,
+    );
+    _locations.add(loc);
+    return _delay(loc);
+  }
+
+  @override
+  Future<InventoryLocation> updateLocation({
+    required String id,
+    String? name,
+  }) async {
+    final idx = _locations.indexWhere((l) => l.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy điểm lưu trữ');
+    final cur = _locations[idx];
+    _locations[idx] = InventoryLocation(
+      id: cur.id,
+      code: cur.code,
+      name: name ?? cur.name,
+    );
+    return _delay(_locations[idx]);
+  }
+
+  @override
+  Future<void> deleteLocation(String id) async {
+    _locations.removeWhere((l) => l.id == id);
+    return _delay(null);
+  }
+
+  final _items = <InventoryItem>[];
+
+  @override
+  Future<List<InventoryItem>> getItems() async {
+    if (_items.isEmpty) _items.addAll(_seedItems());
+    return _delay(List.of(_items));
+  }
+
+  @override
+  Future<InventoryItem> createItem({
+    required String sku,
+    required String name,
+    required String unit,
+    bool trackedSerial = false,
+  }) async {
+    if (_items.isEmpty) _items.addAll(_seedItems());
+    final itm = InventoryItem(
+      id: 'itm-000${_items.length + 1}',
+      sku: sku,
+      name: name,
+      unit: unit,
+      trackedSerial: trackedSerial,
+    );
+    _items.add(itm);
+    return _delay(itm);
+  }
+
+  @override
+  Future<InventoryItem> updateItem({
+    required String id,
+    String? name,
+    String? unit,
+    bool? trackedSerial,
+  }) async {
+    final idx = _items.indexWhere((i) => i.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy vật tư');
+    final cur = _items[idx];
+    _items[idx] = InventoryItem(
+      id: cur.id,
+      sku: cur.sku,
+      name: name ?? cur.name,
+      unit: unit ?? cur.unit,
+      trackedSerial: trackedSerial ?? cur.trackedSerial,
+    );
+    return _delay(_items[idx]);
+  }
+
+  @override
+  Future<void> deleteItem(String id) async {
+    _items.removeWhere((i) => i.id == id);
+    return _delay(null);
+  }
 
   @override
   Future<List<StockBalance>> getBalances({String? locationId}) =>
@@ -83,7 +179,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
       version: 1,
       createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       createdByName: 'Nguyễn An (giả)',
-      locationId: sourceLocationId ?? destLocationId ?? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+      locationId: sourceLocationId ??
+          destLocationId ??
+          'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
       items: lines,
       reason: reason ?? '',
       createdAt: DateTime.now().toUtc(),
@@ -91,6 +189,18 @@ class FakeBankOpsRepository implements BankOpsRepository {
     );
     _stockRequests.insert(0, created);
     return _delay(created);
+  }
+
+  @override
+  Future<void> deleteStockRequest(String id) async {
+    final idx = _stockRequests.indexWhere((r) => r.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
+    if (_stockRequests[idx].status != RequestStatus.draft) {
+      throw ApiException(
+          'CANNOT_DELETE', 'Chỉ có thể xoá phiếu ở trạng thái nháp');
+    }
+    _stockRequests.removeAt(idx);
+    return _delay(null);
   }
 
   @override
@@ -105,8 +215,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<StockRequest> rejectStockRequest(String id, String reason) =>
       _transitionStock(id, RequestStatus.rejected);
 
-  Future<StockRequest> _transitionStock(
-      String id, RequestStatus to) async {
+  Future<StockRequest> _transitionStock(String id, RequestStatus to) async {
     final idx = _stockRequests.indexWhere((r) => r.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
     final r = _stockRequests[idx];
@@ -135,8 +244,54 @@ class FakeBankOpsRepository implements BankOpsRepository {
       );
 
   // ---- cash sim ----
+  final _cashboxes = <Cashbox>[];
+
   @override
-  Future<List<Cashbox>> getCashboxes() => _delay(_seedCashboxes());
+  Future<List<Cashbox>> getCashboxes() async {
+    if (_cashboxes.isEmpty) _cashboxes.addAll(_seedCashboxes());
+    return _delay(List.of(_cashboxes));
+  }
+
+  @override
+  Future<Cashbox> createCashbox({
+    required String code,
+    required String name,
+    String currency = 'VND',
+    String openingBalance = '0.00',
+  }) async {
+    if (_cashboxes.isEmpty) _cashboxes.addAll(_seedCashboxes());
+    final box = Cashbox(
+      id: 'cb-000${_cashboxes.length + 1}',
+      code: code,
+      name: name,
+      openingBalance: openingBalance,
+    );
+    _cashboxes.add(box);
+    return _delay(box);
+  }
+
+  @override
+  Future<Cashbox> updateCashbox({
+    required String id,
+    String? name,
+  }) async {
+    final idx = _cashboxes.indexWhere((b) => b.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy kết sắt');
+    final cur = _cashboxes[idx];
+    _cashboxes[idx] = Cashbox(
+      id: cur.id,
+      code: cur.code,
+      name: name ?? cur.name,
+      openingBalance: cur.openingBalance,
+    );
+    return _delay(_cashboxes[idx]);
+  }
+
+  @override
+  Future<void> deleteCashbox(String id) async {
+    _cashboxes.removeWhere((b) => b.id == id);
+    return _delay(null);
+  }
 
   @override
   Future<List<CashBalance>> getCashBalances() => _delay(_seedCashBalances());
@@ -175,6 +330,18 @@ class FakeBankOpsRepository implements BankOpsRepository {
     );
     _cashRequests.insert(0, created);
     return _delay(created);
+  }
+
+  @override
+  Future<void> deleteCashRequest(String id) async {
+    final idx = _cashRequests.indexWhere((r) => r.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
+    if (_cashRequests[idx].status != RequestStatus.draft) {
+      throw ApiException(
+          'CANNOT_DELETE', 'Chỉ có thể xoá phiếu ở trạng thái nháp');
+    }
+    _cashRequests.removeAt(idx);
+    return _delay(null);
   }
 
   @override
@@ -221,7 +388,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     if (_stockRequests.isEmpty) _stockRequests.addAll(_seedStockRequests());
     if (_cashRequests.isEmpty) _cashRequests.addAll(_seedCashRequests());
     final items = <ApprovalItem>[
-      for (final r in _stockRequests.where((x) => x.status == RequestStatus.pending))
+      for (final r
+          in _stockRequests.where((x) => x.status == RequestStatus.pending))
         ApprovalItem(
           id: r.id,
           kind: 'inventory',
@@ -229,12 +397,14 @@ class FakeBankOpsRepository implements BankOpsRepository {
           impact: 'Kho (${r.kind.name})',
           detail: r.reason.isEmpty ? r.id : r.reason,
         ),
-      for (final r in _cashRequests.where((x) => x.status == RequestStatus.pending))
+      for (final r
+          in _cashRequests.where((x) => x.status == RequestStatus.pending))
         ApprovalItem(
           id: r.id,
           kind: 'cash',
           maker: r.createdByName,
-          impact: '${r.kind == RequestKind.payment ? '-' : '+'}${r.amount} ${r.currency}',
+          impact:
+              '${r.kind == RequestKind.payment ? '-' : '+'}${r.amount} ${r.currency}',
           detail: r.reason.isEmpty ? r.id : r.reason,
         ),
     ];
@@ -249,9 +419,69 @@ class FakeBankOpsRepository implements BankOpsRepository {
     return _delay(List.of(_events));
   }
 
+  final _connections = <IntegrationConnection>[];
+
   @override
-  Future<List<IntegrationConnection>> getConnections() =>
-      _delay(_seedConnections());
+  Future<List<IntegrationConnection>> getConnections() async {
+    if (_connections.isEmpty) _connections.addAll(_seedConnections());
+    return _delay(List.of(_connections));
+  }
+
+  @override
+  Future<IntegrationConnection> createConnection({
+    required String name,
+    required String type,
+    String? endpoint,
+    Map<String, dynamic>? config,
+  }) async {
+    if (_connections.isEmpty) _connections.addAll(_seedConnections());
+        final conn = IntegrationConnection(
+      id: 'conn-000${_connections.length + 1}',
+      name: name,
+      endpoint: endpoint ?? type,
+      status: 'connected',
+      lastTestedAt: null,
+      lastError: null,
+    );
+    _connections.add(conn);
+    return _delay(conn);
+  }
+
+  @override
+  Future<IntegrationConnection> updateConnection({
+    required String id,
+    String? name,
+    String? endpoint,
+    String? status,
+  }) async {
+    final idx = _connections.indexWhere((c) => c.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy kết nối');
+        final cur = _connections[idx];
+    _connections[idx] = IntegrationConnection(
+      id: cur.id,
+      name: name ?? cur.name,
+      endpoint: endpoint ?? cur.endpoint,
+      status: status ?? cur.status,
+      lastTestedAt: cur.lastTestedAt,
+      lastError: cur.lastError,
+    );
+    return _delay(_connections[idx]);
+  }
+
+  @override
+  Future<void> deleteConnection(String id) async {
+    _connections.removeWhere((c) => c.id == id);
+    return _delay(null);
+  }
+
+  @override
+  Future<Map<String, dynamic>> testConnection(String id) async {
+    return _delay({
+      'success': true,
+      'latency_ms': 45,
+      'message': 'Kết nối hoạt động bình thường (mô phỏng)',
+    });
+  }
 
   final _runs = <IntegrationRun>[];
   final _stagingPreviews = <String, StagingPreview>{};
@@ -373,14 +603,16 @@ class FakeBankOpsRepository implements BankOpsRepository {
       rows: staged,
     );
     _stagingPreviews[runId] = preview;
-    _runs.insert(
+        _runs.insert(
       0,
       IntegrationRun(
         id: runId,
         connectionId: 'ic-0001',
         status: 'staged',
+        phase: 'staged',
         startedAt: DateTime.now().toUtc(),
         processed: validCount,
+        errorCount: invalidCount,
         total: rawRows.length,
       ),
     );

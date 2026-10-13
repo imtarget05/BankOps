@@ -155,7 +155,13 @@ class _ReconciliationTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (runs.isEmpty) {
-      return const Center(child: EmptyView(title: 'Chưa có báo cáo đối soát'));
+      return const Center(
+          child: EmptyView(
+        title: 'Chưa có báo cáo đối soát',
+        subtitle:
+            'Chạy đối soát để so sánh sổ cái với số dư thực tế — chênh lệch sẽ hiện ở đây.',
+        icon: Icons.balance_outlined,
+      ));
     }
     return ListView(
       padding: const EdgeInsets.all(16),

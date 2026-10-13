@@ -88,6 +88,30 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return {'data': decoded};
   }
 
+  Future<Map<String, dynamic>> _put(
+      String path, Map<String, dynamic> body,
+      {Map<String, String>? extraHeaders}) async {
+    final headers = await _headers();
+    if (extraHeaders != null) headers.addAll(extraHeaders);
+    final resp =
+        await _client.put(_uri(path), headers: headers, body: json.encode(body));
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      _throwEnvelope(resp);
+    }
+    final decoded = json.decode(resp.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return {'data': decoded};
+  }
+
+  Future<dynamic> _delete(String path) async {
+    final resp =
+        await _client.delete(_uri(path), headers: await _headers());
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      _throwEnvelope(resp);
+    }
+    return json.decode(resp.body);
+  }
+
   static List _asList(dynamic body, String key) {
     if (body is Map && body[key] is List) return body[key] as List;
     if (body is List) return body;
@@ -224,6 +248,90 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
+  Future<InventoryItem> createItem({
+    required String sku,
+    required String name,
+    required String unit,
+    bool trackedSerial = false,
+  }) async {
+    final body = await _post('/inventory/items', {
+      'sku': sku,
+      'name': name,
+      'unit': unit,
+      'tracked_serial': trackedSerial,
+    });
+    return InventoryItem(
+      id: _str(body, 'id'),
+      sku: _str(body, 'sku', sku),
+      name: _str(body, 'name', name),
+      unit: _str(body, 'unit', unit),
+      trackedSerial: body['tracked_serial'] == true,
+    );
+  }
+
+  @override
+  Future<InventoryItem> updateItem({
+    required String id,
+    String? name,
+    String? unit,
+    bool? trackedSerial,
+  }) async {
+    final body = await _put('/inventory/items/$id', {
+      if (name != null) 'name': name,
+      if (unit != null) 'unit': unit,
+      if (trackedSerial != null) 'tracked_serial': trackedSerial,
+    });
+    return InventoryItem(
+      id: _str(body, 'id', id),
+      sku: _str(body, 'sku'),
+      name: _str(body, 'name'),
+      unit: _str(body, 'unit'),
+      trackedSerial: body['tracked_serial'] == true,
+    );
+  }
+
+  @override
+  Future<void> deleteItem(String id) async {
+    await _delete('/inventory/items/$id');
+  }
+
+  @override
+  Future<InventoryLocation> createLocation({
+    required String code,
+    required String name,
+  }) async {
+    final body = await _post('/inventory/locations', {
+      'code': code,
+      'name': name,
+    });
+    return InventoryLocation(
+      id: _str(body, 'id'),
+      code: _str(body, 'code', code),
+      name: _str(body, 'name', name),
+    );
+  }
+
+  @override
+  Future<InventoryLocation> updateLocation({
+    required String id,
+    String? name,
+  }) async {
+    final body = await _put('/inventory/locations/$id', {
+      if (name != null) 'name': name,
+    });
+    return InventoryLocation(
+      id: _str(body, 'id', id),
+      code: _str(body, 'code'),
+      name: _str(body, 'name'),
+    );
+  }
+
+  @override
+  Future<void> deleteLocation(String id) async {
+    await _delete('/inventory/locations/$id');
+  }
+
+  @override
   Future<List<StockBalance>> getBalances({String? locationId}) async {
     final body = await _get('/inventory/balances',
         {if (locationId != null) 'location_id': locationId});
@@ -316,6 +424,11 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return _parseStockRequest(res);
   }
 
+  @override
+  Future<void> deleteStockRequest(String id) async {
+    await _delete('/inventory/requests/$id');
+  }
+
   StockRequest _parseStockRequest(Map m) {
     final lines = (m['lines'] is List ? m['lines'] as List : const [])
         .whereType<Map>()
@@ -385,6 +498,48 @@ class HttpBankOpsRepository implements BankOpsRepository {
               openingBalance: _str(m, 'opening_balance', '0'),
             ))
         .toList();
+  }
+
+  @override
+  Future<Cashbox> createCashbox({
+    required String code,
+    required String name,
+    String currency = 'VND',
+    String openingBalance = '0.00',
+  }) async {
+    final body = await _post('/cash-sim/boxes', {
+      'code': code,
+      'name': name,
+      'currency': currency,
+      'opening_balance': openingBalance,
+    });
+    return Cashbox(
+      id: _str(body, 'id'),
+      code: _str(body, 'code', code),
+      name: _str(body, 'name', name),
+      openingBalance: _str(body, 'opening_balance', openingBalance),
+    );
+  }
+
+  @override
+  Future<Cashbox> updateCashbox({
+    required String id,
+    String? name,
+  }) async {
+    final body = await _put('/cash-sim/boxes/$id', {
+      if (name != null) 'name': name,
+    });
+    return Cashbox(
+      id: _str(body, 'id', id),
+      code: _str(body, 'code'),
+      name: _str(body, 'name'),
+      openingBalance: _str(body, 'opening_balance', '0'),
+    );
+  }
+
+  @override
+  Future<void> deleteCashbox(String id) async {
+    await _delete('/cash-sim/boxes/$id');
   }
 
   @override
@@ -468,6 +623,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
     );
     return _parseCashRequest(res);
   }
+
+  @override
+  Future<void> deleteCashRequest(String id) async =>
+      _delete('/cash-sim/requests/$id');
 
   @override
   Future<CashRequest> submitCashRequest(String id) async =>
@@ -563,7 +722,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
     );
   }
 
-  @override
+    @override
   Future<List<IntegrationConnection>> getConnections() async {
     final body = await _get('/integrations/connections');
     return _asList(body, 'connections')
@@ -573,12 +732,73 @@ class HttpBankOpsRepository implements BankOpsRepository {
               name: _str(m, 'name'),
               endpoint: _str(m, 'type'),
               status: _str(m, 'status', 'connected'),
+              lastTestedAt: _date(m, 'last_tested_at'),
+              lastError: _str(m, 'last_error', ''),
             ))
         .toList();
   }
 
   @override
-  Future<List<IntegrationRun>> getIntegrationRuns() async {
+  Future<IntegrationConnection> createConnection({
+    required String name,
+    required String type,
+    String? endpoint,
+    Map<String, dynamic>? config,
+  }) async {
+    final body = await _post(
+      '/integrations/connections',
+      {
+        'name': name,
+        'type': type,
+        'status': 'connected',
+        'config': config ?? (endpoint != null ? {'endpoint': endpoint} : {}),
+      },
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return IntegrationConnection(
+      id: _str(body, 'id'),
+      name: _str(body, 'name'),
+      endpoint: _str(body, 'type'),
+      status: _str(body, 'status', 'connected'),
+      lastTestedAt: _date(body, 'last_tested_at'),
+      lastError: _str(body, 'last_error', ''),
+    );
+  }
+
+  @override
+  Future<IntegrationConnection> updateConnection({
+    required String id,
+    String? name,
+    String? endpoint,
+    String? status,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (name != null) payload['name'] = name;
+    if (status != null) payload['status'] = status;
+    if (endpoint != null) payload['config'] = {'endpoint': endpoint};
+    final body = await _put('/integrations/connections/$id', payload);
+    return IntegrationConnection(
+      id: _str(body, 'id'),
+      name: _str(body, 'name'),
+      endpoint: _str(body, 'type'),
+      status: _str(body, 'status', 'connected'),
+      lastTestedAt: _date(body, 'last_tested_at'),
+      lastError: _str(body, 'last_error', ''),
+    );
+  }
+
+  @override
+  Future<void> deleteConnection(String id) async =>
+      _delete('/integrations/connections/$id');
+
+  @override
+  Future<Map<String, dynamic>> testConnection(String id) async {
+    final body = await _post('/integrations/connections/$id/test', {});
+    return body;
+  }
+
+  @override
+    Future<List<IntegrationRun>> getIntegrationRuns() async {
     final body = await _get('/integrations/runs');
     return _asList(body, 'runs')
         .whereType<Map>()
@@ -586,12 +806,16 @@ class HttpBankOpsRepository implements BankOpsRepository {
               id: _str(m, 'id'),
               connectionId: _str(m, 'connection_id'),
               status: _str(m, 'status'),
+              phase: _str(m, 'phase', 'pending'),
               startedAt: _date(m, 'created_at'),
               processed:
                   m['valid_count'] is int ? m['valid_count'] as int : null,
+              errorCount: m['invalid_count'] is int ? m['invalid_count'] as int : null,
               total: (m['valid_count'] is int && m['invalid_count'] is int)
                   ? (m['valid_count'] as int) + (m['invalid_count'] as int)
                   : null,
+              error: _str(m, 'error', ''),
+              endedAt: _date(m, 'finished_at'),
             ))
         .toList();
   }

@@ -18,8 +18,9 @@ Base `/api/v1`; JSON UTF-8; UTC ISO-8601; UUID string; money decimal as string (
 | POST `/cash-sim/requests/{id}/submit`, `/approve`, `/reject` | owner/cash.approve | state transition |
 | GET `/approvals/inbox` | *.approve | pending, loại, maker |
 | GET `/activity`, GET `/events/stream?cursor=` | session | feed + SSE |
-| POST `/integrations/connections`, POST `/integrations/{id}/test` | integration.admin | sandbox connector |
-| POST `/integrations/{id}/runs`, GET `/integration-runs/{id}`, GET `/integration-runs/{id}/staging` | integration.admin | job/preview |
+| POST `/integrations/connections`, POST `/integrations/connections/{id}/test`, POST `/integrations/connections/{id}/schema`, GET `/integrations/connections/{id}` | integration.admin | sandbox connector |
+| GET `/integrations/connections`, GET `/integrations/runs`, GET `/integrations/runs/{id}`, GET `/integrations/runs/{id}/preview`, POST `/integrations/{id}/runs` | integration.admin | job/preview + connection list |
+| POST `/integrations/uploads`, POST `/integrations/google-sheets/fetch`, POST `/integrations/webhooks/{id}` | integration.admin | ingest CSV/JSON/Sheets/webhook -> staging |
 | POST `/integration-runs/{id}/confirm` | integration.admin | tạo draft từ staging, không post |
 | POST `/reconciliations`, GET `/reconciliations/{id}` | operator/auditor | chạy/xem |
 | GET `/audit-events` | audit.read | lọc; không edit |
@@ -43,6 +44,30 @@ Content-Type: application/json
 
 ```json
 {"error":{"code":"SELF_APPROVAL_FORBIDDEN","message":"Người tạo không được tự duyệt","request_id":"...","details":{}}}
+```
+
+Response mẫu integrations (staging preview, không còn `simulation: true`):
+
+```json
+{"run_id":"uuid","status":"staged","deduplicated":false,"fingerprint":"sha256...","valid_count":1,"invalid_count":0,"rows":[...],"mapping_version":1}
+```
+
+Connection detail trả về schema, last_tested_at, last_error:
+
+```json
+{"id":"conn-uuid","type":"google_sheets","name":"My Sheet","status":"pending_test","schema":[...],"last_tested_at":null,"last_error":null}
+```
+
+`POST /connections/{id}/test`: kiểm tra kết nối thời gian thực, cập nhật status/last_tested_at:
+
+```json
+{"connection_id":"uuid","ok":true,"tested_at":"2025-01-01T00:00:00Z","status":"connected","error":null}
+```
+
+`POST /connections/{id}/schema`: quét cột từ Google Sheets/CSV, lưu schema_json:
+
+```json
+{"connection_id":"uuid","schema":[{"name":"sku","index":0},...],"tested_at":"2025-01-01T00:00:00Z"}
 ```
 
 Status: 200 read/transition, 201 create, 202 queued job, 400 validation syntax, 401 unauthenticated, 403 forbidden, 404 not found, 409 state/version/idempotency conflict, 422 schema validation, 429 rate limit, 503 dependency unavailable. `POST /approve` trả 200 với trạng thái `posted`, không trả 202 khi DB chưa post.

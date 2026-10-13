@@ -18,7 +18,13 @@ class ActivityCenter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (events.isEmpty) {
-      return const Center(child: EmptyView(title: 'Chưa có hoạt động nào được ghi nhận.'));
+      return const Center(
+          child: EmptyView(
+        title: 'Chưa có hoạt động nào được ghi nhận',
+        subtitle:
+            'Mọi thao tác tạo, gửi duyệt và duyệt phiếu sẽ hiện tại đây theo thời gian thực.',
+        icon: Icons.timeline_outlined,
+      ));
     }
     final statusColors = context.statusColors;
     final theme = Theme.of(context);
