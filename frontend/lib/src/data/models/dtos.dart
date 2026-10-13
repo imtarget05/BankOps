@@ -331,6 +331,7 @@ class AiRiskAssessment {
     this.flaggedRules = const [],
     this.recommendations = const [],
     required this.auditStamp,
+    this.assessmentSource = 'unknown',
   });
 
   final String requestId;
@@ -340,6 +341,7 @@ class AiRiskAssessment {
   final List<String> flaggedRules;
   final List<String> recommendations;
   final String auditStamp;
+  final String assessmentSource;
 
   bool get isHighRisk => riskLevel == 'high' || riskScore >= 70;
   bool get isMediumRisk => riskLevel == 'medium';
@@ -360,6 +362,7 @@ class AiRiskAssessment {
               .toList() ??
           const [],
       auditStamp: json['audit_stamp'] as String? ?? '',
+      assessmentSource: json['assessment_source'] as String? ?? 'unknown',
     );
   }
 }

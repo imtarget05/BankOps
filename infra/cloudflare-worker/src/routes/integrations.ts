@@ -50,7 +50,7 @@ interface StagingRow {
 // GET /integrations/connections
 integrationsRoutes.get("/connections", async (c) => {
   try {
-    const connections = await db<ConnectionRow[]>`
+    const connections = await db<ConnectionRow>(c.env.DATABASE_URL)`
       SELECT id, name, type, status, schema_json, last_tested_at, last_error
       FROM integration_connections ORDER BY name ASC
     `;
@@ -89,7 +89,7 @@ integrationsRoutes.get("/connections/:id", async (c) => {
     return c.json({ error: { code: "INVALID_ID", message: "Missing connection ID" } }, 400);
   }
   try {
-    const connections = await db<ConnectionRow[]>`
+    const connections = await db<ConnectionRow>(c.env.DATABASE_URL)`
       SELECT id, name, type, status, schema_json, last_tested_at, last_error
       FROM integration_connections WHERE id = ${connId}::uuid LIMIT 1
     `;
@@ -148,7 +148,7 @@ integrationsRoutes.post("/connections/:id/schema", async (c) => {
 // GET /integrations/runs — list
 integrationsRoutes.get("/runs", async (c) => {
   try {
-    const runs = await db<RunRow[]>`
+    const runs = await db<RunRow>(c.env.DATABASE_URL)`
       SELECT id, connection_id, status, phase, valid_count, invalid_count, mapping_version, source_fingerprint, error_code, message_key, finished_at, created_at, updated_at
       FROM integration_runs ORDER BY created_at DESC LIMIT 50
     `;
@@ -180,7 +180,7 @@ integrationsRoutes.get("/runs/:id", async (c) => {
     return c.json({ error: { code: "INVALID_ID", message: "Missing run ID" } }, 400);
   }
   try {
-    const runs = await db<RunRow[]>`
+    const runs = await db<RunRow>(c.env.DATABASE_URL)`
       SELECT id, connection_id, status, phase, valid_count, invalid_count, mapping_version, source_fingerprint, error_code, message_key, finished_at, created_at, updated_at
       FROM integration_runs WHERE id = ${runId}::uuid LIMIT 1
     `;
@@ -188,7 +188,7 @@ integrationsRoutes.get("/runs/:id", async (c) => {
       return c.json({ error: { code: "NOT_FOUND", message: "Run not found" } }, 404);
     }
     const run = runs[0];
-    const rows = await db<StagingRow[]>`
+    const rows = await db<StagingRow>(c.env.DATABASE_URL)`
       SELECT row_index, source_row_key, data_json, valid, errors_json
       FROM integration_staging_rows WHERE run_id = ${runId}::uuid ORDER BY row_index ASC LIMIT 200
     `;
@@ -268,7 +268,7 @@ integrationsRoutes.post("/runs/:id/confirm", async (c) => {
     return c.json({ error: { code: "INVALID_ID", message: "Missing run ID" } }, 400);
   }
   try {
-    await db`
+    await db(c.env.DATABASE_URL)`
       UPDATE integration_runs
       SET phase = 'confirmed', updated_at = NOW()
       WHERE id = ${runId}::uuid AND phase = 'staged'

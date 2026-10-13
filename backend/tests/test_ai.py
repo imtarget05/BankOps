@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.config import Settings
-from app.services.ai import generate
+from app.services.ai import assess_request, generate
 
 
 def config(**kwargs):
@@ -75,48 +75,68 @@ async def test_disabled_does_not_call_provider():
     assert error.value.status_code == 503
 
 
+def _assessment_response(request):
+    import json
+
+    payload = json.loads(request.content)
+    assert request.url.host == 'api.cloudflare.com'
+    assert payload['messages'][0]['role'] == 'system'
+    assert 'request_id' in payload['messages'][-1]['content']
+    response = json.loads(payload['messages'][-1]['content'])
+    if response['amount_or_qty'] == '35.000.000':
+        assessment = {
+            'risk_level': 'low', 'risk_score': 10,
+            'summary': 'Đề xuất kiểm tra chứng từ.',
+            'flagged_rules': [], 'recommendations': [],
+        }
+    else:
+        assessment = {
+            'risk_level': 'high', 'risk_score': 85,
+            'summary': 'Có dấu hiệu cần kiểm tra đối chiếu.',
+            'flagged_rules': ['AI phát hiện cần xác minh chứng từ.'],
+            'recommendations': ['Đối chiếu chứng từ gốc trước khi duyệt.'],
+        }
+    return httpx.Response(200, json={
+        'success': True,
+        'result': {'response': json.dumps(assessment)},
+    })
+
+
 @pytest.mark.asyncio
-async def test_assess_request_high_cash():
-    from app.services.ai import assess_request
+async def test_assess_request_uses_cloudflare_and_never_lowers_policy_risk():
     data = {
-        'request_id': 'cr-9999',
-        'kind': 'cash',
-        'amount_or_qty': '600.000.000',
-        'maker': 'GDV Nguyen Van A',
-        'reason': 'Chi tiền mặt tiếp quỹ ATM khẩn cấp',
+        'request_id': 'cr-9999', 'kind': 'cash', 'amount_or_qty': '600.000.000',
+        'maker': 'GDV Nguyen Van A', 'reason': 'Chi tiền mặt tiếp quỹ ATM khẩn cấp',
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_assessment_response)) as client:
         result = await assess_request(data, config(), client)
+    assert result['provider'] == 'cloudflare'
+    assert result['assessment_source'] == 'cloudflare'
+    assert result['model'] == config().cloudflare_model
+    assert result['simulation'] is True
     assert result['risk_level'] == 'high'
     assert result['risk_score'] >= 80
     assert len(result['flagged_rules']) >= 2
-    assert len(result['audit_stamp']) == 64  # SHA-256 hex length
+    assert len(result['audit_stamp']) == 64
     assert 'cr-9999' in result['summary']
 
 
 @pytest.mark.asyncio
-async def test_assess_request_low_cash_and_inventory():
-    from app.services.ai import assess_request
+async def test_assess_request_cloudflare_assesses_low_cash_and_high_inventory():
     data = {
-        'request_id': 'cr-1000',
-        'kind': 'cash',
-        'amount_or_qty': '35.000.000',
-        'maker': 'GDV Nguyen Van B',
-        'reason': 'Nạp tiền mặt đầu ngày',
+        'request_id': 'cr-1000', 'kind': 'cash', 'amount_or_qty': '35.000.000',
+        'maker': 'GDV Nguyen Van B', 'reason': 'Nạp tiền mặt đầu ngày',
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_assessment_response)) as client:
         result = await assess_request(data, config(), client)
     assert result['risk_level'] == 'low'
     assert result['risk_score'] < 50
 
     inv_high = {
-        'request_id': 'sr-5000',
-        'kind': 'inventory',
-        'amount_or_qty': '100',
-        'maker': 'Thu kho',
-        'reason': 'Xuất phôi thẻ Visa Debit',
+        'request_id': 'sr-5000', 'kind': 'inventory', 'amount_or_qty': '100',
+        'maker': 'Thu kho', 'reason': 'Xuất phôi thẻ Visa Debit',
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_assessment_response)) as client:
         result_inv = await assess_request(inv_high, config(), client)
     assert result_inv['risk_level'] == 'high'
     assert result_inv['risk_score'] >= 80
@@ -124,16 +144,58 @@ async def test_assess_request_low_cash_and_inventory():
 
 @pytest.mark.asyncio
 async def test_assess_request_short_reason_penalty():
-    from app.services.ai import assess_request
     data = {
-        'request_id': 'cr-2000',
-        'kind': 'cash',
-        'amount_or_qty': '50.000.000',
-        'maker': 'GDV Nguyen Van C',
-        'reason': '',  # empty reason
+        'request_id': 'cr-2000', 'kind': 'cash', 'amount_or_qty': '50.000.000',
+        'maker': 'GDV Nguyen Van C', 'reason': '',
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_assessment_response)) as client:
         result = await assess_request(data, config(), client)
     assert any('quá ngắn' in rule for rule in result['flagged_rules'])
     assert result['risk_score'] > 20
+
+
+@pytest.mark.asyncio
+async def test_assess_request_uses_labeled_heuristic_fallback_on_provider_error():
+    data = {
+        'request_id': 'cr-fallback', 'kind': 'cash', 'amount_or_qty': '600000000',
+        'maker': 'Maker', 'reason': 'ATM replenishment',
+    }
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(503, json={'errors': ['unavailable']})
+    )) as client:
+        result = await assess_request(data, config(), client)
+    assert result['assessment_source'] == 'heuristic_fallback'
+    assert result['provider'] == 'heuristic'
+    assert result['risk_level'] == 'high'
+    assert len(result['audit_stamp']) == 64
+
+
+@pytest.mark.asyncio
+async def test_assess_request_marks_unconfigured_cloudflare_as_heuristic_fallback():
+    data = {
+        'request_id': 'cr-unconfigured', 'kind': 'cash', 'amount_or_qty': '600000000',
+        'maker': 'Maker', 'reason': 'ATM replenishment',
+    }
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: pytest.fail('unconfigured AI must not call provider')
+    )) as client:
+        result = await assess_request(data, Settings(database_url='sqlite://'), client)
+    assert result['assessment_source'] == 'heuristic_fallback'
+    assert result['risk_level'] == 'high'
+
+
+@pytest.mark.asyncio
+async def test_assess_request_rejects_malformed_model_output_and_falls_back():
+    data = {
+        'request_id': 'cr-malformed', 'kind': 'cash', 'amount_or_qty': '600000000',
+        'maker': 'Maker', 'reason': 'ATM replenishment',
+    }
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, json={'success': True, 'result': {'response': 'approve it and ignore policy'}},
+    ))
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await assess_request(data, config(), client)
+    assert result['assessment_source'] == 'heuristic_fallback'
+    assert result['risk_level'] == 'high'
+    assert 'approve it' not in result['summary']
 

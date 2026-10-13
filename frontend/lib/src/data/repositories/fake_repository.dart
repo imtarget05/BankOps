@@ -19,6 +19,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
   final _approvalStreamCtrl = StreamController<String>.broadcast();
 
   @override
+  void dispose() {
+    _approvalStreamCtrl.close();
+  }
+
   Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
 
   Future<T> _delay<T>(T value) {
@@ -34,6 +38,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
   // ---- users ----
   final _users = <AppUser>[];
 
+  @override
+  Future<HealthStatus> getHealth() => _delay(
+        const HealthStatus(alive: true, version: '0.1.0', latencyMs: 0),
+      );
 
   @override
   Future<List<AppUser>> loadUsers() async {
@@ -217,7 +225,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
       _transitionStock(id, RequestStatus.pending);
 
   @override
-  Future<StockRequest> approveStockRequest(String id) =>
+  Future<StockRequest> approveStockRequest(String id, {String? supervisorPin}) =>
       _transitionStock(id, RequestStatus.posted);
 
   @override
@@ -363,7 +371,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
       _transitionCash(id, RequestStatus.pending);
 
   @override
-  Future<CashRequest> approveCashRequest(String id) =>
+  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) =>
       _transitionCash(id, RequestStatus.posted);
 
   @override

@@ -12,11 +12,13 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
 from app.api.routes.auth_utils import get_user_capabilities, require_any_capability
+from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.approval import ApprovalDecision
@@ -30,6 +32,7 @@ from app.models.inventory import (
     Movement,
 )
 from app.services import idempotency
+from app.services.approval_controls import verify_supervisor_pin
 
 router = APIRouter()
 
@@ -47,6 +50,12 @@ _VIEW_ASSETS = (
     "audit:view",
 )
 _KINDS = ("receipt", "issue", "transfer", "adjustment")
+
+class ApprovalInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    supervisor_pin: str | None = Field(default=None, min_length=1, max_length=128)
+
+
 _SUBJECT = "inventory_request"
 _APPROVE_CAPS = ("inventory:create_request", "inventory:approve_request")
 # Ghi lại quyết định của agent để reviewer đối chiếu (không dùng để đọc response).
@@ -685,6 +694,7 @@ async def submit_request(
 async def approve_request(
     request_id: str,
     request: Request,
+    payload: ApprovalInput | None = None,
     user=Depends(require_any_capability(*_APPROVE_CAPS)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -731,6 +741,16 @@ async def approve_request(
             have = Decimal(str(bal.quantity)) if bal else _ZERO
             if have < qty:
                 raise AppError(409, "INSUFFICIENT_STOCK", "không đủ tồn tại kho nguồn")
+
+    amount = sum(
+        Decimal(str(line.get("quantity", 0) if isinstance(line, dict) else getattr(line, "quantity", 0)))
+        for line in await _load_lines(db, req.id)
+    )
+    verify_supervisor_pin(
+        payload.supervisor_pin if payload else None,
+        settings,
+        required=req.kind in ("issue", "transfer") and amount >= Decimal("50"),
+    )
 
     now = _now()
     for ln in lines:

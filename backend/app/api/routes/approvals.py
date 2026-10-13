@@ -41,7 +41,7 @@ async def get_approval_inbox(
     for r in inv_rows:
         line_count = (
             await db.execute(
-                select(func.count()).select_from(InventoryRequestLine).where(
+                select(func.coalesce(func.sum(InventoryRequestLine.quantity), 0)).where(
                     InventoryRequestLine.request_id == r.id
                 )
             )

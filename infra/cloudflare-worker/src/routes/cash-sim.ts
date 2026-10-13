@@ -5,6 +5,7 @@
 
 import { Hono } from "hono";
 import { Env } from "../index";
+import { assessRequestRisk } from "./ai";
 import { db } from "../db/client";
 import { JwtPayload } from "../middleware/auth";
 
@@ -238,6 +239,26 @@ cashSimRoutes.post("/requests/:id/approve", async (c) => {
       { error: { code: "MAKER_CHECKER_VIOLATION", message: "Maker cannot approve own request" } },
       403
     );
+  }
+  if (!user.caps.includes("cash:approve_request")) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Missing cash:approve_request" } }, 403);
+  }
+  const body = await c.req.json<{ supervisor_pin?: string }>().catch(() => ({} as { supervisor_pin?: string }));
+  const needsPin = assessRequestRisk({
+    request_id: req.id,
+    kind: "cash",
+    amount_or_qty: String(req.amount),
+    maker: req.maker_id,
+    reason: req.reason ?? "",
+  }) === "high";
+  if (needsPin) {
+    try {
+      if (!(await supervisorPinOk(body.supervisor_pin, c.env))) {
+        return c.json({ error: { code: "SUPERVISOR_PIN_INVALID", message: "Mã PIN kiểm soát viên không đúng." } }, 403);
+      }
+    } catch {
+      return c.json({ error: { code: "SUPERVISOR_PIN_UNCONFIGURED", message: "Xác thực kiểm soát viên chưa được cấu hình." } }, 503);
+    }
   }
 
   const journalId = crypto.randomUUID();

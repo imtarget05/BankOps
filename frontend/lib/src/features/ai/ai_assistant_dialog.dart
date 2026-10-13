@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
+import '../../app/app_shell.dart';
+import '../../data/repositories/http_bankops_repository.dart';
 import '../auth/auth_service.dart';
 
 class AiAssistantDialog extends StatefulWidget {
@@ -30,13 +32,14 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   bool _isLoading = false;
+  bool _disposed = false;
 
   final List<_ChatMessage> _messages = [
     _ChatMessage(
       isUser: false,
-      text: 'Xin chào! Tôi là Trợ lý Nghiệp vụ BankOps AI (chạy trên Cloudflare Workers AI & LLM Qwen2.5).\n'
+      text: 'Xin chào! Tôi là Trợ lý Nghiệp vụ BankOps.\n'
           'Tôi có thể hỗ trợ bạn tra cứu quy trình Maker - Checker, hạn mức két sắt, quản lý kho phôi thẻ chip, hoặc hướng dẫn xử lý lỗi import.',
-      model: '@cf/meta/llama-3.1-8b-instruct',
+      model: 'Trợ lý BankOps',
     ),
   ];
 
@@ -63,9 +66,17 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
     String? modelUsed;
 
     try {
-      final auth = context.read<AuthService>();
-      final token = await auth.getAccessToken();
-      final uri = Uri.parse('http://localhost:8000/api/v1/ai/chat');
+      final repository = RepositoryScope.of(context);
+      final token = repository is HttpBankOpsRepository
+          ? await repository.accessToken
+          : await context.read<AuthService>().getAccessToken();
+      final apiBaseUrl = repository is HttpBankOpsRepository
+          ? repository.baseUrl
+          : const String.fromEnvironment(
+              'API_BASE_URL',
+              defaultValue: 'http://localhost:8000/api/v1',
+            );
+      final uri = Uri.parse('$apiBaseUrl/ai/chat');
 
       final resp = await http.post(
         uri,
@@ -89,7 +100,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       modelUsed = 'bankops-local-rules';
     }
 
-    if (mounted) {
+    if (mounted && !_disposed) {
       setState(() {
         _messages.add(_ChatMessage(isUser: false, text: answer, model: modelUsed));
         _isLoading = false;
@@ -142,6 +153,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
 
   @override
   void dispose() {
+    _disposed = true;
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();

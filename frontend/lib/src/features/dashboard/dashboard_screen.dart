@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
+import '../../core/util/role_visibility.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onNavigate});
+
+  /// Điều hướng sang tab AppShell (full index). `null` = chế độ xem tĩnh
+  /// (test/widget độc lập): quick action hiện snackbar hướng dẫn như cũ.
+  final ValueChanged<int>? onNavigate;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -60,7 +65,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 sliver: SliverToBoxAdapter(
-                  child: SummaryCard(data: data),
+                  child: SummaryCard(
+                    data: data,
+                    onNavigate: widget.onNavigate,
+                  ),
                 ),
               ),
               SliverPadding(
@@ -104,7 +112,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                sliver: DashboardKpiGrid(data: data),
+                sliver: DashboardKpiGrid(
+                  data: data,
+                  onNavigate: widget.onNavigate,
+                ),
               ),
             ],
           ),
@@ -378,35 +389,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              _actionButton(
-                context,
-                icon: Icons.savings_outlined,
-                label: 'Lập phiếu Quỹ tiền mặt',
-                color: const Color(0xFF059669),
-              ),
-              _actionButton(
-                context,
-                icon: Icons.inventory_2_outlined,
-                label: 'Lập phiếu Xuất/Nhập kho',
-                color: const Color(0xFF2563EB),
-              ),
-              _actionButton(
-                context,
-                icon: Icons.verified_outlined,
-                label: 'Xử lý Hộp thư duyệt 4-Mắt',
-                color: const Color(0xFF7C3AED),
-              ),
-              _actionButton(
-                context,
-                icon: Icons.sync_alt_outlined,
-                label: 'Đối soát Sổ cái tức thì',
-                color: const Color(0xFF0891B2),
-              ),
-            ],
+          Builder(
+            builder: (context) {
+              final roles = RoleVisibility.rolesOf(
+                SessionScope.maybeOf(context)?.user,
+              );
+              final actions = <Widget>[
+                if (RoleVisibility.canCreate(roles))
+                  _actionButton(
+                    context,
+                    icon: Icons.savings_outlined,
+                    label: 'Lập phiếu Quỹ tiền mặt',
+                    color: const Color(0xFF059669),
+                    tabIndex: 3,
+                  ),
+                if (RoleVisibility.canCreate(roles))
+                  _actionButton(
+                    context,
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Lập phiếu Xuất/Nhập kho',
+                    color: const Color(0xFF2563EB),
+                    tabIndex: 3,
+                  ),
+                if (RoleVisibility.canApprove(roles))
+                  _actionButton(
+                    context,
+                    icon: Icons.verified_outlined,
+                    label: 'Xử lý Hộp thư duyệt 4-Mắt',
+                    color: const Color(0xFF7C3AED),
+                    tabIndex: 4,
+                  ),
+                _actionButton(
+                  context,
+                  icon: Icons.sync_alt_outlined,
+                  label: 'Đối soát Sổ cái tức thì',
+                  color: const Color(0xFF0891B2),
+                  tabIndex: 7,
+                ),
+              ];
+              return Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                children: actions,
+              );
+            },
           ),
         ],
       ),
@@ -418,9 +444,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required IconData icon,
     required String label,
     required Color color,
+    required int tabIndex,
   }) {
+    final go = widget.onNavigate;
     return OutlinedButton.icon(
+      key: Key('quick-action-$tabIndex-${icon.codePoint}'),
       onPressed: () {
+        if (go != null) {
+          go(tabIndex);
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
@@ -814,9 +847,10 @@ class DashboardData {
 }
 
 class SummaryCard extends StatelessWidget {
-  const SummaryCard({super.key, required this.data});
+  const SummaryCard({super.key, required this.data, this.onNavigate});
 
   final DashboardData data;
+  final ValueChanged<int>? onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -839,6 +873,8 @@ class SummaryCard extends StatelessWidget {
         final cards = [
           _buildExecutiveStatCard(
             context,
+            key: const Key('kpi-cash-card'),
+            tabIndex: 2,
             title: 'TỔNG TỒN QUỸ TIỀN MẶT',
             value: AppFormat.money(totalCashAmount.toStringAsFixed(0)),
             subtext: '${data.cashboxes.length} két sắt chi nhánh hoạt động',
@@ -848,6 +884,8 @@ class SummaryCard extends StatelessWidget {
           ),
           _buildExecutiveStatCard(
             context,
+            key: const Key('kpi-stock-card'),
+            tabIndex: 1,
             title: 'ẤN CHỈ & PHÔI TỒN KHO',
             value: '${AppFormat.intFormat(totalStockQty.round())} phôi',
             subtext: '${data.items.length} loại vật tư tại ${data.locations.length} kho',
@@ -857,6 +895,8 @@ class SummaryCard extends StatelessWidget {
           ),
           _buildExecutiveStatCard(
             context,
+            key: const Key('kpi-inbox-card'),
+            tabIndex: 4,
             title: 'PHIẾU CHỜ DUYỆT (4-EYES)',
             value: '${data.inbox.length} phiếu',
             subtext: 'Cần kiểm soát viên xác nhận',
@@ -866,6 +906,8 @@ class SummaryCard extends StatelessWidget {
           ),
           _buildExecutiveStatCard(
             context,
+            key: const Key('kpi-ledger-card'),
+            tabIndex: 7,
             title: 'ĐỐI SOÁT SỔ CÁI (GL)',
             value: '100% Khớp',
             subtext: 'Không có chênh lệch tồn quỹ',
@@ -920,6 +962,8 @@ class SummaryCard extends StatelessWidget {
 
   Widget _buildExecutiveStatCard(
     BuildContext context, {
+    Key? key,
+    required int tabIndex,
     required String title,
     required String value,
     required String subtext,
@@ -930,7 +974,12 @@ class SummaryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
+    final go = onNavigate;
+    return InkWell(
+      key: key,
+      borderRadius: BorderRadius.circular(16),
+      onTap: go == null ? null : () => go(tabIndex),
+      child: Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -1017,14 +1066,16 @@ class SummaryCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
 
 class DashboardKpiGrid extends StatelessWidget {
-  const DashboardKpiGrid({super.key, required this.data});
+  const DashboardKpiGrid({super.key, required this.data, this.onNavigate});
 
   final DashboardData data;
+  final ValueChanged<int>? onNavigate;
 
   static const _tiles = [
     _KpiTile('Điểm lưu kho', Icons.warehouse_rounded, Color(0xFF2563EB)),
@@ -1056,7 +1107,14 @@ class DashboardKpiGrid extends StatelessWidget {
         (context, index) {
           final tile = _tiles[index];
           final count = counts[index];
-          return Container(
+          const tabForTile = [1, 1, 1, 1, 3, 4];
+          final go = onNavigate;
+          return InkWell(
+            key: Key('kpi-tile-$index'),
+            borderRadius: BorderRadius.circular(14),
+            onTap:
+                go == null ? null : () => go(tabForTile[index]),
+            child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -1095,6 +1153,7 @@ class DashboardKpiGrid extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
               ],
+            ),
             ),
           );
         },

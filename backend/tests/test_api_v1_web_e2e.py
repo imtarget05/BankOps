@@ -179,3 +179,103 @@ def test_api_v1_maker_checker_web_flow(client):
         "/api/v1/reports/cashflow-daily", headers=checker_headers
     ).json()["buckets"]
     assert len(cash_rep) >= 1
+
+
+def test_google_oauth_login_flow(client):
+    """Verify POST /api/v1/auth/google provisions new user and issues JWT."""
+    # 1. Validation error for short / empty token
+    r_bad = client.post("/api/v1/auth/google", json={"id_token": "short"})
+    assert r_bad.status_code == 422
+
+    # 2. Mock token login (auto-provisions new user)
+    mock_token = "mock-google-token:nguyen_it@bankops.internal:Nguyễn Văn IT"
+    r = client.post("/api/v1/auth/google", json={"id_token": mock_token})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+    assert data["user"]["username"] == "nguyen_it@bankops.internal"
+    assert "staff" in data["user"]["roles"]
+
+    # 3. Access token works on protected endpoints
+    token = data["access_token"]
+    me_resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_resp.status_code == 200
+    assert me_resp.json()["username"] == "nguyen_it@bankops.internal"
+
+
+def test_high_risk_dual_control_pin_e2e_flow(client):
+    """Verify high-risk cash request (>= 500M) requires supervisor PIN."""
+    # 1. Maker logs in and creates 600,000,000 VND payment request
+    r_login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "demo_maker", "password": DEMO_PASSWORD},
+    )
+    maker_token = r_login.json()["access_token"]
+    maker_headers = {"Authorization": f"Bearer {maker_token}"}
+
+    boxes = client.get("/api/v1/cash-sim/boxes", headers=maker_headers).json()["boxes"]
+    cashbox_id = boxes[0]["id"]
+
+    cr_create = client.post(
+        "/api/v1/cash-sim/requests",
+        headers={**maker_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "cashbox_id": cashbox_id,
+            "kind": "receipt",
+            "amount": "600000000.00",
+            "currency": "VND",
+            "reason": "Tiếp quỹ tiền mặt số lượng lớn từ Ngân hàng Nhà nước",
+        },
+    )
+    assert cr_create.status_code == 201
+    cr_id = cr_create.json()["id"]
+
+    # Submit request
+    cr_sub = client.post(
+        f"/api/v1/cash-sim/requests/{cr_id}/submit",
+        headers={**maker_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={},
+    )
+    assert cr_sub.status_code == 200
+
+    # 2. Checker logs in and inspects AI risk assessment
+    r_chk = client.post(
+        "/api/v1/auth/login",
+        json={"username": "demo_checker", "password": DEMO_PASSWORD},
+    )
+    chk_token = r_chk.json()["access_token"]
+    chk_headers = {"Authorization": f"Bearer {chk_token}"}
+
+    ai_resp = client.post(
+        "/api/v1/ai/assess-request",
+        headers=chk_headers,
+        json={
+            "request_id": cr_id,
+            "kind": "cash",
+            "amount_or_qty": "600000000.00",
+            "maker": "demo_maker",
+            "reason": "Xuất quỹ khẩn cấp ATM trung tâm",
+        },
+    )
+    assert ai_resp.status_code == 200
+    ai_data = ai_resp.json()
+    assert ai_data["risk_level"] == "high"
+    assert ai_data["risk_score"] >= 80
+
+    # 3. Checker approves with WRONG PIN -> rejected 403
+    wrong_app = client.post(
+        f"/api/v1/cash-sim/requests/{cr_id}/approve",
+        headers={**chk_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={"supervisor_pin": "999999"},
+    )
+    assert wrong_app.status_code == 403
+
+    # 4. Checker approves with CORRECT PIN (123456) -> success
+    ok_app = client.post(
+        f"/api/v1/cash-sim/requests/{cr_id}/approve",
+        headers={**chk_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={"supervisor_pin": "123456"},
+    )
+    assert ok_app.status_code == 200, ok_app.text
+    assert ok_app.json()["status"] == "posted"

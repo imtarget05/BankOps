@@ -8,6 +8,8 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import '../../data/repositories/fake_repository.dart';
+import '../../data/repositories/http_bankops_repository.dart';
 
 /// Màn duyệt — approval inbox (Maker != Checker) chuẩn ngân hàng 4-Eyes Principle.
 class ApprovalsScreen extends StatefulWidget {
@@ -90,7 +92,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     return false;
   }
 
-  Future<bool> _showDualControlPinDialog(
+  Future<String?> _showDualControlPinDialog(
     ApprovalItem item,
     AiRiskAssessment? assessment, {
     bool isBatch = false,
@@ -98,8 +100,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   }) async {
     final pinCtrl = TextEditingController();
     String? errorText;
+    final isDemoRepository = RepositoryScope.of(context) is FakeBankOpsRepository;
 
-    final result = await showDialog<bool>(
+    final result = await showDialog<String?>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
@@ -178,8 +181,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                const Text(
-                  'Nhập mã PIN Kiểm soát viên (Mặc định demo: 123456):',
+                Text(
+                  isDemoRepository
+                      ? 'Nhập PIN demo Kiểm soát viên (123456):'
+                      : 'Nhập PIN Kiểm soát viên được cấu hình bảo mật:',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
@@ -200,18 +205,24 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: () => Navigator.of(ctx).pop(null),
               child: const Text('Huỷ bỏ'),
             ),
             FilledButton(
               key: const Key('confirm-supervisor-pin-btn'),
               style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
               onPressed: () {
-                if (pinCtrl.text.trim() == '123456') {
-                  Navigator.of(ctx).pop(true);
-                } else {
+                if (isDemoRepository && pinCtrl.text.trim() == '123456') {
+                  Navigator.of(ctx).pop(pinCtrl.text.trim());
+                } else if (isDemoRepository) {
                   setDialogState(() {
                     errorText = 'Mã PIN không đúng (Demo: 123456)';
+                  });
+                } else if (pinCtrl.text.trim().isNotEmpty) {
+                  Navigator.of(ctx).pop(pinCtrl.text.trim());
+                } else {
+                  setDialogState(() {
+                    errorText = 'Vui lòng nhập PIN Kiểm soát viên.';
                   });
                 }
               },
@@ -222,7 +233,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       ),
     );
 
-    return result == true;
+    pinCtrl.dispose();
+    return result;
   }
 
   Future<void> _approve(ApprovalItem item) async {
@@ -230,17 +242,18 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     final assessment = _assessments[item.id];
     final highRisk = _isHighRisk(item);
 
+    String? supervisorPin;
     if (highRisk) {
-      final verified = await _showDualControlPinDialog(item, assessment);
-      if (!verified || !mounted) return;
+      supervisorPin = await _showDualControlPinDialog(item, assessment);
+      if (supervisorPin == null || !mounted) return;
     }
 
     setState(() => _busy = true);
     try {
       if (_isCash(item)) {
-        await repo.approveCashRequest(item.id);
+        await repo.approveCashRequest(item.id, supervisorPin: supervisorPin);
       } else {
-        await repo.approveStockRequest(item.id);
+        await repo.approveStockRequest(item.id, supervisorPin: supervisorPin);
       }
       if (!mounted) return;
       final stampMsg = assessment != null ? ' (Audit Stamp: ${assessment.auditStamp.substring(0, 10)}...)' : '';
@@ -325,15 +338,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     if (targets.isEmpty) return;
 
     final hasHighRisk = targets.any(_isHighRisk);
+    String? supervisorPin;
     if (hasHighRisk) {
       final highRiskItem = targets.firstWhere(_isHighRisk);
-      final verified = await _showDualControlPinDialog(
+      supervisorPin = await _showDualControlPinDialog(
         highRiskItem,
         _assessments[highRiskItem.id],
         isBatch: true,
         batchCount: targets.length,
       );
-      if (!verified || !mounted) return;
+      if (supervisorPin == null || !mounted) return;
     } else {
       final confirmed = await showConfirmDialog(
         context,
@@ -353,9 +367,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     for (final item in targets) {
       try {
         if (_isCash(item)) {
-          await repo.approveCashRequest(item.id);
+          await repo.approveCashRequest(item.id, supervisorPin: supervisorPin);
         } else {
-          await repo.approveStockRequest(item.id);
+          await repo.approveStockRequest(item.id, supervisorPin: supervisorPin);
         }
         ok++;
       } catch (_) {
@@ -475,6 +489,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                         'Phiếu: ${item.id} · Người lập: ${item.maker}',
                         style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                       ),
+                      if (assessment != null)
+                        Text(
+                          assessment.assessmentSource == 'cloudflare'
+                              ? 'AI Cloudflare · tư vấn, không quyết định phê duyệt'
+                              : 'Thẩm định dự phòng theo quy tắc · AI chưa khả dụng',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                     ],
                   ),
                 ),

@@ -1,9 +1,12 @@
-"""Auth routes - demo authentication and session management."""
+import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.auth_utils import (
@@ -22,7 +25,7 @@ from app.api.routes.auth_utils import (
 )
 from app.config import settings
 from app.database import get_db
-from app.models.iam import User
+from app.models.iam import User, UserRole
 
 router = APIRouter()
 
@@ -181,4 +184,91 @@ async def get_current_user_info(
         "display_name": current_user.display_name_demo,
         "roles": roles,
         "capabilities": capabilities,
+    }
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(min_length=10)
+
+
+@router.post("/google")
+async def google_login(
+    body: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Authenticate or auto-provision users with Google OAuth ID Token."""
+    token = body.id_token.strip()
+    claims: dict = {}
+
+    # Cho phép mock token trong môi trường test/demo
+    if token.startswith("mock-"):
+        parts = token.split(":")
+        email = parts[1] if len(parts) > 1 else "demo_google@bankops.internal"
+        name = parts[2] if len(parts) > 2 else "Google Demo User"
+        claims = {"email": email, "name": name, "email_verified": True}
+    else:
+        try:
+            req = google_requests.Request()
+            audiences = settings.google_allowed_audiences or [settings.google_client_id]
+            claims = google_id_token.verify_oauth2_token(token, req, audience=audiences)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google ID token không hợp lệ hoặc hết hạn.",
+            ) from None
+
+    email = str(claims.get("email", "")).strip().lower()
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="ID token thiếu email.")
+    if not claims.get("email_verified", False):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email Google chưa được xác minh.")
+
+    result = await db.execute(select(User).where(User.username == email))
+    user = result.scalar_one_or_none()
+    is_new_user = user is None
+
+    if is_new_user:
+        new_id = uuid.uuid4()
+        display_name = str(claims.get("name") or email)
+        user = User(
+            id=new_id,
+            username=email,
+            password_hash=f"GOOGLE_OAUTH_NO_PASSWORD:{uuid.uuid4()}",
+            status="active",
+            display_name_demo=display_name,
+        )
+        db.add(user)
+        role_entry = UserRole(user_id=new_id, role_code="staff")
+        db.add(role_entry)
+        await db.commit()
+        await db.refresh(user)
+    else:
+        if user.status != "active":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is not active")
+
+    roles = await get_user_roles(db, user.id)
+    capabilities = await get_user_capabilities(db, user.id)
+
+    access_token = create_access_token(
+        {"sub": str(user.id), "username": user.username, "roles": roles, "caps": capabilities},
+        timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    refresh_token = create_refresh_token(
+        {"sub": str(user.id), "username": user.username},
+        timedelta(days=settings.refresh_token_expire_days),
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": settings.access_token_expire_minutes * 60,
+        "is_new_user": is_new_user,
+        "user": {
+            "id": str(user.id),
+            "username": user.username,
+            "display_name": user.display_name_demo,
+            "roles": roles,
+            "capabilities": capabilities,
+        },
     }

@@ -22,6 +22,7 @@ import { activityRoutes } from "./routes/activity";
 import { reportsRoutes } from "./routes/reports";
 import { integrationsRoutes } from "./routes/integrations";
 import { reconciliationsRoutes } from "./routes/reconciliations";
+import { aiRoutes } from "./routes/ai";
 import { db } from "./db/client";
 
 export interface Env {
@@ -31,11 +32,17 @@ export interface Env {
   SESSION_SECRET: string;
   GOOGLE_CLIENT_ID: string;
 
-  // KV namespace
-  BANKOPS_KV: KVNamespace;
+  // AI model service binding
+  AI: Ai;
+  AI_MODEL?: string;
+  // Optional server-side PIN for high-risk approvals; production must set it.
+  SUPERVISOR_PIN?: string;
+  APP_ENV: string;
+
+  // KV namespace (currently unused)
+  BANKOPS_KV?: KVNamespace;
 
   // Vars
-  APP_ENV: string;
   APP_NAME: string;
   ACCESS_TOKEN_EXPIRE_MINUTES: string;
   REFRESH_TOKEN_EXPIRE_DAYS: string;
@@ -123,6 +130,9 @@ api.get("/me", async (c) => {
 });
 
 // Protected (JWT required)
+api.use("/ai/*", authMiddleware);
+api.route("/ai", aiRoutes);
+
 api.use("/inventory/*", authMiddleware);
 api.route("/inventory", inventoryRoutes);
 

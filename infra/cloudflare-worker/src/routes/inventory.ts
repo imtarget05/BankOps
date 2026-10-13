@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { Env } from "../index";
+import { assessRequestRisk } from "./ai";
 import { db } from "../db/client";
 import { JwtPayload } from "../middleware/auth";
 

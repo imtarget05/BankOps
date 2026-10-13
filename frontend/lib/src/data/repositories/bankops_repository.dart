@@ -14,9 +14,27 @@ class ApiException implements Exception {
   String toString() => 'ApiException($code): $message';
 }
 
+/// Trạng thái sức khoẻ backend (`GET /health/live`, public, không cần auth).
+class HealthStatus {
+  const HealthStatus({
+    required this.alive,
+    required this.version,
+    required this.latencyMs,
+    this.error,
+  });
+
+  final bool alive;
+  final String version;
+  final int latencyMs;
+  final String? error;
+}
+
 /// Hợp đồng repository theo docs/06-api.md. UI chỉ phụ thuộc interface này;
 /// backend FastAPI có thể nối sau bằng cùng contract.
 abstract class BankOpsRepository {
+  // GET /health/live (public) — sức khoẻ backend cho màn Cài đặt.
+  Future<HealthStatus> getHealth();
+
   // POST /auth/login, GET /me
   Future<List<AppUser>> loadUsers();
   Future<AppUser> login(String username);
@@ -65,7 +83,7 @@ abstract class BankOpsRepository {
   Future<void> deleteStockRequest(String id);
   // POST /inventory/requests/{id}/submit|approve|reject
   Future<StockRequest> submitStockRequest(String id);
-  Future<StockRequest> approveStockRequest(String id);
+  Future<StockRequest> approveStockRequest(String id, {String? supervisorPin});
   Future<StockRequest> rejectStockRequest(String id, String reason);
 
   // GET /cash-sim/boxes, /balances, /journals, /requests
@@ -93,13 +111,14 @@ abstract class BankOpsRepository {
   });
   Future<void> deleteCashRequest(String id);
   Future<CashRequest> submitCashRequest(String id);
-  Future<CashRequest> approveCashRequest(String id);
+  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin});
   Future<CashRequest> rejectCashRequest(String id, String reason);
 
   // GET /approvals/inbox & AI Thẩm định rủi ro
   Future<List<ApprovalItem>> getApprovalInbox();
   Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item);
   Stream<String> get approvalNotifications;
+  void dispose();
 
 
   // GET /activity, GET /events/stream

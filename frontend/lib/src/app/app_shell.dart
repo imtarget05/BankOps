@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../data/models/dtos.dart';
 import '../data/repositories/bankops_repository.dart';
 import '../core/theme/app_tokens.dart';
+import '../core/util/role_visibility.dart';
 import '../core/widgets/app_screen.dart';
 import '../core/widgets/app_toast.dart';
 import '../core/widgets/global_search.dart';
@@ -86,6 +87,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _approvalSub?.cancel();
+    _repository?.dispose();
     super.dispose();
   }
 
@@ -218,7 +220,7 @@ class _AppShellState extends State<AppShell> {
     }
     switch (i) {
       case 0:
-        return const DashboardScreen();
+        return DashboardScreen(onNavigate: _go);
       case 1:
         return const InventoryScreen();
       case 2:
@@ -263,7 +265,20 @@ class _AppShellState extends State<AppShell> {
     final repo = _repository;
     if (repo == null) return;
     final tab = await showGlobalSearch(context, repo);
-    if (tab != null && mounted) setState(() => _index = tab);
+    if (tab != null && mounted) _go(tab);
+  }
+
+  /// Điều hướng có kiểm tra quyền hiển thị theo vai trò (RoleVisibility).
+  /// Tab bị ẩn với role hiện tại -> toast + ở yên, không chuyển.
+  void _go(int i) {
+    final session = SessionScope.maybeOf(context);
+    final roles = RoleVisibility.rolesOf(session?.user);
+    if (!RoleVisibility.visibleTabs(roles).contains(i)) {
+      AppToast.info(
+          context, 'Vai trò của bạn không có quyền vào phân hệ này');
+      return;
+    }
+    setState(() => _index = i);
   }
 
   Future<void> _signOut() async {
@@ -328,7 +343,12 @@ class _AppShellState extends State<AppShell> {
 
   void _openMoreSheet({SessionScope? session}) {
     final canApprove = _canAccessApprovals(session);
-    final visibleItems = _items.where((it) => it.index != 4 || canApprove).toList();
+    final roles = RoleVisibility.rolesOf(session?.user);
+    final visibleItems = _items
+        .where((it) =>
+            (it.index != 4 || canApprove) &&
+            RoleVisibility.visibleTabs(roles).contains(it.index))
+        .toList();
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -358,7 +378,12 @@ class _AppShellState extends State<AppShell> {
     final isDark = theme.brightness == Brightness.dark;
     final isWide = width >= 200;
     final canApprove = _canAccessApprovals(session);
-    final visibleItems = _items.where((it) => it.index != 4 || canApprove).toList();
+    final roles = RoleVisibility.rolesOf(session?.user);
+    final visibleItems = _items
+        .where((it) =>
+            (it.index != 4 || canApprove) &&
+            RoleVisibility.visibleTabs(roles).contains(it.index))
+        .toList();
 
     return Container(
       width: width,

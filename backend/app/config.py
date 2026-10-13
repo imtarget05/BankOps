@@ -59,13 +59,14 @@ class Settings(BaseSettings):
     rate_limit_login_window_minutes: int = Field(default=15)
 
     ai_provider: Literal['disabled', 'cloudflare', 'ollama'] = 'cloudflare'
-    cloudflare_account_id: str = Field(default='8788242370433563100da7c3623e1b3c', pattern=r'^([a-fA-F0-9]{32})?$')
+    cloudflare_account_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{32})?$')
     cloudflare_api_token: SecretStr = SecretStr('')
     cloudflare_model: str = '@cf/meta/llama-3.1-8b-instruct'
     ollama_base_url: str = 'http://localhost:11434'
     ollama_model: str = 'qwen2.5:1.5b'
     ai_timeout_seconds: int = Field(default=120, ge=1, le=300)
     ai_requests_per_minute: int = Field(default=10, ge=1, le=100)
+    supervisor_pin: SecretStr = SecretStr('')
 
     # Google Sign-In: OAuth client IDs are public identifiers (safe in code).
     # The web client *secret* must never be committed; it lives only in server

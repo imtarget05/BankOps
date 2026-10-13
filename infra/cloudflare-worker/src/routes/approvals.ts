@@ -15,6 +15,7 @@ interface InvPendingRow {
   maker_id: string;
   reason: string | null;
   maker_name: string | null;
+  total_quantity: string;
 }
 
 interface CashPendingRow {
@@ -33,10 +34,13 @@ approvalsRoutes.get("/inbox", async (c) => {
   const [invRows, cashRows] = await Promise.all([
     db<InvPendingRow>(c.env.DATABASE_URL)`
       SELECT r.id, r.kind, r.status, r.maker_id, r.reason,
-             COALESCE(u.display_name_demo, u.username, r.maker_id::text) as maker_name
+             COALESCE(u.display_name_demo, u.username, r.maker_id::text) as maker_name,
+             COALESCE(SUM(l.quantity), 0)::text AS total_quantity
       FROM inv_requests r
+      LEFT JOIN inv_request_lines l ON l.request_id = r.id
       LEFT JOIN iam_users u ON u.id = r.maker_id
       WHERE r.status = 'submitted'
+      GROUP BY r.id, u.display_name_demo, u.username
       ORDER BY r.created_at DESC
     `,
     db<CashPendingRow>(c.env.DATABASE_URL)`
@@ -58,7 +62,7 @@ approvalsRoutes.get("/inbox", async (c) => {
       status: r.status,
       maker_id: r.maker_id,
       maker: r.maker_name ?? r.maker_id,
-      impact: `Kho (${r.kind})`,
+      impact: `Kho (${r.kind}) · ${r.total_quantity} đơn vị`,
       detail: r.reason || r.id,
     })),
     ...cashRows.map((r) => {

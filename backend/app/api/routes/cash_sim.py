@@ -5,12 +5,14 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
 from app.api.routes.auth import get_current_user
+from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.cash_sim import (
@@ -21,10 +23,17 @@ from app.models.cash_sim import (
     CashRequest,
 )
 from app.services import idempotency
+from app.services.approval_controls import verify_supervisor_pin
 
 router = APIRouter()
 
 _ZERO = Decimal("0")
+
+class ApprovalInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    supervisor_pin: str | None = Field(default=None, min_length=1, max_length=128)
+
+
 _SIM_CASH_PREFIX = "SIM_CASH:"
 _SIM_OFFSET = "SIM_OFFSET:DEMO"
 _SUBJECT = "cash_request"
@@ -458,6 +467,7 @@ async def submit_cash_request(
 async def approve_cash_request(
     request_id: str,
     request: Request,
+    payload: ApprovalInput | None = None,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -485,6 +495,21 @@ async def approve_cash_request(
             409, "INSUFFICIENT_SIM_CASH", "quỹ trong box không đủ để hoàn tất",
             {"current_amount": str(box.amount), "requested": str(amount)},
         )
+
+    from app.services.ai import assess_request_heuristic
+
+    risk = assess_request_heuristic({
+        "request_id": str(req.id),
+        "kind": "cash",
+        "amount_or_qty": str(req.amount),
+        "maker": str(req.maker_id),
+        "reason": req.reason or "",
+    })
+    verify_supervisor_pin(
+        payload.supervisor_pin if payload else None,
+        settings,
+        required=risk["risk_level"] == "high",
+    )
 
     cid = uuid.uuid4().hex[:12]
     now = _now()

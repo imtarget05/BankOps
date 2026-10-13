@@ -1,6 +1,6 @@
 """Authenticated advisory AI. Limits are per process (demo deployment)."""
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,21 +27,19 @@ class RequestAssessmentInput(BaseModel):
     amount_or_qty: str = '0'
     maker: str = 'Maker'
     reason: str = ''
-    context: dict | None = None
+    context: dict[str, Any] | None = None
 
 
 @router.post('/assess-request')
 async def assess(body: RequestAssessmentInput, user: User = Depends(get_current_user)):
     if user.status != 'active':
         raise HTTPException(403, 'Tài khoản không hoạt động.')
+    _enforce_ai_rate_limit(user)
     async with httpx.AsyncClient() as client:
         return await assess_request(body.model_dump(), settings, client)
 
 
-@router.post('/chat')
-async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
-    if user.status != 'active':
-        raise HTTPException(403, 'Tài khoản không hoạt động.')
+def _enforce_ai_rate_limit(user: User) -> None:
     now = time.monotonic()
     for key, (start, _) in list(_windows.items()):
         if now - start >= 60:
@@ -51,6 +49,13 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
     if count >= settings.ai_requests_per_minute:
         raise HTTPException(429, 'Bạn đã vượt giới hạn AI. Thử lại sau một phút.', headers={'Retry-After': '60'})
     _windows[key] = (start, count + 1)
+
+
+@router.post('/chat')
+async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
+    if user.status != 'active':
+        raise HTTPException(403, 'Tài khoản không hoạt động.')
+    _enforce_ai_rate_limit(user)
     async with httpx.AsyncClient() as client:
         return await generate(body.message, settings, client)
 

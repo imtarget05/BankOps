@@ -32,7 +32,15 @@ class HttpBankOpsRepository implements BankOpsRepository {
   final Future<String?> Function()? _tokenProvider;
   final _approvalStreamCtrl = StreamController<String>.broadcast();
 
+  String get baseUrl => _baseUrl;
+  Future<String?> get accessToken => _tokenProvider?.call() ?? Future.value(null);
+
   @override
+  void dispose() {
+    _approvalStreamCtrl.close();
+    _client.close();
+  }
+
   Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
 
 
@@ -478,10 +486,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StockRequest> approveStockRequest(String id) async {
+  Future<StockRequest> approveStockRequest(String id, {String? supervisorPin}) async {
     final res = _parseStockRequest(await _post(
       '/inventory/requests/$id/approve',
-      {},
+      {if (supervisorPin != null) 'supervisor_pin': supervisorPin},
       extraHeaders: {'Idempotency-Key': _idemKey()},
     ));
     _approvalStreamCtrl.add('processed:$id');
@@ -655,10 +663,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<CashRequest> approveCashRequest(String id) async {
+  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) async {
     final res = _parseCashRequest(await _post(
       '/cash-sim/requests/$id/approve',
-      {},
+      {if (supervisorPin != null) 'supervisor_pin': supervisorPin},
       extraHeaders: {'Idempotency-Key': _idemKey()},
     ));
     _approvalStreamCtrl.add('processed:$id');
@@ -693,13 +701,20 @@ class HttpBankOpsRepository implements BankOpsRepository {
     }).toList();
   }
 
+  String _assessmentAmount(ApprovalItem item) {
+    final raw = item.impact;
+    final decimalMatch = RegExp(r'[\d,.]+').firstMatch(raw);
+    if (decimalMatch == null) return raw;
+    return decimalMatch.group(0)!.replaceAll(',', '');
+  }
+
   @override
   Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item) async {
     try {
       final res = await _post('/ai/assess-request', {
         'request_id': item.id,
         'kind': item.kind,
-        'amount_or_qty': item.impact,
+        'amount_or_qty': _assessmentAmount(item),
         'maker': item.maker,
         'reason': item.detail,
       });
@@ -707,7 +722,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
     } catch (_) {
       final isCash = item.kind.toLowerCase() == 'cash' ||
           item.kind.toLowerCase().contains('quỹ');
-      final digits = item.impact.replaceAll(RegExp(r'[^\d]'), '');
+      var rawImpact = item.impact;
+      final decimalMatch = RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
+      if (decimalMatch != null) rawImpact = rawImpact.substring(0, decimalMatch.start);
+      final digits = rawImpact.replaceAll(RegExp(r'[^\d]'), '');
       final val = int.tryParse(digits) ?? 0;
       final isHigh = (isCash && val >= 500000000) || (!isCash && val >= 50);
       return AiRiskAssessment(
@@ -718,6 +736,48 @@ class HttpBankOpsRepository implements BankOpsRepository {
         flaggedRules: isHigh ? ['Giao dịch vượt hạn mức kiểm soát kép (≥ 500 triệu VND)'] : [],
         recommendations: ['Kiểm tra đối chiếu chứng từ gốc và nhập PIN KSV'],
         auditStamp: 'offline-audit-stamp-${item.id}',
+        assessmentSource: 'offline_fallback',
+      );
+    }
+  }
+
+  // ---- health (public, không cần auth) ----
+
+  @override
+  Future<HealthStatus> getHealth() async {
+    final sw = Stopwatch()..start();
+    try {
+      final resp = await _client
+          .get(
+            _uri('/health/live'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 10));
+      sw.stop();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        return HealthStatus(
+          alive: false,
+          version: '?',
+          latencyMs: sw.elapsedMilliseconds,
+          error: 'HTTP ${resp.statusCode}',
+        );
+      }
+      final decoded = json.decode(resp.body);
+      final version = decoded is Map
+          ? (decoded['version']?.toString() ?? '?')
+          : '?';
+      return HealthStatus(
+        alive: true,
+        version: version,
+        latencyMs: sw.elapsedMilliseconds,
+      );
+    } catch (e) {
+      sw.stop();
+      return HealthStatus(
+        alive: false,
+        version: '?',
+        latencyMs: sw.elapsedMilliseconds,
+        error: '$e',
       );
     }
   }
