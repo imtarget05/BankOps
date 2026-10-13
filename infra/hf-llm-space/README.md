@@ -27,15 +27,24 @@ Hướng dẫn đầy đủ: `docs/17-hf-llm-space.md` trong repo BankOps.
 
 | Biến | Mặc định | Ghi chú |
 |------|----------|---------|
-| `MODEL_REPO` | `Qwen/Qwen2.5-1.5B-Instruct-GGUF` | repo GGUF trên HF Hub |
-| `MODEL_FILE` | `qwen2.5-1.5b-instruct-q4_k_m.gguf` | file GGUF (1.12 GB) |
+| `MODEL_REPO` | `Qwen/Qwen2.5-1.5B-Instruct-GGUF` | repo GGUF gốc trên HF Hub (fallback) |
+| `MODEL_FILE` | `qwen2.5-1.5b-instruct-q4_k_m.gguf` | file GGUF gốc (1.12 GB, tải lúc build khi thiếu bản fine-tune) |
+| `BANKOPS_MODEL_FILE` | `Qwen2.5-1.5B-Instruct.Q4_K_M.gguf` | GGUF fine-tune BankOps trong `model/` (ưu tiên dùng nếu có) |
 | `PORT` | `7860` | phải khớp `app_port` trong README |
+
+## Model
+
+- **Ưu tiên:** `model/Qwen2.5-1.5B-Instruct.Q4_K_M.gguf` — bản fine-tune BankOps
+  (~940 MB), upload bằng `infra/scripts/upload-model-to-hf.sh` từ repo BankOps
+  (xem `docs/17-hf-llm-space.md` mục 2b). Kèm `model/chat_template.jinja`.
+- **Fallback:** bản gốc `Qwen/Qwen2.5-1.5B-Instruct-GGUF` tải từ HF Hub lúc build
+  khi `model/` chưa có GGUF fine-tune.
 
 ## Lưu ý
 
 - Space free **ngủ sau 48 giờ không có request**; request đầu tiên sau khi ngủ
   sẽ mất vài phút để khởi động lại (Worker có fallback Workers AI nên người dùng
   vẫn nhận được câu trả lời).
-- Model được tải lúc **build** và nhúng vào image — restart không tải lại.
+- Model được nhúng vào image lúc **build** — restart không tải lại.
 - Không đặt secret nào trong repo này; nếu cần, dùng Settings → Variables and
   secrets của Space.

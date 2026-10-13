@@ -31,30 +31,63 @@ tốc độ chấp nhận được cho trợ lý hội thoại nội bộ.
 ## 2. Đưa code vào Space
 
 Push thư mục `infra/hf-llm-space/` của repo này lên Space (Space là một git repo).
-Dùng `git subtree` để đẩy đúng thư mục con mà không cần remote riêng trong repo chính:
+Dùng script có sẵn (tự xác định username từ `HF_TOKEN`, tự fallback `--force`
+khi HF từ chối non-fast-forward):
 
 ```bash
-git subtree push --prefix=infra/hf-llm-space \
-  https://<user>:<HF_TOKEN>@huggingface.co/spaces/<user>/bankops-llm main
+export HF_TOKEN=hf_xxx   # token quyền write — KHÔNG commit vào repo
+bash infra/scripts/upload-model-to-hf.sh --code-only
 ```
 
-(Thay `<user>` bằng username HF và `<HF_TOKEN>` bằng token quyền *write* —
-tạo tại https://huggingface.co/settings/tokens, KHÔNG commit token vào repo.
-Nếu bị từ chối vì non-fast-forward, thêm `--force` vào trước URL hoặc push
-thử lại sau vài giây — HF đôi khi từ chối do backend git bận.)
+(Hoặc làm tay: `git subtree push --prefix=infra/hf-llm-space \
+https://<user>:<HF_TOKEN>@huggingface.co/spaces/<user>/bankops-llm main`.
+Lưu ý: `git subtree push` không có cờ `--force`; nếu bị từ chối
+non-fast-forward, dùng `git subtree split --prefix=infra/hf-llm-space -b tmp`
+rồi `git push --force <url> tmp:main`.)
 
 Nội dung thư mục:
 
 | File | Vai trò |
 |---|---|
-| `Dockerfile` | Image `ghcr.io/ggml-org/llama.cpp:server` (pin theo digest `server-b4740`) + tải GGUF lúc build |
+| `Dockerfile` | Image `ghcr.io/ggml-org/llama.cpp:server` (pin theo digest `server-b4740`) + nhúng model lúc build |
 | `entrypoint.sh` | Khởi động `llama-server` trên cổng 7860 (khớp `app_port`) |
 | `README.md` | Metadata của Space (`sdk: docker`, `app_port: 7860`) — bắt buộc |
 | `.gitattributes` | Quy tắc LFS (phòng khi commit model vào repo) |
+| `model/` | Tokenizer/config/chat-template của bản fine-tune + GGUF fine-tune (upload bằng script — mục 2b) |
 
-Model được tải **lúc build** từ HF Hub (`Qwen/Qwen2.5-1.5B-Instruct-GGUF`,
-file `qwen2.5-1.5b-instruct-q4_k_m.gguf`, ~1.12 GB, công khai — không cần token)
-và nhúng vào image, nên restart Space không tải lại. Build lần đầu mất ~5–10 phút.
+Model mặc định (fallback) là bản gốc công khai `Qwen/Qwen2.5-1.5B-Instruct-GGUF`,
+file `qwen2.5-1.5b-instruct-q4_k_m.gguf`, ~1.12 GB, tải lúc build từ HF Hub
+(không cần token) và nhúng vào image, nên restart Space không tải lại.
+Build lần đầu mất ~5–10 phút.
+
+## 2b. Model fine-tune BankOps (GGUF riêng — bắt buộc để dùng bản đã train)
+
+Bản fine-tune BankOps của Qwen2.5-1.5B-Instruct (Q4_K_M, ~940 MB — nhỏ hơn bản
+gốc vì quantize riêng, metadata GGUF `general.name = Bankops_Qwen2.5_1.5B_Gguf`)
+được train từ notebook `ai/colab_finetune_bankops_t4.ipynb`. File này **không
+thể** nằm trong repo BankOps trên GitHub (giới hạn 100 MB/file) — nó được upload
+trực tiếp vào repo của Space, vào thư mục `model/`:
+
+```bash
+export HF_TOKEN=hf_xxx   # token quyền write
+pip install -U huggingface_hub   # nếu chưa có
+
+# Truyền file .gguf hoặc cả file .zip chứa model (script tự giải nén):
+bash infra/scripts/upload-model-to-hf.sh ~/Downloads/bankops_integration_files.zip
+```
+
+Script làm 2 việc: (1) đẩy code Space, (2) upload GGUF vào `model/` của repo
+Space bằng `huggingface_hub`. **Lưu ý quan trọng:** sau mỗi lần đẩy code lại
+(bước 1 dùng `--force` khi cần, ghi đè lịch sử repo Space) phải chạy lại bước
+upload model, vì lịch sử mới của repo Space không còn file GGUF cũ.
+
+Khi `model/Qwen2.5-1.5B-Instruct.Q4_K_M.gguf` tồn tại trong repo Space:
+- Image build sẽ **không tải** bản gốc từ Hub nữa (tiết kiệm ~1.12 GB),
+- `entrypoint.sh` chạy GGUF fine-tune kèm `--chat-template model/chat_template.jinja`,
+- alias model hiển thị là `Qwen2.5-1.5B-Instruct.Q4_K_M`.
+
+Chưa upload GGUF? Space vẫn build và chạy được với bản gốc Qwen (fallback) —
+chất lượng trả lời theo persona BankOps sẽ kém hơn cho đến khi upload xong.
 
 ## 3. Kiểm tra Space
 
@@ -137,12 +170,21 @@ Worker tự gửi `Authorization: Bearer <key>` khi `HF_LLM_API_KEY` được se
 Sửa `MODEL_REPO` / `MODEL_FILE` trong `Dockerfile` rồi push lại — Space build
 lại với model mới. Các lựa chọn GGUF cùng cỡ: `Qwen2.5-1.5B-Instruct` (mặc
 định), `Llama-3.2-1B-Instruct-GGUF` (bản của bartowski), hoặc bản fine-tune
-BankOps của bạn (xem `ai/README.md`).
+BankOps của bạn (xem `ai/README.md` và mục 2b — upload bằng
+`infra/scripts/upload-model-to-hf.sh`).
+
+Muốn train lại bản fine-tune: chạy notebook `ai/colab_finetune_bankops_t4.ipynb`
+(Colab T4, QLoRA 4-bit, ~10–15 phút), xuất GGUF Q4_K_M rồi upload lại bằng
+script ở mục 2b. Đổi tên file GGUF mới thì cập nhật luôn `BANKOPS_MODEL_FILE`
+trong `Dockerfile` (và xóa GGUF cũ trong `model/` của repo Space để image
+không phình ra).
 
 ## 8. Checklist nghiệm thu
 
 - [ ] Space build thành công, `/health` trả 200
 - [ ] `/v1/chat/completions` trả JSON chuẩn OpenAI
+- [ ] GGUF fine-tune đã upload vào `model/` (mục 2b) — log build KHÔNG có dòng
+      `[build] fine-tuned GGUF not found...` (có dòng đó nghĩa là đang dùng fallback bản gốc)
 - [ ] Worker deploy xong, `/api/v1/ai/chat` trả `provider: "hf-space"`
 - [ ] Pause Space → `/api/v1/ai/chat` vẫn 200 với `provider: "cloudflare-workers-ai"`
 - [ ] Không có token/secret nào nằm trong git (token HF chỉ ở Secrets của Space)
