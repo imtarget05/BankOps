@@ -12,6 +12,12 @@ concurrency:
   group: deploy-pages-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Canonical API = FastAPI (ADR-0001), host trên Modal (scale-to-zero, free tier).
+  # Đây là URL công khai, KHÔNG phải secret. Đổi giá trị này nếu app Modal được
+  # đổi tên (modal app `bankops-api`, function `api`).
+  API_BASE_URL: "https://imtarget05--bankops-api-api.us-east.modal.run"
+
 jobs:
   build-and-deploy:
     name: Build Flutter Web & Deploy
@@ -24,13 +30,12 @@ jobs:
 
       - name: Verify required secrets are configured
         env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           missing=0
-          for v in API_BASE_URL GOOGLE_CLIENT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+          for v in GOOGLE_CLIENT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
             if [ -z "${!v}" ]; then
               echo "::error::Secret ${v} chưa cấu hình (Settings → Secrets and variables → Actions)"
               missing=1
@@ -61,12 +66,12 @@ jobs:
       - name: Build Flutter Web (release)
         working-directory: frontend
         env:
-          # URL của Cloudflare Worker
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          # FastAPI trên Modal (xem `env.API_BASE_URL` ở đầu workflow).
+          API_BASE_URL: ${{ env.API_BASE_URL }}
         run: |
           flutter build web \
             --release \
-            --dart-define=API_BASE_URL=${{ secrets.API_BASE_URL }} \
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
             --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
             --dart-define=APP_ENV=production
 
@@ -75,7 +80,15 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy frontend/build/web --project-name=bankops-web --commit-dirty=true
+          # --branch=main: ép đây là deployment PRODUCTION. Thiếu cờ này wrangler
+          # lấy branch hiện tại của checkout và tạo bản preview (alias), khiến
+          # bankops-web.pages.dev vẫn phục vụ bản cũ.
+          command: pages deploy frontend/build/web --project-name=bankops-web --branch=main --commit-dirty=true
+
+      - name: Smoke test (API health from deployed bundle)
+        run: |
+          curl -fsS -m 90 "${{ env.API_BASE_URL }}/api/v1/health/live" | grep -q '"status":"alive"'
+          echo "Backend health OK: ${{ env.API_BASE_URL }}"
 
       - name: Print deployment URL
         run: |

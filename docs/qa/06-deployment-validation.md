@@ -89,3 +89,90 @@
  - ✅ Backup/restore available
  - ✅ Health/readiness probes return 200
  - ✅ Post-deploy smoke test passes
+ 
+ ## Cloud Deployment — FastAPI (Modal) + Neon + Cloudflare Pages
+ 
+ **Ngày deploy**: 2026-10-14 · **Topology**: Cloudflare Pages (Flutter Web) → FastAPI trên Modal → Neon Postgres.
+ Worker (legacy) đã archive trong source, **không deploy** (ADR-0001 Phase 2).
+ 
+ ### Targets
+ 
+ | Component | Provider | Identifier / URL | Status |
+ |-----------|----------|------------------|--------|
+ | Backend API | Modal | app `bankops-api` / fn `api` — `https://imtarget05--bankops-api-api.us-east.modal.run` | ✅ Deployed |
+ | Frontend Web | Cloudflare Pages | project `bankops-web` — `https://bankops-web.pages.dev` | ✅ Production |
+ | Frontend (alias) | Cloudflare Pages | `https://qa-validation-20261014.bankops-web.pages.dev` | ✅ Preview/alias |
+ | Database | Neon Postgres 16 | project `BankOps` (`divine-meadow-83331783`), branch `br-quiet-surf-b34t5lwu` | ✅ 39 tables, alembic `014` |
+ | Rollback point | Neon snapshot | `snap-aged-sun-b38mjspm` (`pre-fastapi-deploy-20261014`) | ✅ Available |
+ | Legacy API | Cloudflare Workers | `bankops-api.tanmainguyenbinh.workers.dev` (mã cũ) | ⚠️ Vẫn chạy bản cũ — **giữ nguyên** (quyết định 2026-10-14) |
+ 
+ ### Backend (Modal) — smoke tests
+ 
+ | Check | Result |
+ |-------|--------|
+ | `GET /api/v1/health/live` | ✅ 200 `{"status":"alive"}` (cold start ~27s) |
+ | `GET /api/v1/health/ready` | ✅ 200 `database: ready` |
+ | `POST /api/v1/auth/login` (`demo_admin` / `DemoPass123!`) | ✅ 200 — JWT ~948 bytes |
+ | `GET /api/v1/openapi.json` | ✅ 101 paths |
+ | CORS preflight từ `https://bankops-web.pages.dev` | ✅ 200 + `allow-origin` + `allow-credentials: true` |
+ | CORS trên POST login thật (không chỉ preflight) | ✅ `access-control-allow-origin: https://bankops-web.pages.dev` |
+ 
+ ### Authenticated business endpoints (qua Modal, Origin production)
+ 
+ | Endpoint | Result |
+ |----------|--------|
+ | `/api/v1/me` | ✅ 200 |
+ | `/api/v1/inventory/items` | ✅ 200 (5 items) |
+ | `/api/v1/inventory/locations` | ✅ 200 |
+ | `/api/v1/inventory/stock-levels` | ✅ 200 |
+ | `/api/v1/cash-sim/boxes` | ✅ 200 (3 boxes) |
+ | `/api/v1/approvals/inbox` | ✅ 200 |
+ | `/api/v1/activity` | ✅ 200 |
+ | `/api/v1/admin/users` | ✅ 200 |
+ | `/api/v1/etl/pipelines` | ✅ 200 |
+ | `/api/v1/reconciliations` | ✅ 200 |
+ 
+ ### Frontend (Cloudflare Pages)
+ 
+ | Check | Result |
+ |-------|--------|
+ | `GET /` (production) | ✅ 200, title đúng |
+ | `GET /main.dart.js` | ✅ 200 (~4.8 MB) |
+ | `GET /flutter_bootstrap.js`, `/_redirects` | ✅ 200 |
+ | API base baked vào bundle production | ✅ `https://imtarget05--bankops-api-api.us-east.modal.run/api/v1` |
+ | Không còn host chết/legacy trong bundle | ✅ 0 tham chiếu `bankops-api.tanmainguyenbinh.*` |
+ 
+ > **Pitfall đã gặp**: `wrangler pages deploy` **không có `--branch`** sẽ lấy branch Git hiện tại
+ > (`qa-validation-20261014`) và tạo bản **preview**; `bankops-web.pages.dev` (branch `main`) vẫn phục vụ
+ > bản cũ. Lần deploy đầu rơi vào bẫy này. Đã fix bằng `--branch=main` + thêm cờ này vào các workflow.
+ 
+ ### Data (Neon, sau seed)
+ 
+ | Entity | Count |
+ |--------|-------|
+ | Capabilities | 19 |
+ | User-capability pairs | 39 |
+ | Users | 12 |
+ | Inventory items | 5 |
+ | Cash boxes | 3 |
+ 
+ ### CI/CD
+ 
+ | Workflow | Trạng thái |
+ |----------|-----------|
+ | `.github/workflows/deploy-pages.yml` | ✅ Build web với URL Modal, deploy Pages `--branch=main`, có smoke test |
+ | `.github/workflows/deploy.yml` | ✅ Đã bỏ bước deploy Worker; URL chuyển sang Modal |
+ | `.github/workflows/deploy-worker.yml` | ✅ Validate-only (không bao giờ deploy Worker) |
+ 
+ ### Rủi ro còn lại / rollback
+ 
+ - **JWT signing key**: `BANKOPS_SIGNING_KEY` đã set trong Modal secret; nếu chưa set, app dùng key
+   ngẫu nhiên mỗi cold start ⇒ token cũ invalid. **Đã set** ⇒ OK.
+ - **Cold start**: container scale-to-zero (`scaledown_window=300`) ⇒ request đầu sau idle ~27s.
+ - **Rollback DB**: restore snapshot `snap-aged-sun-b38mjspm`.
+ - **Rollback frontend**: `wrangler pages deployment list --project-name=bankops-web` rồi rollback về
+   deployment trước (`d844798f-38f1-434c-a53c-8f134f1c4dbc`).
+ - **Legacy Worker**: **quyết định 2026-10-14 = giữ nguyên bản cũ đang chạy**, không deploy bản archive
+   (health-only + `410 Gone`). Lý do: mobile build cũ vẫn trỏ `workers.dev`; frontend production đã trỏ Modal
+   nên không ảnh hưởng. Bản archive đã sửa + verify local, sẵn sàng deploy khi mobile chuyển sang Modal.
+   Khi đó rollback: `wrangler deployments list` → `wrangler rollback`.

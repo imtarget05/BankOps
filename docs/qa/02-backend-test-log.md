@@ -89,3 +89,45 @@
  - `test_reserved_inventory_and_return.py` — Reservation lifecycle ✅
  - `test_sse_approvals.py` — SSE approval events ✅
  - `test_worker_jobs.py` — Background job leases ✅
+ 
+ ## Test Run: 2026-10-14 (Round 2 — fresh DB, post-fix)
+ 
+ ### Command
+ ```bash
+ cd backend && \
+   DATABASE_URL="postgresql+asyncpg://bankops:bankops@localhost:5433/bankops" \
+   APP_ENV=test \
+   python3 -m pytest -v --tb=short
+ ```
+ (DB được drop/recreate → `alembic upgrade head` → seed trước khi chạy)
+ 
+ ### Summary
+ | Outcome | Count |
+ |---------|-------|
+ | PASSED | 232 |
+ | FAILED | 0 |
+ | SKIPPED | 1 |
+ | XFAILED | 1 |
+ | **Total** | **234** |
+ 
+ ### Root cause (54 failures ở giữa phiên)
+ `seed_demo` dùng guard kiểu "nếu đã có bất kỳ bản ghi thì bỏ qua toàn bộ", trong khi migration
+ `013` đã pre-insert sẵn 6 capability + 11 user-capability pairs. Kết quả: các capability nghiệp vụ
+ **không bao giờ được seed** ⇒ test RBAC/approval thiếu quyền ⇒ hàng loạt 403/409 sai.
+ 
+ ### Fixes
+ 1. `backend/app/seed.py` — chuyển sang **upsert idempotent** chỉ các role/capability/mapping còn thiếu.
+    Kết quả: 6 → **19 capabilities**, 11 → **39 user-capability pairs**.
+ 2. `backend/app/api/routes/auth.py` — sửa `HTTP_422_UNPROCESSABLE_CONTENT` (không tồn tại) →
+    `HTTP_422_UNPROCESSABLE_ENTITY` tại 4 vị trí (~dòng 67/181/264/410).
+ 3. `backend/tests/test_acceptance_qa.py` — `TestI1I2Inventory::test_issue_more_than_balance_is_409_and_balance_unchanged`:
+    chờ 409 ngay tại `/submit` (bỏ khối approve không thể chạm tới).
+ 
+ ### Deviations so với Round 1
+ - Round 1 ghi `TestI1I2Inventory` fail (1 test). Round 2: **PASS**.
+ - Round 1 tổng 221 (218 pass / 2 skip / 1 fail). Round 2 tổng 234 (232 pass / 1 skip / 1 xfail / 0 fail).
+ - Round 1 skip 2 test vì thiếu Flutter SDK; Round 2 còn 1 skip + 1 xfail (đúng như thiết kế).
+ 
+ ### Verified against cloud deployment
+ Cùng revision `014` / cùng dữ liệu seed trên Neon — 10 endpoint nghiệp vụ trả 200 qua FastAPI trên Modal
+ (xem `docs/qa/06-deployment-validation.md`).
