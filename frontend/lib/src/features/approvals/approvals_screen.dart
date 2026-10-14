@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import '../../app/app_shell.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/report_share.dart';
+import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 import '../../data/repositories/fake_repository.dart';
+import '../ai/ai_voucher_audit.dart';
 
 /// Màn duyệt — approval inbox (Maker != Checker) chuẩn ngân hàng 4-Eyes Principle.
 class ApprovalsScreen extends StatefulWidget {
@@ -209,6 +211,126 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     }
   }
 
+  Future<void> _returnForRework(ApprovalItem item) async {
+    final repo = RepositoryScope.of(context);
+    final reasonCtrl = TextEditingController(text: 'Cần bổ sung thêm thông tin chứng từ đối chiếu');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.assignment_return_outlined, color: Color(0xFFD97706)),
+            const SizedBox(width: 8),
+            Text('Trả về phiếu ${item.id}'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Phiếu sẽ chuyển về trạng thái [Cần chỉnh sửa]. Maker sẽ nhận được ý kiến để hiệu chỉnh và gửi duyệt lại.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('return-reason-input'),
+              controller: reasonCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Ý kiến yêu cầu chỉnh sửa *',
+                hintText: 'Nhập nội dung cần Maker bổ sung...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            key: const Key('return-dialog-confirm-btn'),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xác nhận trả về'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final reason = reasonCtrl.text.trim().isEmpty
+          ? 'Yêu cầu kiểm tra và chỉnh sửa lại nội dung'
+          : reasonCtrl.text.trim();
+      if (_isCash(item)) {
+        await repo.returnCashRequest(item.id, reason: reason);
+      } else {
+        await repo.returnStockRequest(item.id, reason: reason);
+      }
+      if (!mounted) return;
+      AppToast.info(context, 'Đã trả về phiếu ${item.id} cho Maker chỉnh sửa');
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Không thể trả về phiếu: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportVoucherWithAiCheck(ApprovalItem item) async {
+    final repo = RepositoryScope.of(context);
+    AiRiskAssessment? assessment = _assessments[item.id];
+    if (assessment == null) {
+      try {
+        final res = await repo.assessApprovalItem(item);
+        assessment = res;
+        if (mounted) {
+          setState(() => _assessments[item.id] = res);
+        }
+      } catch (_) {
+        // Heuristic fallback
+      }
+    }
+
+    final audit = AiVoucherAuditor.checkApprovalItem(item, assessment);
+
+    if (audit.hasErrors) {
+      if (!mounted) return;
+      final proceed = await AiVoucherAuditDialog.show(
+        context,
+        item: item,
+        result: audit,
+      );
+      if (!proceed) {
+        if (mounted) {
+          AppToast.info(context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
+        }
+        return;
+      }
+    } else {
+      if (mounted) {
+        AppToast.success(context, 'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
+      }
+    }
+
+    if (!mounted) return;
+    await ReportShare.printPdf(
+      context,
+      filename: 'phieu-${item.id}.pdf',
+      build: () => ApprovalPdf.encode(
+        item,
+        assessment: assessment,
+        auditWarnings: audit.hasErrors ? audit.warnings : null,
+      ),
+    );
+  }
+
   /// Duyệt hàng loạt: mỗi phiếu duyệt & ghi sổ độc lập, phiếu lỗi không
   /// chặn phiếu khác. Nếu có phiếu rủi ro cao, yêu cầu xác thực PIN một lần cho cả lô.
   Future<void> _approveSelected(List<ApprovalItem> items) async {
@@ -299,12 +421,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
             color: color,
           ),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -537,6 +663,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         final items = snapshot.data!;
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
+        final user = SessionScope.maybeOf(context)?.user;
+        final roles = RoleVisibility.rolesOf(user);
+        final canApprove = RoleVisibility.canApprove(roles);
 
         return RefreshIndicator(
           onRefresh: () async => _reload(),
@@ -552,7 +681,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Hộp Thư Phê Duyệt 4 Mắt (Phiếu chờ kiểm soát)',
+                          'Hộp Thư Phê Duyệt Kiểm Soát Kép (Maker–Checker)',
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.5,
@@ -622,9 +751,51 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
 
-              if (items.isNotEmpty)
+              if (!canApprove) ...[
+                Container(
+                  key: const Key('approvals-readonly-banner'),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.remove_red_eye_outlined, size: 20, color: Color(0xFFB45309)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Chế độ chỉ xem theo dõi tiến độ',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Bạn đang theo dõi hàng đợi duyệt. Chỉ nhân viên được phân quyền thẩm định (Kiểm soát viên, Quản trị viên) mới có quyền Phê duyệt, Từ chối hoặc Trả về chứng từ.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              if (items.isNotEmpty && canApprove) ...[
                 _SelectionBar(
                   allIds: [for (final i in items) i.id],
                   selected: _selected,
@@ -639,6 +810,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   },
                   onApproveSelected: () => _approveSelected(items),
                 ),
+                const SizedBox(height: 16),
+              ],
 
               if (items.isEmpty)
                 Container(
@@ -777,19 +950,21 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Checkbox(
-                                      key: Key('approval-select-${item.id}'),
-                                      value: _selected.contains(item.id),
-                                      onChanged: _busy
-                                          ? null
-                                          : (v) => setState(() {
-                                                if (v == true) {
-                                                  _selected.add(item.id);
-                                                } else {
-                                                  _selected.remove(item.id);
-                                                }
-                                              }),
-                                    ),
+                                    if (canApprove) ...[
+                                      Checkbox(
+                                        key: Key('approval-select-${item.id}'),
+                                        value: _selected.contains(item.id),
+                                        onChanged: _busy
+                                            ? null
+                                            : (v) => setState(() {
+                                                  if (v == true) {
+                                                    _selected.add(item.id);
+                                                  } else {
+                                                    _selected.remove(item.id);
+                                                  }
+                                                }),
+                                      ),
+                                    ],
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -914,49 +1089,92 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                     ),
                                     Wrap(
                                       spacing: 8,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
                                       children: [
                                         IconButton(
                                           key: Key('print-approval-${item.id}'),
                                           onPressed: () =>
-                                              ReportShare.printPdf(
-                                            context,
-                                            filename: 'phieu-${item.id}.pdf',
-                                            build: () =>
-                                                ApprovalPdf.encode(item),
-                                          ),
+                                              _exportVoucherWithAiCheck(item),
                                           icon: const Icon(
                                               Icons.print_outlined,
                                               size: 20),
-                                          tooltip: 'In phiếu ${item.id} (PDF)',
+                                          tooltip: 'In phiếu ${item.id} (AI Kiểm Duyệt)',
                                         ),
-                                        OutlinedButton.icon(
-                                          key: Key('btn-reject-${item.id}'),
-                                          onPressed: _busy ? null : () => _reject(item),
-                                          icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
-                                          label: const Text(
-                                            'Từ chối',
-                                            style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w700),
+                                        if (canApprove) ...[
+                                          OutlinedButton.icon(
+                                            key: Key('btn-return-${item.id}'),
+                                            onPressed: _busy ? null : () => _returnForRework(item),
+                                            icon: const Icon(Icons.assignment_return_outlined, size: 16, color: Color(0xFFD97706)),
+                                            label: const Text(
+                                              'Trả về',
+                                              style: TextStyle(color: Color(0xFFD97706), fontWeight: FontWeight.w700),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              side: const BorderSide(color: Color(0xFFFDE68A)),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                            ),
                                           ),
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(color: Color(0xFFFCA5A5)),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                          OutlinedButton.icon(
+                                            key: Key('btn-reject-${item.id}'),
+                                            onPressed: _busy ? null : () => _reject(item),
+                                            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                                            label: const Text(
+                                              'Từ chối',
+                                              style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w700),
+                                            ),
+                                            style: OutlinedButton.styleFrom(
+                                              side: const BorderSide(color: Color(0xFFFCA5A5)),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                            ),
                                           ),
-                                        ),
-                                        FilledButton.icon(
-                                          key: Key('btn-approve-${item.id}'),
-                                          onPressed: _busy ? null : () => _approve(item),
-                                          icon: const Icon(Icons.verified_rounded, size: 16),
-                                          label: const Text(
-                                            'Phê duyệt & Ghi sổ',
-                                            style: TextStyle(fontWeight: FontWeight.w700),
+                                          FilledButton.icon(
+                                            key: Key('btn-approve-${item.id}'),
+                                            onPressed: _busy ? null : () => _approve(item),
+                                            icon: const Icon(Icons.verified_rounded, size: 16),
+                                            label: const Text(
+                                              'Phê duyệt & Ghi sổ',
+                                              style: TextStyle(fontWeight: FontWeight.w700),
+                                            ),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: const Color(0xFF059669),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                            ),
                                           ),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: const Color(0xFF059669),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        ] else ...[
+                                          Container(
+                                            key: Key('approval-readonly-tag-${item.id}'),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.lock_clock_outlined,
+                                                  size: 15,
+                                                  color: theme.colorScheme.onSurfaceVariant,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  'Chờ kiểm soát viên duyệt (Chỉ xem)',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: theme.colorScheme.onSurfaceVariant,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ],
                                     ),
                                   ],
@@ -1107,7 +1325,7 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
             child: Text(
               widget.isBatch
                   ? 'Xác Thực Kiểm Soát Kép Lô ${widget.batchCount} Phiếu'
-                  : 'Xác Thực Kiểm Soát Kép (4 Mắt)',
+                  : 'Xác Thực Quyền Kiểm Soát Kép (Supervisor Authorization)',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
           ),

@@ -25,6 +25,7 @@ import '../features/reports/reports_screen.dart';
 import '../features/requests/requests_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/ai/ai_assistant_dialog.dart';
+import '../features/admin/employee_management_screen.dart';
 
 class SessionScope extends InheritedWidget {
   const SessionScope({super.key, required super.child, this.user, this.onSignOut});
@@ -71,6 +72,9 @@ class _AppShellState extends State<AppShell> {
   int _refreshTick = 0;
   StreamSubscription<String>? _approvalSub;
   int _pendingApprovalCount = 0;
+  int _requestsNavId = 0;
+  bool _autoOpenStockRequest = false;
+  bool _autoOpenCashRequest = false;
 
   @override
   void didChangeDependencies() {
@@ -132,6 +136,7 @@ class _AppShellState extends State<AppShell> {
     _Item(6, 'Hoạt động', Icons.timeline_outlined, Icons.timeline),
     _Item(7, 'Báo cáo', Icons.insert_chart_outlined, Icons.insert_chart),
     _Item(8, 'Cài đặt', Icons.settings_outlined, Icons.settings),
+    _Item(9, 'Nhân viên', Icons.manage_accounts_outlined, Icons.manage_accounts),
   ];
 
   static const _slugs = <String>[
@@ -144,6 +149,7 @@ class _AppShellState extends State<AppShell> {
     'activity',
     'reports',
     'settings',
+    'employees',
   ];
 
   static const _titles = <String>[
@@ -156,6 +162,7 @@ class _AppShellState extends State<AppShell> {
     'Hoạt động',
     'Báo cáo',
     'Cài đặt',
+    'Quản trị nhân viên',
   ];
 
   static const _icons = <IconData>[
@@ -168,6 +175,7 @@ class _AppShellState extends State<AppShell> {
     Icons.timeline_outlined,
     Icons.insert_chart_outlined,
     Icons.settings_outlined,
+    Icons.manage_accounts_outlined,
   ];
 
   static const _filled = <IconData>[
@@ -180,13 +188,14 @@ class _AppShellState extends State<AppShell> {
     Icons.timeline,
     Icons.insert_chart,
     Icons.settings,
+    Icons.manage_accounts,
   ];
 
   bool _canAccessApprovals(SessionScope? session) {
     final user = session?.user;
     if (user == null) return true; // Giữ nguyên cho unauthenticated & widget tests
-    return user.roles.any((r) =>
-        ['approver', 'checker'].contains(r.toLowerCase()));
+    final roles = RoleVisibility.rolesOf(user);
+    return !RoleVisibility.isAuditorOnly(roles);
   }
 
   Widget _screenFor(int i, SessionScope? session) {
@@ -206,7 +215,7 @@ class _AppShellState extends State<AppShell> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Tài khoản của bạn không có vai trò Kiểm soát viên (Checker) hoặc Quản trị viên để truy cập danh sách phê duyệt chứng từ.',
+                'Tài khoản kiểm toán viên chỉ xem nhật ký kiểm toán và báo cáo, không truy cập phân hệ phê duyệt chứng từ.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF64748B)),
               ),
@@ -225,11 +234,29 @@ class _AppShellState extends State<AppShell> {
       case 0:
         return DashboardScreen(onNavigate: _go);
       case 1:
-        return const InventoryScreen();
+        return InventoryScreen(
+          onNavigate: _go,
+          onCreateStockRequest: () => _go(3, autoOpenStock: true),
+        );
       case 2:
-        return const CashScreen();
+        return CashScreen(
+          onNavigate: _go,
+          onCreateCashRequest: () => _go(3, autoOpenCash: true),
+        );
       case 3:
-        return const RequestsScreen();
+        return RequestsScreen(
+          key: ValueKey('requests-$_requestsNavId'),
+          initialOpenCreateStock: _autoOpenStockRequest,
+          initialOpenCreateCash: _autoOpenCashRequest,
+          onInitialOpenHandled: () {
+            if (mounted) {
+              setState(() {
+                _autoOpenStockRequest = false;
+                _autoOpenCashRequest = false;
+              });
+            }
+          },
+        );
       case 4:
         return const ApprovalsScreen();
       case 5:
@@ -240,6 +267,8 @@ class _AppShellState extends State<AppShell> {
         return const ReportsScreen();
       case 8:
         return const SettingsScreen();
+      case 9:
+        return const EmployeeManagementScreen();
       default:
         return const SizedBox.shrink();
     }
@@ -262,15 +291,22 @@ class _AppShellState extends State<AppShell> {
 
   /// Điều hướng có kiểm tra quyền hiển thị theo vai trò (RoleVisibility).
   /// Tab bị ẩn với role hiện tại -> toast + ở yên, không chuyển.
-  void _go(int i) {
+  void _go(int i, {bool autoOpenStock = false, bool autoOpenCash = false}) {
     final session = SessionScope.maybeOf(context);
     final roles = RoleVisibility.rolesOf(session?.user);
-    if (!RoleVisibility.visibleTabs(roles).contains(i)) {
+    if (!RoleVisibility.visibleTabs(roles, session?.user).contains(i)) {
       AppToast.info(
           context, 'Vai trò của bạn không có quyền vào phân hệ này');
       return;
     }
-    setState(() => _index = i);
+    setState(() {
+      _index = i;
+      if (autoOpenStock || autoOpenCash) {
+        _requestsNavId++;
+        _autoOpenStockRequest = autoOpenStock;
+        _autoOpenCashRequest = autoOpenCash;
+      }
+    });
   }
 
   Future<void> _signOut() async {
@@ -364,7 +400,7 @@ class _AppShellState extends State<AppShell> {
     final visibleItems = _items
         .where((it) =>
             (it.index != 4 || canApprove) &&
-            RoleVisibility.visibleTabs(roles).contains(it.index))
+            RoleVisibility.visibleTabs(roles, session?.user).contains(it.index))
         .toList();
     showModalBottomSheet<void>(
       context: context,
@@ -399,7 +435,7 @@ class _AppShellState extends State<AppShell> {
     final visibleItems = _items
         .where((it) =>
             (it.index != 4 || canApprove) &&
-            RoleVisibility.visibleTabs(roles).contains(it.index))
+            RoleVisibility.visibleTabs(roles, session?.user).contains(it.index))
         .toList();
 
     return Container(
@@ -497,7 +533,7 @@ class _AppShellState extends State<AppShell> {
                   if (item.index == 0) {
                     sectionHeader = _buildNavSectionHeader('VẬN HÀNH KHO QUỸ');
                   } else if (item.index == 3) {
-                    sectionHeader = _buildNavSectionHeader('KIỂM SOÁT 4 MẮT');
+                    sectionHeader = _buildNavSectionHeader('KIỂM SOÁT PHÊ DUYỆT');
                   } else if (item.index == 5) {
                     sectionHeader = _buildNavSectionHeader('HỆ THỐNG & ĐỐI SOÁT');
                   }
@@ -566,7 +602,7 @@ class _AppShellState extends State<AppShell> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
-                                  _pendingApprovalCount > 0 ? '$_pendingApprovalCount CHỜ DUYỆT' : '4-EYES',
+                                  _pendingApprovalCount > 0 ? '$_pendingApprovalCount CHỜ DUYỆT' : 'MAKER–CHECKER',
                                   style: TextStyle(
                                     color: _pendingApprovalCount > 0 ? const Color(0xFFDC2626) : const Color(0xFFD97706),
                                     fontSize: 9,

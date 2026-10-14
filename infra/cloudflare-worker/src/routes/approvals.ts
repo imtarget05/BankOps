@@ -32,8 +32,15 @@ interface CashPendingRow {
 
 // GET /approvals/inbox – danh sách request đang chờ duyệt (kho + quỹ)
 approvalsRoutes.get("/inbox", async (c) => {
-  const user = c.get("user" as never) as { sub: string; caps: string[] };
-  if (!user.caps.includes("approval:view_inbox")) {
+  const user = c.get("user" as never) as { sub: string; caps?: string[]; roles?: string[] };
+  const caps = user?.caps ?? [];
+  const roles = (user?.roles ?? []).map((r) => r.toLowerCase());
+  const canView =
+    caps.includes("approval:view_inbox") ||
+    roles.some((r) =>
+      ["admin", "system_admin", "approver", "checker", "supervisor", "staff", "maker", "auditor"].includes(r)
+    );
+  if (!canView) {
     return c.json({ detail: "Bạn không có quyền xem phiếu chờ duyệt." }, 403);
   }
   const [invRows, cashRows] = await Promise.all([
@@ -59,8 +66,17 @@ approvalsRoutes.get("/inbox", async (c) => {
     `,
   ]);
 
+  const isApprover =
+    caps.includes("approval:view_inbox") ||
+    roles.some((r) =>
+      ["admin", "system_admin", "approver", "checker", "supervisor"].includes(r)
+    );
+
+  const invFiltered = isApprover ? invRows.filter((r) => r.maker_id !== user.sub) : invRows;
+  const cashFiltered = isApprover ? cashRows.filter((r) => r.maker_id !== user.sub) : cashRows;
+
   const approvals = [
-    ...invRows.filter((r) => r.maker_id !== user.sub).map((r) => ({
+    ...invFiltered.map((r) => ({
       id: r.id,
       kind: "inventory",
       sub_kind: r.kind,
@@ -74,7 +90,7 @@ approvalsRoutes.get("/inbox", async (c) => {
       }),
       detail: r.reason || r.id,
     })),
-    ...cashRows.filter((r) => r.maker_id !== user.sub).map((r) => {
+    ...cashFiltered.map((r) => {
       const sign = r.kind === "payment" ? "-" : "+";
       return {
         id: r.id,

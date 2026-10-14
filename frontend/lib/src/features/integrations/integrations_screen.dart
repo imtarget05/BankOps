@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
+import '../../core/util/role_visibility.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import '../etl/etl_run_screen.dart';
+import '../etl/etl_studio_screen.dart';
 import 'import_screen.dart';
 
 /// Màn tích hợp — nhập dữ liệu CSV/JSON/Google Sheets (Staging -> Preview -> Confirm) + danh sách kết nối & lịch sử.
@@ -316,6 +319,9 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = SessionScope.maybeOf(context);
+    final user = session?.user;
+
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -323,8 +329,11 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,6 +353,44 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
+                  ],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (RoleVisibility.canRunEtl(user) || user == null)
+                      FilledButton.tonalIcon(
+                        key: const Key('goto-etl-run-btn'),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                        label: const Text('Chạy ETL Pipeline'),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RepositoryScope(
+                                repository: RepositoryScope.of(context),
+                                child: const EtlRunScreen(),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    const SizedBox(width: 8),
+                    if (RoleVisibility.canAccessEtlStudio(user) || user == null)
+                      FilledButton.icon(
+                        key: const Key('goto-etl-studio-btn'),
+                        icon: const Icon(Icons.tune_rounded, size: 18),
+                        label: const Text('ETL Studio'),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RepositoryScope(
+                                repository: RepositoryScope.of(context),
+                                child: const EtlStudioScreen(),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ],

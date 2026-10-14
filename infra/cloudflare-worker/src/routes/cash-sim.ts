@@ -40,6 +40,7 @@ interface CashRequest {
   maker_id: string;
   approver_id: string | null;
   reason: string | null;
+  return_reason?: string | null;
   version: number;
   submitted_at: string | null;
   created_at: string;
@@ -57,6 +58,7 @@ interface RequestRow {
   kind: string;
   amount: string;
   reason: string | null;
+  return_reason?: string | null;
   created_at: string;
 }
 interface JournalEntry {
@@ -99,7 +101,7 @@ cashSimRoutes.get("/requests", async (c) => {
   const requests = status
     ? await query`
         SELECT r.id, r.cashbox_id, r.kind, r.amount, b.currency, r.status,
-               r.maker_id, r.approver_id, r.reason, r.version,
+               r.maker_id, r.approver_id, r.reason, r.return_reason, r.version,
                r.submitted_at, r.created_at,
                u.display_name_demo as maker_name,
                b.code as cashbox_code, b.name as cashbox_name
@@ -111,7 +113,7 @@ cashSimRoutes.get("/requests", async (c) => {
       `
     : await query`
         SELECT r.id, r.cashbox_id, r.kind, r.amount, b.currency, r.status,
-               r.maker_id, r.approver_id, r.reason, r.version,
+               r.maker_id, r.approver_id, r.reason, r.return_reason, r.version,
                r.submitted_at, r.created_at,
                u.display_name_demo as maker_name,
                b.code as cashbox_code, b.name as cashbox_name
@@ -127,7 +129,7 @@ cashSimRoutes.get("/requests", async (c) => {
 cashSimRoutes.get("/requests/:id", async (c) => {
   const requestId = c.req.param("id");
   const rows = await db<RequestRow>(c.env.DATABASE_URL)`
-    SELECT id, status, version, maker_id, approver_id, cashbox_id, kind, amount, reason, created_at
+    SELECT id, status, version, maker_id, approver_id, cashbox_id, kind, amount, reason, return_reason, created_at
     FROM cash_requests WHERE id = ${requestId}::uuid LIMIT 1
   `;
   if (!rows.length) {
@@ -192,7 +194,7 @@ cashSimRoutes.post("/requests/:id/submit", async (c) => {
   }
 
   const req = rows[0];
-  if (req.status !== "draft") {
+  if (req.status !== "draft" && req.status !== "returned") {
     return c.json(
       { error: { code: "INVALID_STATE", message: `Cannot submit: ${req.status}` } },
       409
@@ -240,7 +242,12 @@ cashSimRoutes.post("/requests/:id/approve", async (c) => {
       403
     );
   }
-  if (!user.caps.includes("cash:approve_request")) {
+  const canApprove =
+    user.caps.includes("cash:approve_request") ||
+    user.roles?.some((r) =>
+      ["admin", "system_admin", "approver", "checker", "supervisor"].includes(r.toLowerCase())
+    );
+  if (!canApprove) {
     return c.json({ error: { code: "FORBIDDEN", message: "Missing cash:approve_request" } }, 403);
   }
   const body = await c.req.json<{ supervisor_pin?: string }>().catch(() => ({} as { supervisor_pin?: string }));
@@ -339,6 +346,14 @@ cashSimRoutes.post("/requests/:id/reject", async (c) => {
       403
     );
   }
+  const canApprove =
+    user.caps.includes("cash:approve_request") ||
+    user.roles?.some((r) =>
+      ["admin", "system_admin", "approver", "checker", "supervisor"].includes(r.toLowerCase())
+    );
+  if (!canApprove) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Missing approval permissions" } }, 403);
+  }
   await db(c.env.DATABASE_URL)`
     UPDATE cash_requests
     SET status = 'rejected', approver_id = ${user.sub}::uuid, version = version + 1, updated_at = NOW()
@@ -349,6 +364,63 @@ cashSimRoutes.post("/requests/:id/reject", async (c) => {
     amount: String(req.amount),
     currency: "VND",
     status: "rejected",
+    approver_id: user.sub,
+    version: req.version + 1,
+    simulation: true,
+  });
+});
+
+// POST /cash-sim/requests/:id/return
+cashSimRoutes.post("/requests/:id/return", async (c) => {
+  const user = getUser(c);
+  const requestId = c.req.param("id");
+
+  const rows = await db<RequestRow>(c.env.DATABASE_URL)`
+    SELECT id, status, version, maker_id, approver_id, cashbox_id, kind, amount, reason, return_reason, created_at
+    FROM cash_requests WHERE id = ${requestId}::uuid LIMIT 1
+  `;
+  if (!rows.length) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Request not found" } }, 404);
+  }
+  const req = rows[0];
+  if (req.status !== "submitted") {
+    return c.json(
+      { error: { code: "INVALID_STATE", message: `Cannot return: ${req.status}` } },
+      409
+    );
+  }
+  if (req.maker_id === user.sub) {
+    return c.json(
+      { error: { code: "MAKER_CHECKER_VIOLATION", message: "Maker cannot return own request" } },
+      403
+    );
+  }
+  const canReturn =
+    user.caps.includes("cash:approve_request") ||
+    user.roles?.some((r) =>
+      ["admin", "system_admin", "approver", "checker", "supervisor"].includes(r.toLowerCase())
+    );
+  if (!canReturn) {
+    return c.json({ error: { code: "FORBIDDEN", message: "Missing approval permissions" } }, 403);
+  }
+
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
+  const returnReason = String(body.reason || "").trim();
+  if (returnReason.length < 3) {
+    return c.json({ detail: "Lý do trả về phải có ít nhất 3 ký tự." }, 422);
+  }
+
+  await db(c.env.DATABASE_URL)`
+    UPDATE cash_requests
+    SET status = 'returned', return_reason = ${returnReason}, approver_id = ${user.sub}::uuid, version = version + 1, updated_at = NOW()
+    WHERE id = ${requestId}::uuid
+  `;
+  return c.json({
+    ...req,
+    amount: String(req.amount),
+    currency: "VND",
+    status: "returned",
+    return_reason: returnReason,
     approver_id: user.sub,
     version: req.version + 1,
     simulation: true,
