@@ -21,13 +21,13 @@ logs: ## Xem log API + worker trực tiếp
 ps: ## Trạng thái container + healthcheck
 	docker compose ps
 
-test-backend: ## Chạy toàn bộ pytest backend (136 tests)
+test-backend: ## Chạy toàn bộ pytest backend (232 tests)
 	cd backend && python3 -m pytest tests -q
 
 analyze-backend: ## Lint backend & ai bằng ruff
 	python3 -m ruff check backend/ ai/
 
-test-frontend: ## Chạy toàn bộ Flutter test (28 tests)
+test-frontend: ## Chạy toàn bộ Flutter test (69 tests)
 	cd frontend && flutter test --no-pub
 
 analyze-frontend: ## Phân tích tĩnh code Flutter (flutter analyze)

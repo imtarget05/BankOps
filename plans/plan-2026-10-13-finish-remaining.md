@@ -20,7 +20,11 @@
 
 ---
 
-## Work-package A — Verify Flutter (cần SDK, user làm hoặc cài)
+## Work-package A — Verify Flutter ✅ DONE (2026-10-14)
+
+Kết quả: SDK có sẵn (Flutter 3.47.7) → `flutter analyze` **No issues found!** · `flutter test` **69/69 passed**.
+Suite tăng 28 → 69 test kể từ 13/10. Không có test đỏ ⇒ Task A3 no-op.
+Chi tiết: `tasks/notes/verify-flutter.md`.
 
 ### Task A1: Cài Flutter SDK + chạy analyze
 
@@ -31,19 +35,8 @@
 - Consumes: none
 - Produces: `flutter --version` >= 3.4.0, bản `flutter analyze` baseline
 
-- [ ] **Step 1: Cài SDK**
-```bash
-# macOS (chọn 1):
-brew install --cask flutter
-# kiểm tra:
-flutter --version
-```
-- [ ] **Step 2: Chạy analyze**
-```bash
-cd /Users/mainguyenbinhtan/Downloads/BankOps/frontend
-flutter analyze
-```
-Expected: ghi lại số issues (mục tiêu 0 error; warning liệt kê để WP khác sửa).
+- [x] **Step 1: Cài SDK** — Flutter 3.47.7 / Dart 3.13.5 (brew cask) đã có sẵn.
+- [x] **Step 2: Chạy analyze** → `No issues found!` (0 error, 0 warning).
 
 ### Task A2: Chạy full test suite Flutter
 
@@ -54,13 +47,8 @@ Expected: ghi lại số issues (mục tiêu 0 error; warning liệt kê để W
 - Consumes: Task A1 (SDK sẵn)
 - Produces: danh sách test đỏ (nếu có) để sửa
 
-- [ ] **Step 1: Chạy tests**
-```bash
-cd /Users/mainguyenbinhtan/Downloads/BankOps/frontend
-flutter test
-```
-Expected: PASS toàn bộ; test nào đỏ → ghi tên + lỗi, không sửa vội (sửa ở Task A3).
-- [ ] **Step 2: Ghi kết quả vào `tasks/notes/verify-flutter.md`** (pass/fail từng file).
+- [x] **Step 1: Chạy tests** → **69/69 passed** (xem bảng per-file trong `tasks/notes/verify-flutter.md`).
+- [x] **Step 2: Ghi kết quả vào `tasks/notes/verify-flutter.md`** — đã ghi (Run 1 13/10 + Run 2 14/10).
 
 ### Task A3: Sửa đỏ do đợt A–D gây ra (nếu có)
 
@@ -72,12 +60,8 @@ Expected: PASS toàn bộ; test nào đỏ → ghi tên + lỗi, không sửa v�
 - Consumes: danh sách đỏ Task A2
 - Produces: `flutter test` xanh 100%
 
-- [ ] **Step 1: Sửa từng lỗi** (tối đa 1 file/lần, giữ key widget cũ)
-- [ ] **Step 2: Verify**
-```bash
-cd /Users/mainguyenbinhtan/Downloads/BankOps/frontend
-flutter test <file-vừa-sửa> && flutter analyze
-```
+- [x] **Step 1: Sửa từng lỗi** — không có test đỏ nào ⇒ no-op.
+- [x] **Step 2: Verify** → `flutter test` 69/69 + `flutter analyze` 0 issue.
 Expected: PASS + 0 error.
 
 ---
@@ -198,6 +182,17 @@ Khác plan: không có detail sheet sẵn → gắn nút lịch sử trên mỗi
 
 ## Tradeoffs (ghi nhận, chi tiết ở `tasks/notes/`)
 
-- Mọi task Flutter BLOCKED tới khi có SDK — đây là critical path duy nhất.
+- ~~Mọi task Flutter BLOCKED tới khi có SDK~~ → **đã giải quyết 14/10**: SDK có sẵn, WP-A verify xanh (69/69).
 - WP-C thêm 2 dep (`excel`, `printing`): tăng dung lượng build Web ~1-2MB, chấp nhận vì auditor/checker cần file thật.
 - Timeline lọc client-side (không API mới): đủ cho demo scale, backend giữ nguyên.
+
+## Trạng thái tổng (2026-10-14)
+
+| Work-package | Trạng thái |
+|---|---|
+| A — Verify Flutter | ✅ DONE (69/69, analyze 0) |
+| B — Bottom-bar theo role | ✅ DONE (13/10) |
+| C — Xuất Excel/PDF | ✅ DONE (13/10) |
+| D — Timeline audit phiếu | ✅ DONE (13/10) |
+
+⇒ **Toàn bộ plan đã xong.** Cổng kiểm tra đầy đủ: backend 232 passed + ruff clean, Flutter 69/69 + analyze 0, worker tsc/lint 0, secrets guard pass, compose config ok.
