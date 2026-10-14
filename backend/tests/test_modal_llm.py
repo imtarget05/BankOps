@@ -182,10 +182,19 @@ class TestDocsAndWorkerIntegration:
         assert "HF_LLM_BASE_URL" in readme
 
     def test_worker_env_var_comment_mentions_modal_fallback_path(self):
-        """wrangler.toml phải dẫn hướng được khi HF Space không khả dụng."""
+        """Worker đã retired (ADR 0001): health-only, không binding nghiệp vụ.
+
+        wrangler.toml không còn HF_LLM_BASE_URL/Workers AI/ratelimits; FastAPI
+        (backend/) là canonical API duy nhất. Test khóa contract retired thay vì
+        đòi comment Modal cũ.
+        """
         wrangler = (REPO_DIR / "infra" / "cloudflare-worker" / "wrangler.toml").read_text()
-        assert "HF_LLM_BASE_URL" in wrangler
-        assert "Modal" in wrangler
+        assert "RETIRED" in wrangler
+        assert "410" in wrangler
+        assert "FastAPI" in wrangler
+        assert "HF_LLM_BASE_URL" not in wrangler
+        assert "[ai]" not in wrangler
+        assert "[[ratelimits]]" not in wrangler
 
     def test_gguf_name_consistent_with_zip_source(self):
         """Tên GGUF trong code phải khớp artifact fine-tune thật (nếu zip còn trên máy)."""
