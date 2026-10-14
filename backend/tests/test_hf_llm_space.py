@@ -7,6 +7,7 @@ thư mục `model/` và ưu tiên GGUF fine-tune trước bản gốc tải từ
 Các test dưới đây chỉ đọc file tĩnh trong `infra/hf-llm-space/` — không cần
 Docker daemon hay truy cập mạng, chạy được trong CI hiện tại.
 """
+
 from __future__ import annotations
 
 import re
@@ -14,7 +15,6 @@ import stat
 from pathlib import Path
 
 import pytest
-
 from conftest import REPO_DIR
 
 SPACE_DIR = REPO_DIR / "infra" / "hf-llm-space"
@@ -23,15 +23,26 @@ BANKOPS_GGUF = "Qwen2.5-1.5B-Instruct.Q4_K_M.gguf"
 GGUF_LIMIT_BYTES = 100 * 1024 * 1024  # giới hạn file của GitHub
 
 
+def _dockerfile_text() -> str:
+    dockerfile = SPACE_DIR / "Dockerfile"
+    assert dockerfile.is_file(), "infra/hf-llm-space/Dockerfile phải tồn tại"
+    return dockerfile.read_text()
+
+
+def _entrypoint_text() -> str:
+    entrypoint = SPACE_DIR / "entrypoint.sh"
+    assert entrypoint.is_file(), "infra/hf-llm-space/entrypoint.sh phải tồn tại"
+    return entrypoint.read_text()
+
+
 class TestSpaceEntrypoint:
     def test_prefers_fine_tuned_gguf_over_base(self):
         """GGUF fine-tune phải được chọn trước GGUF gốc tải từ Hub."""
         text = _entrypoint_text()
         assert "BANKOPS_MODEL_FILE:-Qwen2.5-1.5B-Instruct.Q4_K_M.gguf" in text
-        assert (
-            text.index('IMAGE_MODEL="${BAKED_DIR}/${BANKOPS_MODEL_FILE}"')
-            < text.index('${BAKED_DIR}/${MODEL_FILE}"')
-        )
+        assert text.index(
+            'IMAGE_MODEL="${BAKED_DIR}/${BANKOPS_MODEL_FILE}"'
+        ) < text.index('${BAKED_DIR}/${MODEL_FILE}"')
 
     def test_fails_fast_without_any_gguf(self):
         assert "no model GGUF found" in _entrypoint_text()
@@ -99,12 +110,6 @@ class TestZipIntegrationSources:
         assert (MODEL_DIR / repo_path).read_bytes() == extracted.read_bytes()
 
 
-def _entrypoint_text() -> str:
-    entrypoint = SPACE_DIR / "entrypoint.sh"
-    assert entrypoint.is_file(), "infra/hf-llm-space/entrypoint.sh phải tồn tại"
-    return entrypoint.read_text()
-
-
 class TestSpaceArtifacts:
     def test_fine_tune_artifacts_are_committed(self):
         """Artifact tokenizer/config/chat-template của bản fine-tune phải nằm trong repo."""
@@ -129,9 +134,13 @@ class TestSpaceArtifacts:
 
     def test_model_artifacts_not_ignored_by_gitignore(self):
         """`.gitignore` gốc không được có mẫu rộng làm rơi artifact model/ khi commit."""
-        gitignore = (REPO_DIR / ".gitignore").read_text()
+        lines = [
+            line.strip()
+            for line in (REPO_DIR / ".gitignore").read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
         for pattern in ("*.json", "*.jinja", "model/", "**/model/"):
-            assert pattern not in gitignore, f".gitignore chứa mẫu `{pattern}`"
+            assert pattern not in lines, f".gitignore chứa mẫu dòng `{pattern}`"
 
     def test_space_gitattributes_keeps_lfs_rule_for_gguf(self):
         """Space giữ rule LFS cho *.gguf (phòng khi commit model vào repo Space bằng git)."""
