@@ -172,7 +172,26 @@
  - **Rollback DB**: restore snapshot `snap-aged-sun-b38mjspm`.
  - **Rollback frontend**: `wrangler pages deployment list --project-name=bankops-web` rồi rollback về
    deployment trước (`d844798f-38f1-434c-a53c-8f134f1c4dbc`).
- - **Legacy Worker**: **quyết định 2026-10-14 = giữ nguyên bản cũ đang chạy**, không deploy bản archive
-   (health-only + `410 Gone`). Lý do: mobile build cũ vẫn trỏ `workers.dev`; frontend production đã trỏ Modal
-   nên không ảnh hưởng. Bản archive đã sửa + verify local, sẵn sàng deploy khi mobile chuyển sang Modal.
-   Khi đó rollback: `wrangler deployments list` → `wrangler rollback`.
+- **Legacy Worker**: **quyết định 2026-10-14 = giữ nguyên bản cũ đang chạy**, không deploy bản archive
+  (health-only + `410 Gone`). Lý do: mobile build cũ vẫn trỏ `workers.dev`; frontend production đã trỏ Modal
+  nên không ảnh hưởng. Bản archive đã sửa + verify local, sẵn sàng deploy khi mobile chuyển sang Modal.
+  Khi đó rollback: `wrangler deployments list` → `wrangler rollback`.
+
+### Bổ sung tối 2026-10-14 — deploy alias QA + smoke/E2E độc lập (track QA)
+
+Build từ branch `qa-validation-20261014` (3 commits: `f9c16ec` backend QA fixes, `4c13475`
+flutter RadioGroup, `90a6327` snapshot). Không động production.
+
+| Check | Result |
+|-------|--------|
+| `modal deploy infra/modal/bankops_api.py` | ✅ Không đổi mã — URL giữ nguyên `https://imtarget05--bankops-api-api.us-east.modal.run` |
+| `GET /health/live` (Modal, cold start) | ✅ 200 `{"status":"alive"}` |
+| `GET /health/ready` | ✅ 200 `database: ready` (Neon đã migrate) |
+| `GET /api/v1/openapi.json` | ✅ 200 |
+| Login `demo_maker` → JWT 536 ký tự | ✅ 200 |
+| `GET /inventory/items`, `/inventory/balances`, `/activity` | ✅ 200, 200, 200 |
+| `GET /audit-events` (maker) | ✅ 403 (RBAC đúng) |
+| E2E maker→checker live: create → submit 200 → approve → `posted` | ✅ PASS |
+| `flutter build web --dart-define=API_BASE_URL=<modal>/api/v1` | ✅ Built |
+| `wrangler pages deploy --project-name=bankops-web` (branch alias) | ✅ `https://qa-validation-20261014.bankops-web.pages.dev` 200, title đúng |
+| Production `bankops-web.pages.dev` | ✅ Không đụng (giữ bản production của track deploy) |
