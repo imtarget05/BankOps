@@ -13,11 +13,17 @@ binding = "AI"
 APP_ENV = "production"
 APP_NAME = "BankOps-API"
 AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
-# Backend LLM tự host (Hugging Face Space llama.cpp, OpenAI-compatible).
-# Để rỗng "" = dùng Workers AI; khi đã tạo Space, thay bằng URL dạng
-# "https://<user>-bankops-llm.hf.space" rồi deploy lại. Workers AI tự thành fallback.
-# Xem docs/17-hf-llm-space.md.
-HF_LLM_BASE_URL = ""
+# Backend LLM tự host, OpenAI-compatible. Để rỗng "" = dùng Workers AI.
+# Ưu tiên 1: Modal (GGUF fine-tune — khuyến nghị, miễn phí; HF Space Docker
+#   hiện yêu cầu gói PRO): modal deploy infra/modal/modal_app.py rồi đặt
+#   HF_LLM_BASE_URL = "https://<workspace>--bankops-llm-serve.modal.run"
+# Ưu tiên 2: HF Space llama.cpp (cần HF PRO): "https://<user>-bankops-llm.hf.space"
+# Workers AI tự thành fallback khi backend lỗi/đang ngủ.
+# Xem docs/17-hf-llm-space.md và infra/modal/README.md.
+HF_LLM_BASE_URL = "https://imtarget05--bankops-llm-serve.us-east.modal.run"
+# 90s: đủ chờ cold start của Modal (kéo container + load model) để request
+# đầu tiên sau khi ngủ vẫn đi vào bản fine-tune thay vì rơi xuống fallback.
+HF_LLM_TIMEOUT_MS = "90000"
 ACCESS_TOKEN_EXPIRE_MINUTES = "30"
 REFRESH_TOKEN_EXPIRE_DAYS = "7"
 
@@ -63,7 +69,7 @@ period = 60
 
 [env.staging]
 name = "bankops-api-staging"
-vars = { APP_ENV = "staging", APP_NAME = "BankOps-API", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct", HF_LLM_BASE_URL = "", ACCESS_TOKEN_EXPIRE_MINUTES = "30", REFRESH_TOKEN_EXPIRE_DAYS = "7" }
+vars = { APP_ENV = "staging", APP_NAME = "BankOps-API", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct", HF_LLM_BASE_URL = "https://imtarget05--bankops-llm-serve.us-east.modal.run", HF_LLM_TIMEOUT_MS = "90000", ACCESS_TOKEN_EXPIRE_MINUTES = "30", REFRESH_TOKEN_EXPIRE_DAYS = "7" }
 
 [env.staging.ai]
 binding = "AI"

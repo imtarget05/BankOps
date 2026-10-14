@@ -5,6 +5,12 @@
 > BankOps. Worker ưu tiên backend này; Cloudflare Workers AI giữ vai trò fallback
 > nên API không bao giờ chết khi Space lỗi hoặc đang ngủ.
 
+> **Cập nhật 2026-10:** HF yêu cầu gói PRO để tạo Space Docker/Gradio trên
+> hardware free. Phương án thay thế giữ nguyên API: chạy GGUF fine-tune trên
+> **Modal** (miễn phí $30 credit/tháng, scale-to-zero) — xem `infra/modal/README.md`
+> và `infra/scripts/upload-model-to-modal.sh`. Các mục dưới đây vẫn đúng khi bạn
+> có HF PRO; Worker chỉ khác giá trị `HF_LLM_BASE_URL`.
+
 ## 0. Vì sao phương án này
 
 | Tiêu chí | HF Space (llama.cpp) | Workers AI (hiện tại) | Colab |
