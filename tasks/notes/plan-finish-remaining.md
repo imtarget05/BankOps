@@ -11,7 +11,12 @@
 2. Ẩn menu theo role: fail-open, chỉ auditor thuần bị ẩn tab 3/4/5 (bảo toàn demo_checker + test cũ).
 3. WP-C thêm `excel` + `printing` (~1-2MB build Web) — chấp nhận vì auditor cần file thật; CSV clipboard giữ làm fallback.
 4. Timeline audit lọc client-side theo `ActivityEvent.subjectId`, không thêm API backend.
-5. Critical path: Flutter SDK. Mọi task verify Flutter BLOCKED tới khi user cài SDK (Task A1).
+5. ~~Critical path: Flutter SDK. Mọi task verify Flutter BLOCKED tới khi user cài SDK (Task A1).~~
+   → **Đã gỡ 14/10**: SDK có sẵn (Flutter 3.47.7), WP-A verify xanh (`flutter analyze` 0 issue, `flutter test` 69/69).
+   Xem `tasks/notes/verify-flutter.md`.
 
 ## Tradeoff chưa chốt (cần user)
-- Excel/PDF có đáng tăng size build Web không? Mặc định: có (đã plan WP-C).
+- ~~Excel/PDF có đáng tăng size build Web không?~~ → **đã chốt: CÓ** — WP-C dùng `excel` + `printing`, đã xong 13/10.
+
+## Trạng thái
+- WP-A/B/C/D **đều DONE** (B/C/D 13/10, A 14/10). Plan đóng.
