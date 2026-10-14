@@ -287,7 +287,7 @@ class _EtlReviewScreenState extends State<EtlReviewScreen> {
           children: [
             const Icon(Icons.fact_check_outlined, size: 22),
             const SizedBox(width: 8),
-            Text('Review Staging: Run #${run.id.substring(0, 8)}'),
+            Text('Review Staging: Run #${run.id.length >= 8 ? run.id.substring(0, 8) : run.id}'),
           ],
         ),
         actions: [
@@ -421,7 +421,7 @@ class _EtlReviewScreenState extends State<EtlReviewScreen> {
                 ],
               ),
               Text(
-                'Fingerprint: ${run.sourceFingerprint.substring(0, 10)}...',
+                'Fingerprint: ${run.sourceFingerprint.length >= 10 ? run.sourceFingerprint.substring(0, 10) : run.sourceFingerprint}...',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFF64748B)),
               ),
             ],
