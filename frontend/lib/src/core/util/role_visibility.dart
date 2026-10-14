@@ -15,7 +15,13 @@ class RoleVisibility {
     'admin',
     'integration_admin',
   };
-  static const _approvers = {'approver', 'checker'};
+  static const _approvers = {
+    'approver',
+    'checker',
+    'admin',
+    'system_admin',
+    'supervisor',
+  };
   static const _privileged = {
     'staff',
     'maker',
@@ -52,11 +58,47 @@ class RoleVisibility {
       roles.contains('auditor') &&
       roles.intersection(_privileged).isEmpty;
 
+  /// Quản trị nhân sự / cấp phát IAM (Phase 1).
+  static bool canManageEmployees(AppUser? user) {
+    if (user == null) return false;
+    final roles = rolesOf(user);
+    if (roles.contains('admin') || roles.contains('system_admin')) return true;
+    final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
+    return caps.contains('iam:admin') || caps.contains('admin:user_management');
+  }
+
+  /// ETL Studio (Phase 2): Cấu hình pipeline, mapping.
+  static bool canAccessEtlStudio(AppUser? user) {
+    if (user == null) return false;
+    final roles = rolesOf(user);
+    if (roles.contains('admin') || roles.contains('system_admin')) return true;
+    final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
+    return caps.contains('etl:admin') || caps.contains('etl:design');
+  }
+
+  /// Chạy nhập liệu ETL (Phase 2).
+  static bool canRunEtl(AppUser? user) {
+    if (user == null) return false;
+    final roles = rolesOf(user);
+    if (roles.contains('admin') || roles.contains('system_admin')) return true;
+    final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
+    return caps.contains('etl:run') || caps.contains('etl:admin');
+  }
+
   /// Danh sách tab (full index theo AppShell) user được thấy.
-  /// 0 Tổng quan, 1 Kho, 2 Quỹ, 3 Yêu cầu, 4 Duyệt, 5 Tích hợp,
-  /// 6 Hoạt động, 7 Báo cáo, 8 Cài đặt.
-  static List<int> visibleTabs(Set<String> roles) {
-    if (isAuditorOnly(roles)) return const [0, 1, 2, 6, 7, 8];
-    return const [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  /// 0 Tổng quan, 1 Kho, 2 Quỹ, 3 Yêu cầu, 4 Duyệt, 5 Tích hợp/ETL,
+  /// 6 Hoạt động, 7 Báo cáo, 8 Cài đặt, 9 Quản trị nhân viên.
+  static List<int> visibleTabs(Set<String> roles, [AppUser? user]) {
+    final list = <int>[0, 1, 2];
+    if (!isAuditorOnly(roles)) {
+      list.addAll([3, 4, 5]);
+    }
+    list.addAll([6, 7, 8]);
+    if ((user != null && canManageEmployees(user)) ||
+        roles.contains('admin') ||
+        roles.contains('system_admin')) {
+      list.add(9);
+    }
+    return list;
   }
 }

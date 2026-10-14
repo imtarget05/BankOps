@@ -26,14 +26,19 @@ from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.approval import ApprovalDecision
+from app.models.iam import User
 from app.models.inventory import (
     Asset,
+    AssetLog,
     Balance,
     InventoryRequest,
     InventoryRequestLine,
     Item,
     Location,
     Movement,
+    StockLevel,
+    Stocktake,
+    StocktakeLine,
 )
 from app.services import idempotency
 from app.services.approval_controls import verify_supervisor_pin
@@ -70,6 +75,36 @@ _REQUEST_READ_CAPS = ("inventory:create_request", "inventory:approve_request")
 _write_caps = require_any_capability("inventory:create_request")
 _ZERO = Decimal("0")
 
+# The web client currently presents the first four statuses.  The additional
+# values preserve the documented custody vocabulary for security stationery.
+_ASSET_STATUSES = frozenset(
+    {
+        "available",
+        "in_vault",
+        "assigned",
+        "in_use",
+        "issued",
+        "maintenance",
+        "damaged",
+        "lost",
+        "disposed",
+        "retired",
+    }
+)
+_ASSET_STATUS_TRANSITIONS = {
+    "available": _ASSET_STATUSES - {"retired"},
+    "in_vault": _ASSET_STATUSES - {"issued", "retired"},
+    "assigned": _ASSET_STATUSES - {"issued", "retired"},
+    "in_use": _ASSET_STATUSES - {"issued", "retired"},
+    "maintenance": {"maintenance", "available", "in_vault", "damaged", "lost", "disposed"},
+    "damaged": {"damaged", "maintenance", "disposed"},
+    "lost": {"lost"},
+    "issued": {"issued"},
+    "disposed": {"disposed"},
+    "retired": {"retired"},
+}
+_MOVABLE_ASSET_STATUSES = frozenset({"available", "in_vault"})
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -87,6 +122,21 @@ def _qty(raw) -> Decimal:
         return Decimal(str(raw))
     except (InvalidOperation, ValueError, TypeError):
         raise AppError(422, "INVALID_QUANTITY", f"quantity không hợp lệ: {raw!r}") from None
+
+
+def _format_qty(val) -> str | None:
+    if val is None:
+        return None
+    try:
+        d = Decimal(str(val))
+    except (InvalidOperation, ValueError, TypeError):
+        return str(val)
+    if d == d.to_integral():
+        return str(int(d))
+    s = str(d)
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
 
 
 def _check_if_match(request: Request, version: int) -> None:
@@ -119,6 +169,8 @@ def _req_out(req: InventoryRequest, lines: list | None = None) -> dict:
         body["source_id"] = str(req.source_id)
     if req.dest_id:
         body["dest_id"] = str(req.dest_id)
+    if getattr(req, "return_reason", None):
+        body["return_reason"] = req.return_reason
     if lines is not None:
         body["lines"] = lines
     return body
@@ -133,7 +185,12 @@ async def _load_lines(db: AsyncSession, request_id) -> list:
         )
     ).scalars().all()
     return [
-        {"item_id": str(r.item_id), "quantity": str(r.quantity), "serial": r.serial}
+        {
+            "item_id": str(r.item_id),
+            "quantity": str(r.quantity),
+            "direction": getattr(r, "direction", "increase"),
+            "serial": r.serial,
+        }
         for r in rows
     ]
 
@@ -187,14 +244,90 @@ def _validate_transition(req: InventoryRequest, kind: str, src, dst) -> None:
         raise AppError(422, "DESTINATION_REQUIRED", "transfer yêu cầu cả source_id và dest_id")
 
 
-async def _get_balance(db: AsyncSession, location_id, item_id) -> Balance | None:
-    return (
+async def _get_balance(
+    db: AsyncSession, location_id, item_id, *, for_update: bool = False
+) -> Balance | None:
+    stmt = select(Balance).where(
+        Balance.location_id == location_id, Balance.item_id == item_id
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _lock_balances(
+    db: AsyncSession, balance_keys: set[tuple[object, object]]
+) -> dict[tuple[object, object], Balance]:
+    """Lock every existing balance in one stable order before a posting writes.
+
+    Request approval can touch both sides of a transfer.  Taking every lock in
+    the same `(location_id, item_id)` order prevents a transfer A→B and B→A
+    from deadlocking while preserving a single serialisable balance update.
+    """
+    locked: dict[tuple[object, object], Balance] = {}
+    for location_id, item_id in sorted(balance_keys, key=lambda key: (str(key[0]), str(key[1]))):
+        balance = await _get_balance(db, location_id, item_id, for_update=True)
+        if balance is not None:
+            locked[(location_id, item_id)] = balance
+    return locked
+
+
+def _affected_balance_keys(
+    req: InventoryRequest, lines: list[InventoryRequestLine]
+) -> set[tuple[object, object]]:
+    keys: set[tuple[object, object]] = set()
+    for line in lines:
+        if req.kind == "transfer" and req.source_id is not None and req.dest_id is not None:
+            keys.add((req.source_id, line.item_id))
+            keys.add((req.dest_id, line.item_id))
+        elif req.kind == "issue" and req.source_id is not None:
+            keys.add((req.source_id, line.item_id))
+        else:
+            target = req.dest_id or req.source_id
+            if target is not None:
+                keys.add((target, line.item_id))
+    return keys
+
+
+async def _lock_and_validate_serial_assets(
+    db: AsyncSession, req: InventoryRequest, lines: list[InventoryRequestLine]
+) -> dict[str, Asset]:
+    """Lock serial assets and validate custody before stock is ever posted."""
+    serial_lines = [line for line in lines if line.serial and line.serial.strip()]
+    if not serial_lines:
+        return {}
+
+    serials = [line.serial.strip() for line in serial_lines]
+    if len(serials) != len(set(serials)):
+        raise AppError(422, "DUPLICATE_SERIAL_LINE", "Một serial chỉ được xuất hiện một lần trong phiếu")
+
+    rows = (
         await db.execute(
-            select(Balance).where(
-                Balance.location_id == location_id, Balance.item_id == item_id
-            )
+            select(Asset)
+            .where(Asset.serial.in_(sorted(serials)))
+            .order_by(Asset.serial)
+            .with_for_update()
         )
-    ).scalar_one_or_none()
+    ).scalars().all()
+    assets = {asset.serial: asset for asset in rows}
+
+    for line in serial_lines:
+        serial = line.serial.strip()
+        asset = assets.get(serial)
+        if asset is None:
+            raise AppError(422, "SERIAL_ASSET_NOT_FOUND", f"Không tìm thấy serial {serial!r}")
+        if str(asset.item_id) != str(line.item_id):
+            raise AppError(422, "SERIAL_ITEM_MISMATCH", "Serial không thuộc mặt hàng trên dòng phiếu")
+        if req.kind in ("issue", "transfer"):
+            if str(asset.location_id) != str(req.source_id):
+                raise AppError(422, "SERIAL_SOURCE_MISMATCH", "Serial không nằm tại kho nguồn của phiếu")
+            if asset.status not in _MOVABLE_ASSET_STATUSES:
+                raise AppError(
+                    422,
+                    "SERIAL_STATUS_INVALID",
+                    f"Serial {serial!r} không ở trạng thái có thể xuất/chuyển",
+                )
+    return assets
 
 
 async def _audit(db, actor_id, action: str, req: InventoryRequest, before: dict) -> None:
@@ -227,6 +360,58 @@ async def _outbox(db, event_type: str, req: InventoryRequest, extra: dict) -> No
                 "status": req.status,
                 "version": req.version,
                 **extra,
+            },
+            created_at=_now(),
+        )
+    )
+
+
+async def _audit_stocktake(
+    db: AsyncSession, actor_id, action: str, stocktake: Stocktake, before: dict
+) -> None:
+    db.add(
+        AuditEvent(
+            id=uuid.uuid4(),
+            actor_id=actor_id,
+            action=action,
+            subject=f"inventory_stocktake:{stocktake.id}",
+            before_hash=idempotency.payload_hash(before),
+            after_hash=idempotency.payload_hash(
+                {
+                    "status": stocktake.status,
+                    "adjustment_request_id": str(stocktake.adjustment_request_id)
+                    if stocktake.adjustment_request_id
+                    else None,
+                }
+            ),
+            occurred_at=_now(),
+            metadata_json={
+                "location_id": str(stocktake.location_id),
+                "status": stocktake.status,
+                "adjustment_request_id": str(stocktake.adjustment_request_id)
+                if stocktake.adjustment_request_id
+                else None,
+            },
+        )
+    )
+
+
+async def _outbox_stocktake(
+    db: AsyncSession, event_type: str, stocktake: Stocktake
+) -> None:
+    db.add(
+        OutboxEvent(
+            id=uuid.uuid4(),
+            event_type=event_type,
+            aggregate_id=str(stocktake.id),
+            payload_json={
+                "subject_type": "inventory_stocktake",
+                "subject_id": str(stocktake.id),
+                "location_id": str(stocktake.location_id),
+                "status": stocktake.status,
+                "adjustment_request_id": str(stocktake.adjustment_request_id)
+                if stocktake.adjustment_request_id
+                else None,
             },
             created_at=_now(),
         )
@@ -465,6 +650,8 @@ async def list_balances(
                 "location_id": str(b.location_id),
                 "item_id": str(b.item_id),
                 "quantity": str(b.quantity),
+                "reserved_quantity": str(getattr(b, "reserved_quantity", 0) or 0),
+                "available_quantity": str(b.available_quantity),
                 "version": b.version,
             }
             for b in page
@@ -659,10 +846,24 @@ async def create_request(
             raise AppError(
                 422, "INVALID_QUANTITY", f"quantity phải > 0, nhận {ln.get('quantity')!r}"
             )
+        direction = str(ln.get("direction", "increase")).lower()
+        if direction not in {"increase", "decrease"}:
+            raise AppError(
+                422,
+                "INVALID_ADJUSTMENT_DIRECTION",
+                "direction phải là increase hoặc decrease",
+            )
+        if kind != "adjustment" and direction != "increase":
+            raise AppError(
+                422,
+                "INVALID_ADJUSTMENT_DIRECTION",
+                "Chỉ phiếu adjustment mới có direction=decrease",
+            )
+        serial = str(ln["serial"]).strip() if ln.get("serial") else None
         db.add(
             InventoryRequestLine(
                 id=uuid.uuid4(), request_id=req.id, item_id=item_id,
-                quantity=qty, serial=ln.get("serial"),
+                quantity=qty, direction=direction, serial=serial,
             )
         )
     await _audit(db, user.id, "inventory.request.created", req, {"status": None})
@@ -684,9 +885,67 @@ async def submit_request(
     req = await _load_request(db, request_id)
     if str(req.maker_id) != str(user.id):
         raise AppError(403, "FORBIDDEN", "Chỉ maker mới được submit phiếu của mình")
-    if req.status != "draft":
+    if req.status not in ("draft", "returned"):
         raise AppError(409, "STATE_CONFLICT", f"cannot submit từ {req.status}")
     _check_if_match(request, req.version)
+
+    # Lock the request before reserving stock, so a duplicate concurrent submit
+    # cannot reserve the same draft twice.  The source balances are locked below.
+    if req.kind in ("issue", "transfer") and req.source_id is not None:
+        req = (
+            await db.execute(
+                select(InventoryRequest)
+                .where(InventoryRequest.id == req.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        if req.status not in ("draft", "returned"):
+            raise AppError(409, "STATE_CONFLICT", f"cannot submit từ {req.status}")
+
+    lines = (
+        await db.execute(
+            select(InventoryRequestLine).where(InventoryRequestLine.request_id == req.id)
+        )
+    ).scalars().all()
+
+    # Reserve inventory for issue / transfer
+    if req.kind in ("issue", "transfer") and req.source_id is not None:
+        need: dict = {}
+        for ln in lines:
+            need[ln.item_id] = need.get(ln.item_id, _ZERO) + Decimal(str(ln.quantity))
+
+        # Validate the entire reservation while every source row is locked.
+        # Reserving a subset would let an unfulfillable request enter the
+        # checker queue and would make its later release/approval ambiguous.
+        source_balances = await _lock_balances(
+            db, {(req.source_id, item_id) for item_id in need}
+        )
+        for item_id in sorted(need, key=str):
+            qty = need[item_id]
+            bal = source_balances.get((req.source_id, item_id))
+            available = (
+                max(
+                    _ZERO,
+                    Decimal(str(bal.quantity))
+                    - Decimal(str(getattr(bal, "reserved_quantity", 0) or 0)),
+                )
+                if bal is not None
+                else _ZERO
+            )
+            if available < qty:
+                raise AppError(
+                    409,
+                    "INSUFFICIENT_STOCK",
+                    "không đủ tồn khả dụng tại kho nguồn để đặt trước toàn bộ phiếu",
+                )
+
+        for item_id in sorted(need, key=str):
+            bal = source_balances[(req.source_id, item_id)]
+            bal.reserved_quantity = (
+                Decimal(str(getattr(bal, "reserved_quantity", 0) or 0)) + need[item_id]
+            )
+
     before = {"status": req.status, "version": req.version}
     req.status = "submitted"
     req.version += 1
@@ -723,47 +982,85 @@ async def approve_request(
     cached = _replay(key, {"approve": str(req.id)})
     if cached is not None:
         return cached
-    # Invariant 1 — maker không tự duyệt, kể cả admin.
+
+    # A maker receives the domain-specific A1 result even if their normal
+    # role has no approval capability.  The final state is still rechecked
+    # under the row lock below before any posting can occur.
     if str(req.maker_id) == str(user.id):
         raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
+
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
         raise AppError(403, "FORBIDDEN", "missing capability: inventory:approve_request")
+
+    # Every final decision takes the same row lock.  Reject/return use this
+    # exact pattern, so a losing action observes the final state and cannot
+    # release reservations after an approve has posted movements.
+    req = (
+        await db.execute(
+            select(InventoryRequest)
+            .where(InventoryRequest.id == req.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if req is None:
+        raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
+    # Invariant 1 — maker không tự duyệt, kể cả admin. Recheck after the
+    # final-decision lock to keep the invariant adjacent to the mutation.
+    if str(req.maker_id) == str(user.id):
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
     if req.status != "submitted":
         raise AppError(409, "STATE_CONFLICT", f"cannot approve từ {req.status}")
     _check_if_match(request, req.version)
 
-    # Optimistic lock tại DB: version phải còn đúng — checker thứ hai vào
-    # sau sẽ thấy 0 row -> 409, đúng một post duy nhất (A2).
-    locked = (
-        await db.execute(
-            select(InventoryRequest)
-            .where(InventoryRequest.id == req.id, InventoryRequest.version == req.version)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
-    if locked is None:
-        raise AppError(409, "VERSION_CONFLICT", "Phiếu đã bị thay đổi (A2)")
     lines = (
         await db.execute(
             select(InventoryRequestLine).where(InventoryRequestLine.request_id == req.id)
         )
     ).scalars().all()
 
+    # Validate and lock custody records before creating a single movement.
+    serial_assets = await _lock_and_validate_serial_assets(db, req, lines)
+    balances = await _lock_balances(db, _affected_balance_keys(req, lines))
+
     # I1: kiểm tra đủ tồn TRƯỚC khi ghi movement nào.
     if req.kind in ("issue", "transfer") and req.source_id is not None:
         need: dict = {}
         for ln in lines:
             need[ln.item_id] = need.get(ln.item_id, _ZERO) + Decimal(str(ln.quantity))
-        for item_id, qty in need.items():
-            bal = await _get_balance(db, req.source_id, item_id)
+        for item_id in sorted(need, key=str):
+            qty = need[item_id]
+            bal = balances.get((req.source_id, item_id))
             have = Decimal(str(bal.quantity)) if bal else _ZERO
             if have < qty:
                 raise AppError(409, "INSUFFICIENT_STOCK", "không đủ tồn tại kho nguồn")
+            reserved = (
+                Decimal(str(getattr(bal, "reserved_quantity", 0) or 0))
+                if bal is not None
+                else _ZERO
+            )
+            if reserved < qty:
+                raise AppError(
+                    409,
+                    "RESERVATION_MISMATCH",
+                    "phiếu không còn đủ tồn đặt trước để được phê duyệt",
+                )
+
+    # A negative stocktake adjustment is stored as a positive quantity plus an
+    # explicit direction.  Confirm every reducing line can be posted before
+    # any movement is written, preserving all-or-nothing semantics.
+    if req.kind == "adjustment":
+        for ln in lines:
+            if getattr(ln, "direction", "increase") != "decrease":
+                continue
+            target = req.dest_id or req.source_id
+            bal = balances.get((target, ln.item_id)) if target is not None else None
+            if bal is None or Decimal(str(bal.quantity)) < Decimal(str(ln.quantity)):
+                raise AppError(409, "INSUFFICIENT_STOCK", "điều chỉnh giảm vượt quá tồn kho")
 
     amount = sum(
-        Decimal(str(line.get("quantity", 0) if isinstance(line, dict) else getattr(line, "quantity", 0)))
-        for line in await _load_lines(db, req.id)
+        Decimal(str(line.quantity)) for line in lines
     )
     verify_supervisor_pin(
         payload.supervisor_pin if payload else None,
@@ -792,14 +1089,25 @@ async def approve_request(
                     quantity_signed=qty, posted_at=now,
                 )
             )
-            src = await _get_balance(db, req.source_id, ln.item_id)
+            src = balances.get((req.source_id, ln.item_id))
             if src:
                 src.quantity = Decimal(str(src.quantity)) - qty
-            dst = await _get_balance(db, req.dest_id, ln.item_id)
+                src.reserved_quantity = (
+                    Decimal(str(getattr(src, "reserved_quantity", 0) or 0)) - qty
+                )
+            dst = balances.get((req.dest_id, ln.item_id))
             if dst:
                 dst.quantity = Decimal(str(dst.quantity)) + qty
             else:
-                db.add(Balance(location_id=req.dest_id, item_id=ln.item_id, quantity=qty, version=1))
+                dst = Balance(
+                    location_id=req.dest_id,
+                    item_id=ln.item_id,
+                    quantity=qty,
+                    reserved_quantity=Decimal(0),
+                    version=1,
+                )
+                db.add(dst)
+                balances[(req.dest_id, ln.item_id)] = dst
         elif req.kind == "issue" and req.source_id is not None:
             db.add(
                 Movement(
@@ -808,25 +1116,74 @@ async def approve_request(
                     quantity_signed=-qty, posted_at=now,
                 )
             )
-            src = await _get_balance(db, req.source_id, ln.item_id)
+            src = balances.get((req.source_id, ln.item_id))
             if src:
                 src.quantity = Decimal(str(src.quantity)) - qty
+                src.reserved_quantity = (
+                    Decimal(str(getattr(src, "reserved_quantity", 0) or 0)) - qty
+                )
         else:
             target = req.dest_id or req.source_id
             if target is None:
                 continue
+            direction = getattr(ln, "direction", "increase")
+            quantity_signed = -qty if req.kind == "adjustment" and direction == "decrease" else qty
             db.add(
                 Movement(
                     id=uuid.uuid4(), request_id=req.id, line_id=ln.id,
                     item_id=ln.item_id, location_id=target,
-                    quantity_signed=qty, posted_at=now,
+                    quantity_signed=quantity_signed, posted_at=now,
                 )
             )
-            bal = await _get_balance(db, target, ln.item_id)
+            bal = balances.get((target, ln.item_id))
             if bal:
-                bal.quantity = Decimal(str(bal.quantity)) + qty
+                bal.quantity = Decimal(str(bal.quantity)) + quantity_signed
             else:
-                db.add(Balance(location_id=target, item_id=ln.item_id, quantity=qty, version=1))
+                bal = Balance(
+                    location_id=target,
+                    item_id=ln.item_id,
+                    quantity=quantity_signed,
+                    reserved_quantity=Decimal(0),
+                    version=1,
+                )
+                db.add(bal)
+                balances[(target, ln.item_id)] = bal
+
+        if ln.serial:
+            asset = serial_assets[ln.serial.strip()]
+            status_before = asset.status
+            if req.kind == "transfer" and req.dest_id:
+                asset.location_id = req.dest_id
+                db.add(
+                    AssetLog(
+                        id=uuid.uuid4(),
+                        asset_id=asset.id,
+                        serial=asset.serial,
+                        from_location_id=req.source_id,
+                        to_location_id=req.dest_id,
+                        status_before=status_before,
+                        status_after=asset.status,
+                        request_id=req.id,
+                        actor_id=user.id,
+                        notes=f"Chuyển kho theo phiếu {req.id}",
+                    )
+                )
+            elif req.kind == "issue":
+                asset.status = "issued"
+                db.add(
+                    AssetLog(
+                        id=uuid.uuid4(),
+                        asset_id=asset.id,
+                        serial=asset.serial,
+                        from_location_id=req.source_id,
+                        to_location_id=None,
+                        status_before=status_before,
+                        status_after="issued",
+                        request_id=req.id,
+                        actor_id=user.id,
+                        notes=f"Xuất kho theo phiếu {req.id}",
+                    )
+                )
 
     before = {"status": "submitted", "version": req.version}
     req.status = "posted"
@@ -864,20 +1221,48 @@ async def reject_request(
     db: AsyncSession = Depends(get_db),
 ):
     req = await _load_request(db, request_id)
-    if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
         raise AppError(403, "FORBIDDEN", "missing capability: inventory:approve_request")
+    req = (
+        await db.execute(
+            select(InventoryRequest)
+            .where(InventoryRequest.id == req.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if req is None:
+        raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
+    if str(req.maker_id) == str(user.id):
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
     if req.status != "submitted":
         raise AppError(409, "STATE_CONFLICT", f"cannot reject từ {req.status}")
     _check_if_match(request, req.version)
+
+    lines = (
+        await db.execute(
+            select(InventoryRequestLine).where(InventoryRequestLine.request_id == req.id)
+        )
+    ).scalars().all()
+    balances = await _lock_balances(db, _affected_balance_keys(req, lines))
+
     before = {"status": req.status, "version": req.version}
     if payload and payload.get("reason"):
         req.reason = str(payload["reason"])
     req.status = "rejected"
     req.version += 1
     req.approver_id = user.id
+
+    if req.kind in ("issue", "transfer") and req.source_id is not None:
+        for ln in lines:
+            src = balances.get((req.source_id, ln.item_id))
+            if src:
+                src.reserved_quantity = max(
+                    Decimal(0),
+                    Decimal(str(getattr(src, "reserved_quantity", 0) or 0)) - Decimal(str(ln.quantity))
+                )
+
     await _audit(db, user.id, "inventory.request.rejected", req, before)
     await _outbox(db, "inventory.request.rejected", req, {})
     await db.commit()
@@ -889,6 +1274,75 @@ async def reject_request(
         status="rejected",
         message=f"Phiếu kho {req.kind} ({req.id}) đã bị từ chối",
         meta={"sub_kind": req.kind, "approver_id": str(user.id), "reason": req.reason},
+    )
+    return _req_out(req)
+
+
+@router.post("/inventory/requests/{request_id}/return")
+async def return_request(
+    request_id: str,
+    request: Request,
+    payload: dict | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    req = await _load_request(db, request_id)
+    caps = await get_user_capabilities(db, user.id)
+    if "inventory:approve_request" not in caps:
+        raise AppError(403, "FORBIDDEN", "missing capability: inventory:approve_request")
+    req = (
+        await db.execute(
+            select(InventoryRequest)
+            .where(InventoryRequest.id == req.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if req is None:
+        raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
+    if str(req.maker_id) == str(user.id):
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự trả về phiếu của mình (A1)")
+    if req.status != "submitted":
+        raise AppError(409, "STATE_CONFLICT", f"cannot return từ {req.status}")
+    _check_if_match(request, req.version)
+
+    reason = str(payload.get("reason", "")).strip() if payload else ""
+    if len(reason) < 3:
+        raise AppError(422, "MISSING_REASON", "Lý do trả về yêu cầu chỉnh sửa phải có ít nhất 3 ký tự")
+
+    lines = (
+        await db.execute(
+            select(InventoryRequestLine).where(InventoryRequestLine.request_id == req.id)
+        )
+    ).scalars().all()
+    balances = await _lock_balances(db, _affected_balance_keys(req, lines))
+
+    before = {"status": req.status, "version": req.version}
+    req.status = "returned"
+    req.return_reason = reason
+    req.version += 1
+    req.approver_id = user.id
+
+    if req.kind in ("issue", "transfer") and req.source_id is not None:
+        for ln in lines:
+            src = balances.get((req.source_id, ln.item_id))
+            if src:
+                src.reserved_quantity = max(
+                    Decimal(0),
+                    Decimal(str(getattr(src, "reserved_quantity", 0) or 0)) - Decimal(str(ln.quantity))
+                )
+
+    await _audit(db, user.id, "inventory.request.returned", req, before)
+    await _outbox(db, "inventory.request.returned", req, {"return_reason": reason})
+    await db.commit()
+    await db.refresh(req)
+    await broadcast_approval_event(
+        action="returned",
+        request_id=str(req.id),
+        kind="inventory",
+        status="returned",
+        message=f"Phiếu kho {req.kind} ({req.id}) đã được trả về để chỉnh sửa",
+        meta={"sub_kind": req.kind, "approver_id": str(user.id), "reason": reason},
     )
     return _req_out(req)
 
@@ -907,6 +1361,9 @@ async def create_asset(
     serial = str(payload.get("serial", "")).strip()
     if not serial:
         raise AppError(422, "SERIAL_REQUIRED", "serial là bắt buộc")
+    status = str(payload.get("status", "available")).strip().lower()
+    if status not in _ASSET_STATUSES:
+        raise AppError(422, "INVALID_ASSET_STATUS", "Trạng thái ấn chỉ không hợp lệ")
     cached = _replay(key, payload)
     if cached is not None:
         return cached
@@ -923,9 +1380,21 @@ async def create_asset(
         raise AppError(409, "DUPLICATE_SERIAL", f"serial {serial!r} đã tồn tại")
     asset = Asset(
         id=uuid.uuid4(), item_id=item_id, serial=serial,
-        location_id=location_id, status=str(payload.get("status", "available")),
+        location_id=location_id, status=status,
     )
     db.add(asset)
+    log = AssetLog(
+        id=uuid.uuid4(),
+        asset_id=asset.id,
+        serial=asset.serial,
+        from_location_id=None,
+        to_location_id=location_id,
+        status_before=None,
+        status_after=asset.status,
+        actor_id=user.id,
+        notes="Khởi tạo số serial ấn chỉ vào hệ thống",
+    )
+    db.add(log)
     try:
         await db.commit()
         await db.refresh(asset)
@@ -941,4 +1410,685 @@ async def create_asset(
         "status": asset.status,
     }
     idempotency.remember(db, key, idempotency.payload_hash(payload), 201, body)
+    return body
+
+
+@router.get("/inventory/assets/{asset_id}/history")
+async def get_asset_history(
+    asset_id: str,
+    current_user=Depends(require_any_capability(*_VIEW_ASSETS)),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        aid = uuid.UUID(asset_id)
+        asset = (await db.execute(select(Asset).where(Asset.id == aid))).scalars().first()
+    except (ValueError, AttributeError):
+        asset = (await db.execute(select(Asset).where(Asset.serial == str(asset_id)))).scalars().first()
+    if not asset:
+        raise AppError(404, "ASSET_NOT_FOUND", "Không tìm thấy ấn chỉ")
+    aid = asset.id
+
+    logs = (
+        await db.execute(
+            select(AssetLog)
+            .where(AssetLog.asset_id == aid)
+            .order_by(AssetLog.created_at.desc())
+        )
+    ).scalars().all()
+
+    locations = {
+        str(loc.id): loc.name
+        for loc in (await db.execute(select(Location))).scalars().all()
+    }
+    users = {
+        str(u.id): (u.display_name_demo or u.username)
+        for u in (await db.execute(select(User))).scalars().all()
+    }
+
+    return {
+        "asset": {
+            "id": str(asset.id),
+            "serial": asset.serial,
+            "status": asset.status,
+            "location_id": str(asset.location_id),
+            "location_name": locations.get(str(asset.location_id), ""),
+            "assignee": asset.assignee_demo,
+        },
+        "history": [
+            {
+                "id": str(log.id),
+                "serial": log.serial,
+                "from_location_id": str(log.from_location_id) if log.from_location_id else None,
+                "from_location_name": locations.get(str(log.from_location_id)) if log.from_location_id else None,
+                "to_location_id": str(log.to_location_id) if log.to_location_id else None,
+                "to_location_name": locations.get(str(log.to_location_id)) if log.to_location_id else None,
+                "from_assignee": log.from_assignee,
+                "to_assignee": log.to_assignee,
+                "status_before": log.status_before,
+                "status_after": log.status_after,
+                "actor_id": str(log.actor_id) if log.actor_id else None,
+                "actor_name": users.get(str(log.actor_id)) if log.actor_id else None,
+                "request_id": str(log.request_id) if log.request_id else None,
+                "notes": log.notes,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }
+
+
+@router.post("/inventory/assets/{asset_id}/handover")
+async def handover_asset(
+    asset_id: str,
+    payload: dict,
+    request: Request,
+    user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    key = _require_key(request)
+    operation = {"asset_id": asset_id, "payload": payload}
+    cached = _replay(key, operation)
+    if cached is not None:
+        return cached
+
+    try:
+        aid = uuid.UUID(asset_id)
+        asset_stmt = select(Asset).where(Asset.id == aid)
+    except (ValueError, AttributeError):
+        asset_stmt = select(Asset).where(Asset.serial == str(asset_id).strip())
+    asset = (await db.execute(asset_stmt.with_for_update())).scalars().first()
+    if not asset:
+        raise AppError(404, "ASSET_NOT_FOUND", "Không tìm thấy ấn chỉ")
+
+    to_location_id = (
+        _uuid(payload["to_location_id"], "to_location_id")
+        if payload.get("to_location_id")
+        else None
+    )
+    if to_location_id is not None:
+        destination = (
+            await db.execute(select(Location).where(Location.id == to_location_id))
+        ).scalar_one_or_none()
+        if destination is None:
+            raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho nhận bàn giao")
+        if not destination.active:
+            raise AppError(409, "LOCATION_INACTIVE", "Không thể bàn giao đến kho đã ngừng hoạt động")
+
+    raw_assignee = payload.get("to_assignee")
+    if raw_assignee is not None and not isinstance(raw_assignee, str):
+        raise AppError(422, "INVALID_ASSIGNEE", "to_assignee phải là chuỗi")
+    to_assignee = raw_assignee.strip() if isinstance(raw_assignee, str) else None
+    if to_assignee is not None and len(to_assignee) > 128:
+        raise AppError(422, "INVALID_ASSIGNEE", "to_assignee không được quá 128 ký tự")
+
+    new_status = str(payload.get("status") or asset.status).strip().lower()
+    if new_status not in _ASSET_STATUSES:
+        raise AppError(422, "INVALID_ASSET_STATUS", "Trạng thái ấn chỉ không hợp lệ")
+    allowed = _ASSET_STATUS_TRANSITIONS.get(asset.status, set())
+    if new_status not in allowed:
+        raise AppError(
+            409,
+            "INVALID_ASSET_TRANSITION",
+            f"Không thể chuyển ấn chỉ từ {asset.status} sang {new_status}",
+        )
+
+    raw_notes = payload.get("notes")
+    if raw_notes is not None and not isinstance(raw_notes, str):
+        raise AppError(422, "INVALID_NOTES", "notes phải là chuỗi")
+    notes = raw_notes.strip() if isinstance(raw_notes, str) else "Bàn giao ấn chỉ nội bộ"
+    if len(notes) > 1024:
+        raise AppError(422, "INVALID_NOTES", "notes không được quá 1024 ký tự")
+
+    status_before = asset.status
+    from_loc = asset.location_id
+    from_assignee = asset.assignee_demo
+
+    if to_location_id:
+        asset.location_id = to_location_id
+    if to_assignee is not None:
+        asset.assignee_demo = to_assignee
+    asset.status = new_status
+
+    log = AssetLog(
+        id=uuid.uuid4(),
+        asset_id=asset.id,
+        serial=asset.serial,
+        from_location_id=from_loc,
+        to_location_id=asset.location_id,
+        from_assignee=from_assignee,
+        to_assignee=asset.assignee_demo,
+        status_before=status_before,
+        status_after=new_status,
+        actor_id=user.id,
+        notes=notes,
+    )
+    db.add(log)
+    await db.commit()
+    await db.refresh(asset)
+    body = {
+        "id": str(asset.id),
+        "serial": asset.serial,
+        "status": asset.status,
+        "location_id": str(asset.location_id),
+        "assignee": asset.assignee_demo,
+        "log_id": str(log.id),
+    }
+    idempotency.remember(db, key, idempotency.payload_hash(operation), 200, body)
+    return body
+
+
+# --------------------------------------------------------------------------
+# Stock Levels & Low Stock Alerts
+# --------------------------------------------------------------------------
+@router.put("/inventory/stock-levels")
+async def put_stock_level(
+    payload: dict,
+    request: Request,
+    user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Thiết lập định mức tồn kho (min_qty, max_qty) theo (location_id, item_id)."""
+    key = request.headers.get("Idempotency-Key")
+    if key:
+        cached = _replay(key, payload)
+        if cached is not None:
+            return cached
+
+    location_id = _uuid(payload.get("location_id"), "location_id")
+    item_id = _uuid(payload.get("item_id"), "item_id")
+
+    if "min_qty" not in payload:
+        raise AppError(422, "MISSING_MIN_QTY", "min_qty là bắt buộc")
+    min_qty = _qty(payload["min_qty"])
+    if min_qty < Decimal("0"):
+        raise AppError(422, "INVALID_MIN_QTY", "min_qty không được âm")
+
+    max_qty = None
+    if payload.get("max_qty") is not None:
+        max_qty = _qty(payload["max_qty"])
+        if max_qty < min_qty:
+            raise AppError(422, "INVALID_STOCK_LEVEL", "max_qty phải lớn hơn hoặc bằng min_qty")
+
+    loc = (await db.execute(select(Location).where(Location.id == location_id))).scalars().first()
+    if not loc:
+        raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho")
+    it = (await db.execute(select(Item).where(Item.id == item_id))).scalars().first()
+    if not it:
+        raise AppError(404, "ITEM_NOT_FOUND", "Không tìm thấy mặt hàng")
+
+    existing = (
+        await db.execute(
+            select(StockLevel).where(
+                StockLevel.location_id == location_id,
+                StockLevel.item_id == item_id,
+            )
+        )
+    ).scalars().first()
+
+    if existing:
+        existing.min_qty = min_qty
+        existing.max_qty = max_qty
+        level = existing
+    else:
+        level = StockLevel(
+            id=uuid.uuid4(),
+            location_id=location_id,
+            item_id=item_id,
+            min_qty=min_qty,
+            max_qty=max_qty,
+        )
+        db.add(level)
+
+    await db.commit()
+    await db.refresh(level)
+
+    body = {
+        "id": str(level.id),
+        "location_id": str(level.location_id),
+        "item_id": str(level.item_id),
+        "min_qty": _format_qty(level.min_qty),
+        "max_qty": _format_qty(level.max_qty) if level.max_qty is not None else None,
+    }
+    if key:
+        idempotency.remember(db, key, idempotency.payload_hash(payload), 200, body)
+    return body
+
+
+@router.get("/inventory/stock-levels")
+async def list_stock_levels(
+    location_id: str | None = None,
+    item_id: str | None = None,
+    user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lấy danh sách các định mức tồn kho đã cấu hình."""
+    stmt = select(StockLevel)
+    if location_id:
+        stmt = stmt.where(StockLevel.location_id == _uuid(location_id, "location_id"))
+    if item_id:
+        stmt = stmt.where(StockLevel.item_id == _uuid(item_id, "item_id"))
+    levels = (await db.execute(stmt)).scalars().all()
+    return {
+        "stock_levels": [
+            {
+                "id": str(level.id),
+                "location_id": str(level.location_id),
+                "item_id": str(level.item_id),
+                "min_qty": _format_qty(level.min_qty),
+                "max_qty": _format_qty(level.max_qty) if level.max_qty is not None else None,
+            }
+            for level in levels
+        ]
+    }
+
+
+@router.get("/inventory/low-stock")
+async def list_low_stock(
+    location_id: str | None = None,
+    user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    """So sánh số dư thực tế với định mức min_qty và trả về danh sách cảnh báo thiếu."""
+    stmt = select(StockLevel)
+    if location_id:
+        stmt = stmt.where(StockLevel.location_id == _uuid(location_id, "location_id"))
+    levels = (await db.execute(stmt)).scalars().all()
+
+    items_out = []
+    for level in levels:
+        bal = (
+            await db.execute(
+                select(Balance).where(
+                    Balance.location_id == level.location_id,
+                    Balance.item_id == level.item_id,
+                )
+            )
+        ).scalars().first()
+        current_qty = Decimal(str(bal.quantity)) if bal else Decimal("0")
+
+        if current_qty < Decimal(str(level.min_qty)):
+            loc = (await db.execute(select(Location).where(Location.id == level.location_id))).scalars().first()
+            it = (await db.execute(select(Item).where(Item.id == level.item_id))).scalars().first()
+            deficit = Decimal(str(level.min_qty)) - current_qty
+            status = "empty" if current_qty <= Decimal("0") else "low"
+            unit = it.unit if it else "đơn vị"
+            deficit_str = _format_qty(deficit)
+            suggested_action = (
+                f"Đề xuất lập phiếu nhập kho hoặc chuyển kho bổ sung tối thiểu {deficit_str} {unit}"
+            )
+            items_out.append({
+                "location_id": str(level.location_id),
+                "location_code": loc.code if loc else "N/A",
+                "location_name": loc.name if loc else "N/A",
+                "item_id": str(level.item_id),
+                "sku": it.sku if it else "N/A",
+                "item_name": it.name if it else "N/A",
+                "unit": unit,
+                "current_qty": _format_qty(current_qty),
+                "min_qty": _format_qty(level.min_qty),
+                "max_qty": _format_qty(level.max_qty) if level.max_qty is not None else None,
+                "status": status,
+                "deficit": deficit_str,
+                "suggested_action": suggested_action,
+            })
+
+    return {"items": items_out}
+
+
+# --------------------------------------------------------------------------
+# Stocktakes (Kiểm kê định kỳ & đối soát chênh lệch)
+# --------------------------------------------------------------------------
+@router.post("/inventory/stocktakes", status_code=201)
+async def create_stocktake(
+    payload: dict,
+    request: Request,
+    user=Depends(require_any_capability("inventory:create_request", "inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Tạo đợt kiểm kê kho mới (trạng thái ban đầu = open)."""
+    key = request.headers.get("Idempotency-Key")
+    if key:
+        cached = _replay(key, payload)
+        if cached is not None:
+            return cached
+
+    location_id = _uuid(payload.get("location_id"), "location_id")
+    loc = (await db.execute(select(Location).where(Location.id == location_id))).scalars().first()
+    if not loc:
+        raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho kiểm kê")
+
+    note = str(payload.get("note") or payload.get("title") or "Kiểm kê định kỳ").strip()
+    st = Stocktake(
+        id=uuid.uuid4(),
+        location_id=location_id,
+        status="open",
+        maker_id=user.id,
+        note=note,
+    )
+    db.add(st)
+    await db.commit()
+    await db.refresh(st)
+
+    body = {
+        "id": str(st.id),
+        "location_id": str(st.location_id),
+        "status": st.status,
+        "note": st.note,
+        "maker_id": str(st.maker_id),
+        "created_at": st.created_at.isoformat() if st.created_at else None,
+    }
+    if key:
+        idempotency.remember(db, key, idempotency.payload_hash(payload), 201, body)
+    return body
+
+
+@router.get("/inventory/stocktakes")
+async def list_stocktakes(
+    location_id: str | None = None,
+    status: str | None = None,
+    user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Danh sách các đợt kiểm kê."""
+    stmt = select(Stocktake).order_by(Stocktake.created_at.desc())
+    if location_id:
+        stmt = stmt.where(Stocktake.location_id == _uuid(location_id, "location_id"))
+    if status:
+        stmt = stmt.where(Stocktake.status == status)
+    rows = (await db.execute(stmt)).scalars().all()
+    return {
+        "stocktakes": [
+            {
+                "id": str(r.id),
+                "location_id": str(r.location_id),
+                "status": r.status,
+                "note": r.note,
+                "maker_id": str(r.maker_id),
+                "approver_id": str(r.approver_id) if r.approver_id else None,
+                "adjustment_request_id": str(r.adjustment_request_id) if r.adjustment_request_id else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/inventory/stocktakes/{stocktake_id}")
+async def get_stocktake(
+    stocktake_id: str,
+    user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Chi tiết đợt kiểm kê kèm các dòng đếm thực tế và chênh lệch."""
+    sid = _uuid(stocktake_id, "stocktake_id")
+    st = (await db.execute(select(Stocktake).where(Stocktake.id == sid))).scalars().first()
+    if not st:
+        raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    lines = (
+        await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == sid))
+    ).scalars().all()
+    return {
+        "id": str(st.id),
+        "location_id": str(st.location_id),
+        "status": st.status,
+        "note": st.note,
+        "maker_id": str(st.maker_id),
+        "approver_id": str(st.approver_id) if st.approver_id else None,
+        "adjustment_request_id": str(st.adjustment_request_id) if st.adjustment_request_id else None,
+        "created_at": st.created_at.isoformat() if st.created_at else None,
+        "completed_at": st.completed_at.isoformat() if st.completed_at else None,
+        "lines": [
+            {
+                "id": str(line.id),
+                "item_id": str(line.item_id),
+                "book_qty": _format_qty(line.book_qty),
+                "counted_qty": _format_qty(line.counted_qty),
+                "variance": _format_qty(line.variance),
+                "reason": line.reason,
+            }
+            for line in lines
+        ],
+    }
+
+
+@router.put("/inventory/stocktakes/{stocktake_id}/lines")
+async def update_stocktake_lines(
+    stocktake_id: str,
+    payload: dict,
+    request: Request,
+    user=Depends(require_any_capability("inventory:create_request", "inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cập nhật các dòng kiểm đếm thực tế, tự tính chênh lệch so với sổ cái."""
+    sid = _uuid(stocktake_id, "stocktake_id")
+    st = (
+        await db.execute(
+            select(Stocktake)
+            .where(Stocktake.id == sid)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if not st:
+        raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    if st.status != "open":
+        raise AppError(409, "STATE_CONFLICT", f"Không thể sửa dòng khi đợt kiểm kê ở trạng thái {st.status}")
+    if str(st.maker_id) != str(user.id):
+        raise AppError(403, "FORBIDDEN", "Chỉ maker mới được cập nhật dòng kiểm kê của mình")
+
+    raw_lines = payload.get("lines", [])
+    for row in raw_lines:
+        item_id = _uuid(row.get("item_id"), "item_id")
+        counted_qty = _qty(row.get("counted_qty", 0))
+
+        # Đọc tồn sổ sách tại thời điểm kiểm kê
+        bal = (
+            await db.execute(
+                select(Balance).where(
+                    Balance.location_id == st.location_id,
+                    Balance.item_id == item_id,
+                )
+            )
+        ).scalars().first()
+        book_qty = Decimal(str(bal.quantity)) if bal else Decimal("0")
+        variance = counted_qty - book_qty
+
+        existing_line = (
+            await db.execute(
+                select(StocktakeLine).where(
+                    StocktakeLine.stocktake_id == sid,
+                    StocktakeLine.item_id == item_id,
+                )
+            )
+        ).scalars().first()
+
+        if existing_line:
+            existing_line.book_qty = book_qty
+            existing_line.counted_qty = counted_qty
+            existing_line.variance = variance
+            if "reason" in row:
+                existing_line.reason = str(row["reason"])
+        else:
+            db.add(
+                StocktakeLine(
+                    id=uuid.uuid4(),
+                    stocktake_id=sid,
+                    item_id=item_id,
+                    book_qty=book_qty,
+                    counted_qty=counted_qty,
+                    variance=variance,
+                    reason=str(row.get("reason", "")),
+                )
+            )
+
+    await db.commit()
+    lines = (
+        await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == sid))
+    ).scalars().all()
+    return {
+        "id": str(st.id),
+        "location_id": str(st.location_id),
+        "status": st.status,
+        "note": st.note,
+        "lines": [
+            {
+                "id": str(line.id),
+                "item_id": str(line.item_id),
+                "book_qty": str(line.book_qty),
+                "counted_qty": str(line.counted_qty),
+                "variance": str(line.variance),
+                "reason": line.reason,
+            }
+            for line in lines
+        ],
+    }
+
+
+@router.post("/inventory/stocktakes/{stocktake_id}/submit")
+async def submit_stocktake(
+    stocktake_id: str,
+    request: Request,
+    user=Depends(require_any_capability("inventory:create_request", "inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Đệ trình đợt kiểm kê sang trạng thái submitted chờ phê duyệt."""
+    sid = _uuid(stocktake_id, "stocktake_id")
+    st = (
+        await db.execute(
+            select(Stocktake)
+            .where(Stocktake.id == sid)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if not st:
+        raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    if st.status != "open":
+        raise AppError(409, "STATE_CONFLICT", f"Không thể submit từ trạng thái {st.status}")
+    if str(st.maker_id) != str(user.id):
+        raise AppError(403, "FORBIDDEN", "Chỉ maker mới được submit đợt kiểm kê của mình")
+
+    st.status = "submitted"
+    await db.commit()
+    await db.refresh(st)
+    return {
+        "id": str(st.id),
+        "location_id": str(st.location_id),
+        "status": st.status,
+        "note": st.note,
+    }
+
+
+@router.post("/inventory/stocktakes/{stocktake_id}/approve")
+async def approve_stocktake(
+    stocktake_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Phê duyệt đợt kiểm kê (Maker != Checker). Tự sinh phiếu adjustment nếu có chênh lệch."""
+    sid = _uuid(stocktake_id, "stocktake_id")
+    key = _require_key(request)
+    operation = {"approve_stocktake": str(sid)}
+    cached = _replay(key, operation)
+    if cached is not None:
+        return cached
+
+    caps = await get_user_capabilities(db, user.id)
+    if "inventory:approve_request" not in caps:
+        raise AppError(403, "FORBIDDEN", "Thiếu quyền inventory:approve_request để phê duyệt kiểm kê")
+
+    # Single-winner state transition: the second checker waits and then sees
+    # `closed`, so it cannot emit a second adjustment draft.
+    st = (
+        await db.execute(select(Stocktake).where(Stocktake.id == sid).with_for_update())
+    ).scalar_one_or_none()
+    if not st:
+        raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    cached = _replay(key, operation)
+    if cached is not None:
+        return cached
+
+    # Invariant A1: Maker không tự duyệt đợt kiểm kê của chính mình
+    if str(st.maker_id) == str(user.id):
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Maker không được tự duyệt đợt kiểm kê của mình (A1)")
+
+    if st.status != "submitted":
+        raise AppError(409, "STATE_CONFLICT", f"Không thể approve từ trạng thái {st.status}")
+
+    lines = (
+        await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == sid))
+    ).scalars().all()
+
+    variance_lines = [line for line in lines if Decimal(str(line.variance)) != Decimal("0")]
+    adj_id: str | None = None
+
+    # Nếu có chênh lệch, tự động sinh phiếu điều chỉnh kho (kind=adjustment)
+    if variance_lines:
+        adj_req = InventoryRequest(
+            id=uuid.uuid4(),
+            kind="adjustment",
+            status="submitted",
+            maker_id=st.maker_id,
+            source_id=st.location_id,
+            dest_id=st.location_id,
+            reason=f"Điều chỉnh tự động từ đợt kiểm kê {str(st.id)[:8]}: {st.note or ''}",
+            created_by=st.maker_id,
+            version=1,
+            submitted_at=_now(),
+        )
+        db.add(adj_req)
+
+        for vl in variance_lines:
+            db.add(
+                InventoryRequestLine(
+                    id=uuid.uuid4(),
+                    request_id=adj_req.id,
+                    item_id=vl.item_id,
+                    # A shortage has a negative variance and must reduce the
+                    # ledger when the separately approved adjustment is posted.
+                    # The quantity remains positive to satisfy qty_positive;
+                    # direction is the explicit accounting effect.
+                    quantity=abs(Decimal(str(vl.variance))),
+                    direction="increase" if Decimal(str(vl.variance)) > _ZERO else "decrease",
+                )
+            )
+
+        st.adjustment_request_id = adj_req.id
+        adj_id = str(adj_req.id)
+
+    st.status = "closed"
+    st.approver_id = user.id
+    st.completed_at = _now()
+    db.add(
+        ApprovalDecision(
+            id=uuid.uuid4(),
+            subject_type="inventory_stocktake",
+            subject_id=st.id,
+            actor_id=user.id,
+            decision="approved",
+        )
+    )
+    await _audit_stocktake(
+        db,
+        user.id,
+        "inventory.stocktake.approved",
+        st,
+        {"status": "submitted", "adjustment_request_id": None},
+    )
+    await _outbox_stocktake(db, "inventory.stocktake.approved", st)
+
+    await db.commit()
+    await db.refresh(st)
+
+    body = {
+        "id": str(st.id),
+        "status": "closed",
+        "location_id": str(st.location_id),
+        "maker_id": str(st.maker_id),
+        "approver_id": str(st.approver_id),
+        "adjustment_request_id": adj_id,
+    }
+    idempotency.remember(db, key, idempotency.payload_hash(operation), 200, body)
     return body

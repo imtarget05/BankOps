@@ -17,11 +17,13 @@ from app.api.middleware.correlation import CorrelationIdMiddleware
 from app.api.openapi import custom_openapi
 from app.api.routes import (
     activity,
+    admin_users,
     ai,
     approvals,
     auth,
     auth_google,
     cash_sim,
+    etl,
     events,
     health,
     integrations,
@@ -176,12 +178,14 @@ def _mount_routes(target: FastAPI | APIRouter, *, include_in_schema: bool = True
     target.include_router(health.router, prefix="/health", tags=["health"], include_in_schema=include_in_schema)
     target.include_router(auth.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)
     target.include_router(auth_google.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)
+    target.include_router(admin_users.router, tags=["admin"], include_in_schema=include_in_schema)
     target.include_router(inventory.router, tags=["inventory"], include_in_schema=include_in_schema)
     target.include_router(cash_sim.router, tags=["cash-sim"], include_in_schema=include_in_schema)
     target.include_router(approvals.router, prefix="/approvals", tags=["approvals"], include_in_schema=include_in_schema)
     target.include_router(activity.router, tags=["activity"], include_in_schema=include_in_schema)
     target.include_router(events.router, tags=["events"], include_in_schema=include_in_schema)
     target.include_router(reports.router, prefix="/reports", tags=["reports"], include_in_schema=include_in_schema)
+    target.include_router(etl.router, tags=["etl"], include_in_schema=include_in_schema)
     target.include_router(integrations.router, tags=["integrations"], include_in_schema=include_in_schema)
     target.include_router(reconciliations.router, tags=["reconciliations"], include_in_schema=include_in_schema)
     # docs/06:9 khai báo `GET /me` (không qua /auth) — alias tới cùng handler.

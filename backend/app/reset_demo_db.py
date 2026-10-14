@@ -1,6 +1,7 @@
 """Script reset & re-seed dữ liệu mẫu sạch và chuyên nghiệp cho hệ thống BankOps."""
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 
@@ -14,6 +15,13 @@ from app.models.cash_sim import (
     CashJournal,
     CashRequest,
 )
+from app.models.etl import (
+    EtlConnection,
+    EtlMappingVersion,
+    EtlPipeline,
+    EtlRun,
+    EtlRunRow,
+)
 from app.models.iam import User
 from app.models.integration import (
     IntegrationConnection,
@@ -22,14 +30,18 @@ from app.models.integration import (
 )
 from app.models.inventory import (
     Asset,
+    AssetLog,
     Balance,
     InventoryRequest,
     InventoryRequestLine,
     Item,
     Location,
     Movement,
+    Stocktake,
+    StocktakeLine,
 )
 from app.models.reconciliation import ReconciliationException, ReconciliationRun
+from app.models.stock_level import StockLevel
 from app.seed import seed_demo
 
 
@@ -42,6 +54,10 @@ async def reset_demo_database():
         await db.execute(delete(Movement))
         await db.execute(delete(InventoryRequestLine))
         await db.execute(delete(InventoryRequest))
+        await db.execute(delete(StocktakeLine))
+        await db.execute(delete(Stocktake))
+        await db.execute(delete(StockLevel))
+        await db.execute(delete(AssetLog))
         await db.execute(delete(Asset))
         await db.execute(delete(Balance))
 
@@ -56,6 +72,12 @@ async def reset_demo_database():
         await db.execute(delete(IntegrationStagingRow))
         await db.execute(delete(IntegrationRun))
         await db.execute(delete(IntegrationConnection))
+
+        await db.execute(delete(EtlRunRow))
+        await db.execute(delete(EtlRun))
+        await db.execute(delete(EtlMappingVersion))
+        await db.execute(delete(EtlPipeline))
+        await db.execute(delete(EtlConnection))
 
         await db.execute(delete(AuditEvent))
         await db.execute(delete(OutboxEvent))
@@ -115,6 +137,52 @@ async def reset_demo_database():
             db.add_all(conns)
             await db.commit()
             print("Đã nạp 3 kết nối hệ thống ngân hàng chuẩn.")
+
+        # Seed sample ETL Connection & Pipeline
+        existing_etl_conn = (await db.execute(select(EtlConnection))).scalars().first()
+        if not existing_etl_conn:
+            loc = (await db.execute(select(Location))).scalars().first()
+            admin_user = (await db.execute(select(User).where(User.username == "demo_admin"))).scalars().first()
+            etl_conn = EtlConnection(
+                id=uuid.uuid4(),
+                type="csv",
+                name="Kết nối Tệp CSV/Excel Chi nhánh Bến Thành",
+                status="active",
+                owner_id=admin_user.id if admin_user else None,
+            )
+            db.add(etl_conn)
+            await db.flush()
+
+            etl_pipe = EtlPipeline(
+                id=uuid.uuid4(),
+                name="Đồng bộ Tồn kho & Điều chỉnh Quản trị Bến Thành",
+                target="balance_adjustment_admin",
+                connection_id=etl_conn.id,
+                location_id=loc.id if loc else None,
+                status="active",
+                owner_id=admin_user.id if admin_user else None,
+            )
+            db.add(etl_pipe)
+            await db.flush()
+
+            mv = EtlMappingVersion(
+                id=uuid.uuid4(),
+                pipeline_id=etl_pipe.id,
+                version=1,
+                status="published",
+                mapping_json=[
+                    {"source_field": "sku", "target_field": "sku", "required": True, "transform": "trim_upper"},
+                    {"source_field": "target_quantity", "target_field": "target_quantity", "required": False, "transform": "to_float"},
+                    {"source_field": "delta_quantity", "target_field": "delta_quantity", "required": False, "transform": "to_float"},
+                    {"source_field": "reason", "target_field": "reason", "required": False, "transform": "trim", "default": "Điều chỉnh tồn ETL Admin"},
+                ],
+                duplicate_policy="reject",
+                created_by=admin_user.id if admin_user else None,
+                published_at=datetime.now(UTC),
+            )
+            db.add(mv)
+            await db.commit()
+            print("Đã nạp ETL Pipeline và Mapping Version mẫu.")
 
     print("--- Hoàn tất reset và re-seed dữ liệu ngân hàng sạch! ---")
 

@@ -9,7 +9,14 @@ import '../../data/repositories/bankops_repository.dart';
 /// Màn quản lý quỹ tiền mặt chuẩn ngân hàng:
 /// Hiển thị chi tiết từng két sắt (Vaults), số dư thực tế, số dư đầu ngày, và sổ nhật ký giao dịch (Journals).
 class CashScreen extends StatefulWidget {
-  const CashScreen({super.key});
+  const CashScreen({
+    super.key,
+    this.onNavigate,
+    this.onCreateCashRequest,
+  });
+
+  final ValueChanged<int>? onNavigate;
+  final VoidCallback? onCreateCashRequest;
 
   @override
   State<CashScreen> createState() => _CashScreenState();
@@ -249,26 +256,29 @@ class _CashScreenState extends State<CashScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Quản Lý Quỹ Tiền Mặt & Két Sắt',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Quản Lý Quỹ Tiền Mặt & Két Sắt',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Kiểm soát hạn mức tồn quỹ chi nhánh, tiền mặt tại quầy và nhật ký bút toán',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontSize: 13,
+                        const SizedBox(height: 4),
+                        Text(
+                          'Kiểm soát hạn mức tồn quỹ chi nhánh, tiền mặt tại quầy và nhật ký bút toán',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 16),
                   Wrap(
                     spacing: 10,
                     runSpacing: 8,
@@ -285,12 +295,11 @@ class _CashScreenState extends State<CashScreen> {
                       FilledButton.icon(
                         key: const Key('btn-create-cash-request'),
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              behavior: SnackBarBehavior.floating,
-                              content: Text('Vui lòng vào tab "Yêu cầu" để lập phiếu nộp/rút quỹ mới.'),
-                            ),
-                          );
+                          if (widget.onCreateCashRequest != null) {
+                            widget.onCreateCashRequest!();
+                          } else if (widget.onNavigate != null) {
+                            widget.onNavigate!(3);
+                          }
                         },
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Lập phiếu quỹ mới'),
@@ -416,11 +425,14 @@ class _CashScreenState extends State<CashScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      box.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 16,
+                                    Flexible(
+                                      child: Text(
+                                        box.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     const SizedBox(width: 10),
@@ -669,15 +681,20 @@ class _CashScreenState extends State<CashScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurfaceVariant,
-                  letterSpacing: 0.5,
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
+              const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(

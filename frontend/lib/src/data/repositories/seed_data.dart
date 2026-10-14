@@ -30,9 +30,40 @@ List<StockBalance> _seedBalances() => const [
 ];
 
 List<AssetRecord> _seedAssets() => const [
-  AssetRecord(serial: 'EMV-VISA-2026-000101', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
-  AssetRecord(serial: 'EMV-VISA-2026-000102', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
-  AssetRecord(serial: 'STK-QR-2026-880001', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
+  AssetRecord(id: 'asset-001', serial: 'EMV-VISA-2026-000101', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available, assignee: 'Nguyễn Hoàng An'),
+  AssetRecord(id: 'asset-002', serial: 'EMV-VISA-2026-000102', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
+  AssetRecord(id: 'asset-003', serial: 'STK-QR-2026-880001', itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3', locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1', status: AssetStatus.available),
+];
+
+List<AssetLogItem> _seedAssetLogs() => [
+  AssetLogItem(
+    id: 'log-001',
+    serial: 'EMV-VISA-2026-000101',
+    fromLocationId: null,
+    fromLocationName: 'NCC Thẻ Thông Minh',
+    toLocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    toLocationName: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính',
+    statusBefore: null,
+    statusAfter: 'in_stock',
+    actorName: 'Trần Tuấn Bình (KSV)',
+    notes: 'Nhập kho lô phôi thẻ chip bảo mật mới',
+    createdAt: DateTime.utc(2026, 10, 1, 9, 0),
+  ),
+  AssetLogItem(
+    id: 'log-002',
+    serial: 'EMV-VISA-2026-000101',
+    fromLocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    fromLocationName: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính',
+    toLocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    toLocationName: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính',
+    fromAssignee: null,
+    toAssignee: 'Nguyễn Hoàng An (GDV)',
+    statusBefore: 'in_stock',
+    statusAfter: 'assigned',
+    actorName: 'Trần Tuấn Bình (KSV)',
+    notes: 'Bàn giao phôi thẻ cho GDV phục vụ phát hành tại quầy',
+    createdAt: DateTime.utc(2026, 10, 5, 14, 30),
+  ),
 ];
 
 List<StockMovement> _seedMovements() => [

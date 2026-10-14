@@ -48,6 +48,7 @@ class CashRequest(Base, TimestampMixin):
     maker_id: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=False)
     approver_id: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=True)
     reason: str = Column(String(512), nullable=True)
+    return_reason: str = Column(String(1024), nullable=True)
     version: int = Column(Integer, default=1, nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_by: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=False)

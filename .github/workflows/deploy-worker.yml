@@ -1,20 +1,15 @@
-name: Deploy BankOps Worker to Cloudflare
+name: Validate legacy Cloudflare Worker
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "infra/cloudflare-worker/**"
-      - ".github/workflows/deploy-worker.yml"
   workflow_dispatch:
 
 concurrency:
-  group: deploy-worker-${{ github.ref }}
-  cancel-in-progress: false  # đừng cancel deploy đang chạy
+  group: validate-legacy-worker-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Deploy Worker
+  validate:
+    name: Validate legacy Worker source
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -25,21 +20,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Verify required secrets are configured
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ secrets.CLOUDFLARE_WORKERS_SUBDOMAIN }}
-        run: |
-          missing=0
-          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_WORKERS_SUBDOMAIN; do
-            if [ -z "${!v}" ]; then
-              echo "::error::Secret ${v} chưa cấu hình (Settings → Secrets and variables → Actions)"
-              missing=1
-            fi
-          done
-          exit $missing
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,16 +34,7 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: infra/cloudflare-worker
-          command: deploy
-
-      - name: Smoke test
+      - name: Document non-production status
         run: |
-          sleep 5
-          curl -f https://bankops-api.${{ secrets.CLOUDFLARE_WORKERS_SUBDOMAIN }}.workers.dev/api/v1/health/live \
-            || echo "⚠️  Smoke test failed – manual check required"
+          echo "Cloudflare Worker is legacy/compatibility source only."
+          echo "FastAPI is the canonical production API; this workflow never deploys Worker."

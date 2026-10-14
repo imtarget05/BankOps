@@ -35,7 +35,11 @@ class StatusChip extends StatelessWidget {
   factory StatusChip.request(RequestStatus status) {
     final tone = status.isSuccess
         ? StatusTone.success
-        : (status.isFailed ? StatusTone.danger : StatusTone.info);
+        : (status.isFailed
+            ? StatusTone.danger
+            : (status == RequestStatus.returned
+                ? StatusTone.warning
+                : StatusTone.info));
     return StatusChip._(
       label: status.label,
       icon: _iconFor(status),
@@ -108,6 +112,8 @@ class StatusChip extends StatelessWidget {
         return Icons.edit_note_outlined;
       case RequestStatus.pending:
         return Icons.schedule_outlined;
+      case RequestStatus.returned:
+        return Icons.assignment_return_outlined;
       case RequestStatus.approved:
         return Icons.fact_check_outlined;
       case RequestStatus.posted:

@@ -21,6 +21,11 @@ services:
     build:
       context: backend
     container_name: bankops-api
+    # Optional, ignored local configuration. Production injects secrets through
+    # its platform secret manager instead; do not create this file in CI.
+    env_file:
+      - path: ./backend/.env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,11 +39,8 @@ services:
       - AI_PROVIDER=${AI_PROVIDER:-cloudflare}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b}
-      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER:-binhtan5734@gmail.com}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-qavobrcdeusnaoru}
-      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-BankOps Core Banking}
+      # Email is opt-in.  Do not put SMTP credentials or provider defaults here:
+      # configure it in the ignored backend/.env file for local testing.
     ports:
       - "8000:8000"
     volumes:

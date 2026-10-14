@@ -4,12 +4,14 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.24+-02569B?logo=flutter)](https://flutter.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql)](https://postgresql.org)
-[![Cloudflare Workers AI](https://img.shields.io/badge/Cloudflare-Workers_AI-F38020?logo=cloudflare)](https://developers.cloudflare.com/workers-ai/)
+[![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%20%2F%20AI%20provider-F38020?logo=cloudflare)](https://developers.cloudflare.com)
 [![Quality Gate](https://img.shields.io/badge/Quality_Gate-Passed-success)](https://github.com/imtarget05/BankOps)
 
 > **Lưu ý an toàn:** Tất cả số tiền, tồn quỹ, giao dịch, mã ấn chỉ và danh tính trong hệ thống là **mô phỏng nghiệp vụ** (`simulation: true`). Không kết nối trực tiếp core banking sản xuất và không sử dụng dữ liệu khách hàng thật.
 
 > **Thiết kế web/app nhân viên — khảo sát 14/10/2026:** Xem [bộ tài liệu hiện trạng, kiến trúc, luồng nghiệp vụ và backlog nghiệm thu](docs/employee-app/README.md). Tài liệu phân biệt phần đã có trong mã nguồn với phần đề xuất, đồng thời ghi nhận các khác biệt FastAPI/Worker và các vấn đề cần xử lý trước pilot. Các số liệu kiểm thử bên dưới là kết quả lịch sử, chưa chứng nhận working tree hiện tại.
+
+> **Nguồn API chuẩn:** FastAPI + PostgreSQL là backend nghiệp vụ duy nhất. Thư mục Cloudflare Worker được giữ tạm để tương thích/đối chiếu, không có cam kết parity và không phải đích deploy production. Chi tiết ở [kiến trúc](docs/03-architecture.md) và [ghi chú Cloudflare](docs/14-cloudflare-deploy.md).
 
 ---
 
@@ -56,9 +58,9 @@ flowchart TD
 
 ## 2. Hệ Thống Trợ Lý AI & Small LLM Pipeline
 
-1. **Trợ lý Hội thoại BankOps AI (Cloudflare Workers AI)**:
-   - Mô hình: `@cf/meta/llama-3.1-8b-instruct`.
-   - Cung cấp tư vấn quy trình Maker-Checker, hạn mức két sắt, xử lý lỗi dữ liệu Staging và quy chế kiểm soát nội bộ.
+1. **Trợ lý Hội thoại BankOps AI (qua FastAPI)**:
+   - FastAPI là lớp duy nhất áp dụng RBAC, retrieval và guardrail trước khi gọi provider AI.
+   - Cloudflare Workers AI có thể là provider từ xa khi FastAPI được cấu hình phù hợp; Worker trong repository không phục vụ API chat production.
 2. **Small LLM Pipeline Cho Máy Không Có GPU & Google Colab T4**:
    - Mô hình nền tảng: `Qwen2.5-1.5B-Instruct` (GGUF Quantized 4-bit `q4_k_m`, tiêu thụ < 1.4 GB RAM trên CPU).
    - Notebook huấn luyện 1-click: [`ai/colab_finetune_bankops_t4.ipynb`](file:///Users/mainguyenbinhtan/Downloads/BankOps/ai/colab_finetune_bankops_t4.ipynb) (Fine-tune ~12 phút trên Colab T4 miễn phí).
@@ -107,11 +109,11 @@ python3 backend/tests/verify_live_e2e.py
 
 ### 5.2. Chạy Toàn Bộ Test Suite Backend & Frontend (1-Click)
 ```bash
-# Kiểm tra toàn bộ linter, typecheck và tests của cả Backend + Frontend + Worker
+# Kiểm tra toàn bộ linter, typecheck và tests của cả Backend + Frontend + Worker legacy
 make check-all
 
 # Hoặc chạy từng phân hệ thủ công:
-# 1. Kiểm tra tĩnh & linter
+# 1. Kiểm tra tĩnh & linter (Worker typecheck không chứng minh parity API)
 python3 -m ruff check backend/ ai/
 cd frontend && flutter analyze .
 cd infra/cloudflare-worker && npm run typecheck
@@ -137,7 +139,7 @@ BankOps/
 ├── frontend/                    # Flutter Web Client (Material 3, Responsive Desktop/Mobile)
 │   ├── lib/src/features/        # Các phân hệ (auth, approvals, cash, inventory, reports, ai, timeline)
 │   └── test/                    # Widget & Unit test suite (28 tests: roles, exports, timeline, charts)
-├── infra/cloudflare-worker/     # Edge API Gateway (Hono + TypeScript)
+├── infra/cloudflare-worker/     # Implementation legacy/compatibility; không phải API production
 ├── infra/hf-llm-space/          # Self-hosted llama.cpp Docker Space cho Hugging Face
 ├── sample-data/                 # Dữ liệu mẫu ban đầu (users, cashboxes, items, locations)
 └── docker-compose.yml           # Cấu hình cụm Docker 4 containers

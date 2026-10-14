@@ -1,113 +1,390 @@
-"""Background worker module for processing async jobs.
+"""Durable background worker for jobs and the transactional outbox.
 
-Polls the ``jobs`` table with a DB lease claim, runs each job idempotently,
-and dispatches pending ``outbox_events`` after commit (docs/09).
+Jobs are leased from PostgreSQL with ``FOR UPDATE SKIP LOCKED``. A job's
+domain side effects and terminal state are committed together, so a retry can
+only run work that was rolled back. The outbox is dispatched in a separate
+transaction after the originating business transaction has committed.
 """
 
 import asyncio
 import logging
 import os
+import socket
+import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.activity import ActivityEvent, Job, OutboxEvent
+from app.models.cash_sim import CashEntry, CashJournal, CashRequest
+from app.models.inventory import Balance, InventoryRequest, Movement, StockLevel
+from app.models.reconciliation import ReconciliationException, ReconciliationRun
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = int(os.environ.get("WORKER_POLL_INTERVAL", "5"))
 LEASE_SECONDS = int(os.environ.get("WORKER_LEASE_SECONDS", "60"))
 MAX_RETRY = int(os.environ.get("WORKER_MAX_RETRY", "5"))
+WORKER_ID = os.environ.get("WORKER_ID", socket.gethostname())
+OUTBOX_BATCH_SIZE = 50
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-async def claim_job(session: AsyncSession):
-    """Claim a single queued job via DB lease.
-
-    Uses ``status`` transition queued -> running as the lease. When the
-    ``jobs`` table carries lease columns (``lease_until``/``next_attempt``)
-    they are honoured; otherwise falls back to status-only claim so the
-    worker still progresses on the current schema.
-    """
-    from app.models.activity import Job
-
-    now = _utcnow()
-    result = await session.execute(
-        select(Job).where(Job.status == "queued").limit(1)
+def _claimable_job_condition(now: datetime):
+    """Return queued jobs due now plus abandoned, expired leases."""
+    return or_(
+        and_(
+            Job.status == "queued",
+            or_(Job.next_attempt.is_(None), Job.next_attempt <= now),
+        ),
+        and_(
+            Job.status == "running",
+            Job.lease_until.is_not(None),
+            Job.lease_until <= now,
+        ),
     )
-    job = result.scalar_one_or_none()
+
+
+async def claim_job(session: AsyncSession) -> Job | None:
+    """Atomically lease one due job without blocking other worker processes."""
+    now = _utcnow()
+    statement = (
+        select(Job)
+        .where(_claimable_job_condition(now))
+        .order_by(Job.next_attempt.asc().nullsfirst(), Job.created_at, Job.id)
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    )
+    job = (await session.execute(statement)).scalar_one_or_none()
     if job is None:
         return None
-    # Honour lease_until / next_attempt when present on the row.
-    lease_until = getattr(job, "lease_until", None)
-    if lease_until is not None and lease_until > now:
-        return None
-    next_attempt = getattr(job, "next_attempt", None)
-    if next_attempt is not None and next_attempt > now:
-        return None
-    # claim: mark running + heartbeat + lease
+
     job.status = "running"
-    if hasattr(job, "lease_until"):
-        job.lease_until = now + timedelta(seconds=LEASE_SECONDS)
-    if hasattr(job, "heartbeat_at"):
-        job.heartbeat_at = now
-    if hasattr(job, "updated_at"):
-        job.updated_at = now
+    job.lease_owner = WORKER_ID
+    job.lease_token = uuid.uuid4().hex
+    job.lease_until = now + timedelta(seconds=LEASE_SECONDS)
+    job.heartbeat_at = now
+    job.next_attempt = None
+    if job.retry_count is None:
+        job.retry_count = 0
     await session.commit()
-    logger.info("Worker claim job %s type=%s lease=%ss", job.id, job.type, LEASE_SECONDS)
+    logger.info(
+        "Claimed job %s type=%s lease=%ss",
+        job.id,
+        job.type,
+        LEASE_SECONDS,
+    )
     return job
 
 
-async def run_job_with_retry(session: AsyncSession, job) -> None:
-    """Run a claimed job idempotently; retry count + next_attempt on failure."""
-    from app.models.activity import Job  # noqa: F401  (documents job table)
+async def _load_owned_job(
+    session: AsyncSession, job_id: object, lease_token: str
+) -> Job | None:
+    """Lock the job before executing so an expired lease cannot double-run it."""
+    now = _utcnow()
+    statement = (
+        select(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == "running",
+            Job.lease_token == lease_token,
+            Job.lease_until > now,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return (await session.execute(statement)).scalar_one_or_none()
+
+
+def _reconciliation_scope(job_type: str) -> str | None:
+    """Translate the explicitly supported reconciliation job names to scope."""
+    scopes = {
+        "reconciliation": "all",
+        "reconciliation:all": "all",
+        "reconciliation:cash": "cash",
+        "reconciliation:inventory": "inventory",
+    }
+    return scopes.get(job_type)
+
+
+async def _run_reconciliation(session: AsyncSession, scope: str) -> tuple[int, int]:
+    """Record differences only; reconciliation never changes a source balance."""
+    run = ReconciliationRun(
+        id=uuid.uuid4(), scope=scope, status="running", auto_fixed=False
+    )
+    session.add(run)
+    await session.flush()
+
+    total = 0
+    exceptions: list[tuple[str, dict, dict]] = []
+    if scope in ("all", "cash"):
+        journals = (await session.execute(select(CashJournal))).scalars().all()
+        for journal in journals:
+            total += 1
+            entries = (
+                await session.execute(
+                    select(CashEntry).where(CashEntry.journal_id == journal.id)
+                )
+            ).scalars().all()
+            debit = sum((entry.debit or Decimal(0) for entry in entries), Decimal(0))
+            credit = sum((entry.credit or Decimal(0) for entry in entries), Decimal(0))
+            if debit != credit:
+                exceptions.append(
+                    (
+                        f"journal:{journal.id}",
+                        {"debit": str(debit), "credit": str(debit)},
+                        {"debit": str(debit), "credit": str(credit)},
+                    )
+                )
+
+    if scope in ("all", "inventory"):
+        movements = (await session.execute(select(Movement))).scalars().all()
+        expected: dict[tuple[str, str], Decimal] = {}
+        for movement in movements:
+            key = (str(movement.location_id), str(movement.item_id))
+            expected[key] = expected.get(key, Decimal(0)) + (
+                movement.quantity_signed or Decimal(0)
+            )
+
+        balances = (await session.execute(select(Balance))).scalars().all()
+        actual = {
+            (str(balance.location_id), str(balance.item_id)): balance.quantity
+            or Decimal(0)
+            for balance in balances
+        }
+        for key in expected.keys() | actual.keys():
+            total += 1
+            expected_quantity = expected.get(key, Decimal(0))
+            actual_quantity = actual.get(key)
+            if actual_quantity is None or expected_quantity != actual_quantity:
+                exceptions.append(
+                    (
+                        f"balance:{key[0]}:{key[1]}",
+                        {"quantity": str(expected_quantity)},
+                        {
+                            "quantity": (
+                                str(actual_quantity)
+                                if actual_quantity is not None
+                                else None
+                            )
+                        },
+                    )
+                )
+
+    for subject, expected_json, actual_json in exceptions:
+        session.add(
+            ReconciliationException(
+                id=uuid.uuid4(),
+                run_id=run.id,
+                subject=subject,
+                expected_json=expected_json,
+                actual_json=actual_json,
+            )
+        )
+    run.status = "exception" if exceptions else "matched"
+    return total, total
+
+
+async def _run_sla_reminders(session: AsyncSession, job: Job) -> tuple[int, int]:
+    """Queue reminders for real submitted inventory and cash requests."""
+    inventory_requests = (
+        await session.execute(
+            select(InventoryRequest).where(InventoryRequest.status == "submitted")
+        )
+    ).scalars().all()
+    cash_requests = (
+        await session.execute(select(CashRequest).where(CashRequest.status == "submitted"))
+    ).scalars().all()
+    pending_requests = [*inventory_requests, *cash_requests]
+
+    for request in pending_requests:
+        session.add(
+            OutboxEvent(
+                id=uuid.uuid4(),
+                event_type="sla.reminder.dispatched",
+                aggregate_id=str(request.id),
+                payload_json={
+                    "request_id": str(request.id),
+                    "status": request.status,
+                    "created_at": (
+                        request.created_at.isoformat() if request.created_at else None
+                    ),
+                    "job_id": str(job.id),
+                },
+                created_at=_utcnow(),
+                attempts=0,
+            )
+        )
+    return len(pending_requests), len(pending_requests)
+
+
+async def _run_inventory_thresholds(
+    session: AsyncSession, job: Job
+) -> tuple[int, int]:
+    """Queue one low-stock event per configured stock level below its minimum."""
+    statement = select(Balance, StockLevel).join(
+        StockLevel,
+        and_(
+            StockLevel.location_id == Balance.location_id,
+            StockLevel.item_id == Balance.item_id,
+        ),
+    )
+    rows = (await session.execute(statement)).all()
+    breaches = 0
+    for balance, stock_level in rows:
+        available_quantity = balance.available_quantity
+        minimum = stock_level.min_qty or Decimal(0)
+        if minimum <= 0 or available_quantity >= minimum:
+            continue
+        breaches += 1
+        session.add(
+            OutboxEvent(
+                id=uuid.uuid4(),
+                event_type="inventory.threshold.breached",
+                aggregate_id=f"{balance.location_id}:{balance.item_id}",
+                payload_json={
+                    "location_id": str(balance.location_id),
+                    "item_id": str(balance.item_id),
+                    "available_quantity": str(available_quantity),
+                    "min_quantity": str(minimum),
+                    "job_id": str(job.id),
+                },
+                created_at=_utcnow(),
+                attempts=0,
+            )
+        )
+    return breaches, len(rows)
+
+
+async def _execute_job_payload(
+    session: AsyncSession, job: Job
+) -> tuple[int, int]:
+    """Run an explicitly registered job type against the real ORM models."""
+    job_type = job.type.lower().strip()
+    scope = _reconciliation_scope(job_type)
+    if scope is not None:
+        return await _run_reconciliation(session, scope)
+    if job_type == "sla_reminder":
+        return await _run_sla_reminders(session, job)
+    if job_type == "inventory_thresholds":
+        return await _run_inventory_thresholds(session, job)
+    raise ValueError(f"Unsupported job type: {job.type!r}")
+
+
+async def _record_job_failure(
+    session: AsyncSession, job_id: object, lease_token: str, error: Exception
+) -> bool:
+    """Release an owned lease for retry, or terminally fail it after MAX_RETRY."""
+    statement = (
+        select(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == "running",
+            Job.lease_token == lease_token,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    job = (await session.execute(statement)).scalar_one_or_none()
+    if job is None:
+        await session.rollback()
+        return False
+
+    retry_count = (job.retry_count or 0) + 1
+    job.retry_count = retry_count
+    job.error_code = type(error).__name__[:64]
+    job.heartbeat_at = _utcnow()
+    job.lease_owner = None
+    job.lease_token = None
+    job.lease_until = None
+    if retry_count >= MAX_RETRY:
+        job.status = "failed"
+        job.finished_at = _utcnow()
+        job.next_attempt = None
+    else:
+        job.status = "queued"
+        job.next_attempt = _utcnow() + timedelta(seconds=2 ** min(retry_count, 6))
+    await session.commit()
+    return True
+
+
+async def run_job_with_retry(session: AsyncSession, claimed_job: Job) -> bool:
+    """Run a leased job once and persist its result or an eligible retry."""
+    job_id = claimed_job.id
+    lease_token = claimed_job.lease_token
+    if not lease_token:
+        logger.warning("Refusing to execute job %s without a lease token", job_id)
+        return False
 
     try:
-        # Idempotent dispatch by job key: re-check status before work.
-        await session.refresh(job)
-        if job.status == "succeeded":
-            return
-        # Placeholder job execution (reconciliation/outbox publishing hooks here).
+        job = await _load_owned_job(session, job_id, lease_token)
+        if job is None:
+            await session.rollback()
+            logger.info("Job %s lease was superseded before execution", job_id)
+            return False
+
+        now = _utcnow()
+        job.heartbeat_at = now
+        job.lease_until = now + timedelta(seconds=LEASE_SECONDS)
+        processed, total = await _execute_job_payload(session, job)
+        job.processed = processed
+        job.total = total
         job.status = "succeeded"
         job.finished_at = _utcnow()
+        job.heartbeat_at = _utcnow()
+        job.lease_owner = None
+        job.lease_token = None
+        job.lease_until = None
+        job.next_attempt = None
         await session.commit()
-        logger.info("Worker job %s succeeded", job.id)
-    except Exception as exc:  # retry with backoff
-        retry = int(getattr(job, "retry_count", 0) or 0) + 1
-        if hasattr(job, "retry_count"):
-            job.retry_count = retry
-        if hasattr(job, "next_attempt"):
-            job.next_attempt = _utcnow() + timedelta(seconds=2 ** min(retry, 6))
-        job.error_code = type(exc).__name__[:64]
-        if retry >= MAX_RETRY:
-            job.status = "failed"
-        else:
-            job.status = "queued"  # release lease for retry
-        await session.commit()
-        logger.warning("Worker job %s retry %s: %s", job.id, retry, exc)
+        logger.info("Job %s succeeded (processed=%s/%s)", job_id, processed, total)
+        return True
+    except Exception as error:  # side effects above are rolled back before retry
+        await session.rollback()
+        recorded = await _record_job_failure(session, job_id, lease_token, error)
+        logger.warning("Job %s failed; retry recorded=%s: %s", job_id, recorded, error)
+        return False
 
 
 async def dispatch_outbox(session: AsyncSession) -> int:
-    """Dispatch unpublished outbox events after commit; returns count."""
-    from app.models.activity import OutboxEvent
-
-    result = await session.execute(
-        select(OutboxEvent).where(OutboxEvent.published_at.is_(None)).limit(50)
+    """Materialize unpublished outbox rows as durable activity events once."""
+    statement = (
+        select(OutboxEvent)
+        .where(OutboxEvent.published_at.is_(None))
+        .order_by(OutboxEvent.created_at, OutboxEvent.id)
+        .with_for_update(skip_locked=True)
+        .limit(OUTBOX_BATCH_SIZE)
     )
-    events = list(result.scalars().all())
+    events = list((await session.execute(statement)).scalars().all())
+    if not events:
+        return 0
+
+    now = _utcnow()
     for event in events:
+        session.add(
+            ActivityEvent(
+                id=uuid.uuid4(),
+                type=event.event_type,
+                subject=event.aggregate_id,
+                message_key=event.event_type,
+                payload=(event.payload_json if isinstance(event.payload_json, dict) else {}),
+                occurred_at=now,
+                outbox_event_id=event.id,
+            )
+        )
         event.attempts = (event.attempts or 0) + 1
-        event.published_at = _utcnow()
-        logger.info("Worker dispatch outbox %s type=%s", event.id, event.event_type)
-    if events:
-        await session.commit()
+        event.published_at = now
+    await session.commit()
     return len(events)
 
 
-async def poll_once(session: AsyncSession) -> dict:
-    """Single poll iteration: claim one job, run it, dispatch outbox."""
+async def poll_once(session: AsyncSession) -> dict[str, str | int | None]:
+    """Claim and run one job, then publish a bounded outbox batch."""
     job = await claim_job(session)
     if job is not None:
         await run_job_with_retry(session, job)
@@ -115,26 +392,24 @@ async def poll_once(session: AsyncSession) -> dict:
     return {"job_id": str(job.id) if job is not None else None, "dispatched": dispatched}
 
 
-async def process_jobs():
-    """Process pending jobs from the job queue with lease + heartbeat."""
+async def process_jobs() -> None:
+    """Run the polling loop in a dedicated process sharing the FastAPI package."""
     from app.database import AsyncSessionLocal
 
-    logger.info("Worker started - waiting for jobs")
+    logger.info("Worker %s started", WORKER_ID)
     while True:
         try:
             async with AsyncSessionLocal() as session:
                 outcome = await poll_once(session)
                 if outcome["job_id"] or outcome["dispatched"]:
                     logger.info("Worker heartbeat job=%s outbox=%s", outcome["job_id"], outcome["dispatched"])
-                else:
-                    logger.debug("Worker heartbeat idle")
-        except Exception as exc:
-            logger.warning("Worker poll failed, retry later: %s", exc)
+        except Exception as error:
+            logger.warning("Worker poll failed; retrying later: %s", error)
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
-def main():
-    """Entry point for the background worker."""
+def main() -> None:
+    """Entry point for the background worker process."""
     asyncio.run(process_jobs())
 
 

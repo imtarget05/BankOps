@@ -1,13 +1,11 @@
 {
   "name": "bankops-worker",
   "version": "1.0.0",
-  "description": "BankOps API trên Cloudflare Workers – zero cold start",
+  "description": "Retired BankOps Cloudflare Worker compatibility boundary",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local",
-    "deploy": "wrangler deploy",
-    "deploy:staging": "wrangler deploy --env staging",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts"
   },

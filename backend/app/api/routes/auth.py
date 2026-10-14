@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from google.auth.transport import requests as google_requests
@@ -29,7 +29,8 @@ from app.api.routes.auth_utils import (
 )
 from app.config import settings
 from app.database import get_db
-from app.models.iam import User, UserRole
+from app.models.activity import AuditEvent
+from app.models.iam import User, UserRole, UserStatus
 from app.services.email_service import send_password_reset_email
 
 router = APIRouter()
@@ -62,7 +63,7 @@ async def login(
 
     if not username or not password:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="username and password are required",
         )
 
@@ -91,7 +92,14 @@ async def login(
     refresh_token_expires = timedelta(days=7)
 
     access_token = create_access_token(
-        {"sub": str(user.id), "username": user.username, "roles": roles, "caps": capabilities},
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "roles": roles,
+            "caps": capabilities,
+            "auth_version": getattr(user, "auth_version", 1),
+            "branch_id": str(user.branch_id) if getattr(user, "branch_id", None) else None,
+        },
         access_token_expires,
     )
     refresh_token = create_refresh_token(
@@ -110,6 +118,8 @@ async def login(
             "display_name": user.display_name_demo,
             "roles": roles,
             "capabilities": capabilities,
+            "must_change_password": getattr(user, "must_change_password", False),
+            "branch_id": str(user.branch_id) if getattr(user, "branch_id", None) else None,
         },
     }
 
@@ -125,101 +135,176 @@ class RegisterRequest(BaseModel):
 
 @router.post("/register")
 async def register(
-    body: RegisterRequest,
+    request: Request,
+):
+    """Đăng ký công khai đã bị tắt theo chính sách bảo mật nội bộ ngân hàng (Phase 1 IAM)."""
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="PUBLIC_REGISTRATION_DISABLED: Đăng ký tài khoản công khai đã bị vô hiệu hóa. Tài khoản nhân viên phải được Quản trị viên cấp phát.",
+    )
+class AcceptInviteRequest(BaseModel):
+    invite_token: str
+    new_password: str = Field(min_length=6, max_length=128)
+    pin: str | None = None
+
+
+@router.post("/accept-invite")
+async def accept_invite(
+    body: AcceptInviteRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Đăng ký tài khoản mới và cấp quyền đăng nhập ngay lập tức."""
-    clean_username = body.username.strip().lower()
-    if not clean_username or len(clean_username) < 3:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Tên đăng nhập phải có ít nhất 3 ký tự.",
-        )
+    """Kích hoạt tài khoản và đặt mật khẩu từ token mời của quản trị viên."""
+    import hashlib
+    token_hash = hashlib.sha256(body.invite_token.strip().encode("utf-8")).hexdigest()
+    now = datetime.now(UTC)
 
-    # Kiểm tra trùng username
-    existing = await db.execute(
-        select(User).where(func.lower(User.username) == clean_username)
+    result = await db.execute(
+        select(User).where(User.invite_token_hash == token_hash)
     )
-    if existing.scalar_one_or_none():
+    user = result.scalar_one_or_none()
+    if not user:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Tên đăng nhập đã tồn tại trong hệ thống.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã mời không hợp lệ hoặc đã được sử dụng.",
         )
 
-    clean_email = (body.email or "").strip().lower() or None
-    if clean_email:
-        existing_email = await db.execute(
-            select(User).where(func.lower(User.email) == clean_email)
+    if user.invite_expires_at and user.invite_expires_at < now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mã mời đã hết hạn. Vui lòng liên hệ quản trị viên để nhận mã mới.",
         )
-        if existing_email.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email này đã được sử dụng bởi một tài khoản khác.",
-            )
 
     clean_pin = (body.pin or "123456").strip()
     if clean_pin and (not clean_pin.isdigit() or len(clean_pin) != 6):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Mã PIN bảo mật phải gồm đúng 6 chữ số.",
         )
 
-    new_id = uuid.uuid4()
-    new_user = User(
-        id=new_id,
-        username=clean_username,
-        password_hash=get_password_hash(body.password),
-        pin_hash=get_password_hash(clean_pin) if clean_pin else None,
-        status="active",
-        display_name_demo=body.display_name.strip() or clean_username,
-        email=clean_email,
+    user.password_hash = get_password_hash(body.new_password)
+    user.pin_hash = get_password_hash(clean_pin) if clean_pin else user.pin_hash
+    user.status = UserStatus.active
+    user.must_change_password = False
+    user.invite_token_hash = None
+    user.invite_expires_at = None
+    user.auth_version = getattr(user, "auth_version", 1) + 1
+
+    db.add(
+        AuditEvent(
+            id=uuid.uuid4(),
+            actor_id=user.id,
+            action="USER_INVITE_ACCEPTED",
+            subject=f"iam_users:{user.id}",
+            occurred_at=now,
+            metadata_json={"username": user.username},
+        )
     )
-    db.add(new_user)
 
-    # Phân quyền: role hợp lệ (staff/maker, approver/checker, auditor)
-    role_to_assign = (body.role or "staff").strip().lower()
-    if role_to_assign in ("maker", "staff"):
-        role_code = "staff"
-    elif role_to_assign in ("checker", "approver"):
-        role_code = "approver"
-    elif role_to_assign in ("auditor",):
-        role_code = "auditor"
-    else:
-        role_code = "staff"
-
-    db.add(UserRole(user_id=new_id, role_code=role_code))
     await db.commit()
-    await db.refresh(new_user)
+    await db.refresh(user)
 
-    roles = await get_user_roles(db, new_user.id)
-    capabilities = await get_user_capabilities(db, new_user.id)
-
+    roles = await get_user_roles(db, user.id)
+    capabilities = await get_user_capabilities(db, user.id)
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-    refresh_token_expires = timedelta(days=settings.refresh_token_expire_days)
 
     access_token = create_access_token(
-        {"sub": str(new_user.id), "username": new_user.username, "roles": roles, "caps": capabilities},
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "roles": roles,
+            "caps": capabilities,
+            "auth_version": user.auth_version,
+            "branch_id": str(user.branch_id) if user.branch_id else None,
+        },
         access_token_expires,
     )
     refresh_token = create_refresh_token(
-        {"sub": str(new_user.id), "username": new_user.username},
-        refresh_token_expires,
+        {"sub": str(user.id), "username": user.username},
+        timedelta(days=settings.refresh_token_expire_days),
     )
 
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "expires_in": int(access_token_expires.total_seconds()),
+        "message": "Kích hoạt tài khoản và đặt mật khẩu thành công.",
         "user": {
-            "id": str(new_user.id),
-            "username": new_user.username,
-            "display_name": new_user.display_name_demo,
-            "email": new_user.email,
+            "id": str(user.id),
+            "username": user.username,
+            "display_name": user.display_name_demo,
             "roles": roles,
             "capabilities": capabilities,
         },
-        "message": "Đăng ký tài khoản thành công.",
+    }
+
+
+class ChangeInitialPasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6, max_length=128)
+    pin: str | None = None
+
+
+@router.post("/change-initial-password")
+async def change_initial_password(
+    body: ChangeInitialPasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bắt buộc đổi mật khẩu tạm thời ở lần đăng nhập đầu tiên."""
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mật khẩu hiện tại không chính xác.",
+        )
+
+    clean_pin = (body.pin or "").strip()
+    if clean_pin and (not clean_pin.isdigit() or len(clean_pin) != 6):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Mã PIN bảo mật phải gồm đúng 6 chữ số.",
+        )
+
+    now = datetime.now(UTC)
+    current_user.password_hash = get_password_hash(body.new_password)
+    if clean_pin:
+        current_user.pin_hash = get_password_hash(clean_pin)
+    current_user.must_change_password = False
+    current_user.auth_version = getattr(current_user, "auth_version", 1) + 1
+
+    db.add(
+        AuditEvent(
+            id=uuid.uuid4(),
+            actor_id=current_user.id,
+            action="USER_INITIAL_PASSWORD_CHANGED",
+            subject=f"iam_users:{current_user.id}",
+            occurred_at=now,
+            metadata_json={"username": current_user.username},
+        )
+    )
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    roles = await get_user_roles(db, current_user.id)
+    capabilities = await get_user_capabilities(db, current_user.id)
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+
+    access_token = create_access_token(
+        {
+            "sub": str(current_user.id),
+            "username": current_user.username,
+            "roles": roles,
+            "caps": capabilities,
+            "auth_version": current_user.auth_version,
+            "branch_id": str(current_user.branch_id) if current_user.branch_id else None,
+        },
+        access_token_expires,
+    )
+
+    return {
+        "access_token": access_token,
+        "message": "Đổi mật khẩu thành công.",
+        "must_change_password": False,
     }
 
 
@@ -321,7 +406,7 @@ async def update_profile(
     clean_name = body.display_name.strip()
     if not clean_name:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Họ và tên không được để trống.",
         )
 

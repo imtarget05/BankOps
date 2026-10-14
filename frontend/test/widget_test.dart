@@ -27,7 +27,8 @@ void main() {
     expect(find.text("Quỹ"), findsWidgets);
     expect(find.text("Tổng quan vận hành"), findsOneWidget);
     expect(find.text("Kho đang hoạt động"), findsOneWidget);
-    expect(find.textContaining("100"), findsWidgets);
+    // A reconciliation with exceptions must not be presented as "100% matched".
+    expect(find.text('Có ngoại lệ'), findsOneWidget);
 
     // Navigate to Requests -> submit draft -> navigate to Approvals -> approve
     await tester.tap(find.byKey(const Key('nav-requests')));
@@ -79,5 +80,75 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Tổng quan'), findsWidgets);
+  });
+
+  testWidgets('Clicking Lập phiếu kho mới in Inventory auto-redirects to Requests and opens stock dialog',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final fakeRepo = FakeBankOpsRepository(latency: Duration.zero);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthService>(
+        create: (_) => AuthService(baseUrl: 'http://localhost:8000'),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: AppShell(repository: fakeRepo),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Navigate to Inventory tab
+    await tester.tap(find.byKey(const Key('nav-inventory')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Quản Lý Kho Ấn Chỉ'), findsOneWidget);
+
+    // Tap "Lập phiếu kho mới"
+    await tester.tap(find.byKey(const Key('btn-create-stock-request')));
+    await tester.pumpAndSettle();
+
+    // Verify it automatically redirected to Requests screen and opened the stock creation dialog
+    expect(find.text('Quản Lý & Lập Phiếu Yêu Cầu'), findsOneWidget);
+    expect(find.text('Tạo Phiếu Kho Mới'), findsOneWidget);
+    expect(find.byKey(const Key('stock-qty-input')), findsOneWidget);
+    // Verify no snackbar notification was shown
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('Clicking Lập phiếu quỹ mới in Cash auto-redirects to Requests and opens cash dialog',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final fakeRepo = FakeBankOpsRepository(latency: Duration.zero);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthService>(
+        create: (_) => AuthService(baseUrl: 'http://localhost:8000'),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: AppShell(repository: fakeRepo),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Navigate to Cash tab
+    await tester.tap(find.byKey(const Key('nav-cash')));
+    await tester.pumpAndSettle();
+    expect(find.text('Quản Lý Quỹ Tiền Mặt & Két Sắt'), findsOneWidget);
+
+    // Tap "Lập phiếu quỹ mới"
+    await tester.tap(find.byKey(const Key('btn-create-cash-request')));
+    await tester.pumpAndSettle();
+
+    // Verify it automatically redirected to Requests screen and opened the cash creation dialog
+    expect(find.text('Quản Lý & Lập Phiếu Yêu Cầu'), findsOneWidget);
+    expect(find.text('Tạo Phiếu Quỹ Tiền Mặt'), findsOneWidget);
+    expect(find.byKey(const Key('cash-amount-input')), findsOneWidget);
+    // Verify no snackbar notification was shown
+    expect(find.byType(SnackBar), findsNothing);
   });
 }

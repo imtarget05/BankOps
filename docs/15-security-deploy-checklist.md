@@ -10,9 +10,13 @@
 
 A Cloudflare API token was committed to git history. This must be rotated **before** any other step.
 
+An SMTP app password was also present in Compose configuration. Treat it as compromised:
+revoke it at the mail provider, create a replacement only if SMTP remains needed, and store
+the replacement only in the deployment secret manager or an ignored local env file.
+
 - [ ] **Revoke the leaked token** in Cloudflare dashboard:
   - Go to https://dash.cloudflare.com/profile/api-tokens
-  - Find the token with prefix `cfut_WtI4hAp3…` (xem danh sách token đầy đủ trong dashboard)
+  - Find any committed Cloudflare API token and revoke it in the dashboard
   - Click **Delete** / **Revoke**
   - Confirm revocation
 
@@ -41,6 +45,13 @@ A Cloudflare API token was committed to git history. This must be rotated **befo
   git log --all -p | grep -iE '(api[_-]?key|secret|password|token|BEGIN.*PRIVATE)'
   ```
   Expected: **0 results** (excluding false positives from dependency files)
+
+- [ ] **Run the tracked-file guard before every push**:
+  ```bash
+  python3 scripts/check_no_secrets.py
+  ```
+  Expected: exit code 0. This guard detects known Cloudflare-token and SMTP-password
+  patterns; it complements, but does not replace, a full secret scanner in CI.
 
 ---
 

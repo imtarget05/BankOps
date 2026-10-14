@@ -1,6 +1,7 @@
-from app.services.ai_retrieval import grounded_prompt, retrieve
-from app.api.routes.ai import ChatRequest, chat_stream
 import pytest
+
+from app.api.routes.ai import ChatRequest, chat_stream
+from app.services.ai_retrieval import grounded_prompt, retrieve
 
 
 def test_retrieval_cites_relevant_operational_document():

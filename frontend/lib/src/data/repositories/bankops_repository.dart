@@ -79,6 +79,14 @@ abstract class BankOpsRepository {
   Future<List<InventoryItem>> getItems();
   Future<List<StockBalance>> getBalances({String? locationId});
   Future<List<AssetRecord>> getAssets({String? locationId});
+  Future<List<AssetLogItem>> getAssetHistory(String assetId);
+  Future<void> handoverAsset(
+    String assetId, {
+    String? toLocationId,
+    String? toAssignee,
+    String? status,
+    String? notes,
+  });
   Future<List<StockMovement>> getMovements({String? itemId});
 
   // CRUD Inventory Items & Locations
@@ -106,6 +114,24 @@ abstract class BankOpsRepository {
   });
   Future<void> deleteLocation(String id);
 
+  // Stock Levels & Low Stock Alerts
+  Future<List<StockLevelItem>> getStockLevels({String? locationId, String? itemId});
+  Future<StockLevelItem> putStockLevel({
+    required String locationId,
+    required String itemId,
+    required String minQty,
+    String? maxQty,
+  });
+  Future<List<LowStockAlertItem>> getLowStockAlerts({String? locationId});
+
+  // Stocktakes (Kiểm kê định kỳ & đối soát)
+  Future<List<StocktakeItem>> getStocktakes({String? locationId});
+  Future<StocktakeItem> getStocktake(String id);
+  Future<StocktakeItem> createStocktake({required String locationId, String? note});
+  Future<StocktakeItem> updateStocktakeLines(String id, List<Map<String, dynamic>> lines);
+  Future<StocktakeItem> submitStocktake(String id);
+  Future<StocktakeItem> approveStocktake(String id);
+
   // GET /inventory/requests, POST /inventory/requests
   Future<List<StockRequest>> getStockRequests();
   Future<StockRequest> createStockRequest({
@@ -116,10 +142,11 @@ abstract class BankOpsRepository {
     String? reason,
   });
   Future<void> deleteStockRequest(String id);
-  // POST /inventory/requests/{id}/submit|approve|reject
+  // POST /inventory/requests/{id}/submit|approve|reject|return
   Future<StockRequest> submitStockRequest(String id);
   Future<StockRequest> approveStockRequest(String id, {String? supervisorPin});
   Future<StockRequest> rejectStockRequest(String id, String reason);
+  Future<StockRequest> returnStockRequest(String id, {required String reason});
 
   // GET /cash-sim/boxes, /balances, /journals, /requests
   Future<List<Cashbox>> getCashboxes();
@@ -148,6 +175,7 @@ abstract class BankOpsRepository {
   Future<CashRequest> submitCashRequest(String id);
   Future<CashRequest> approveCashRequest(String id, {String? supervisorPin});
   Future<CashRequest> rejectCashRequest(String id, String reason);
+  Future<CashRequest> returnCashRequest(String id, {required String reason});
 
   // GET /approvals/inbox & AI Thẩm định rủi ro
   Future<List<ApprovalItem>> getApprovalInbox();
@@ -214,4 +242,96 @@ abstract class BankOpsRepository {
     int stagnantDays = 60,
     int criticalDays = 90,
   });
+
+  // --- Admin IAM (Phase 1) ---
+  Future<List<BranchDto>> getBranches();
+  Future<List<RoleDto>> getRoles();
+  Future<List<EmployeeUserDto>> getEmployees({
+    String? search,
+    String? branchId,
+    String? role,
+    String? status,
+  });
+  Future<EmployeeUserDto> createEmployee({
+    required String username,
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branchId,
+    List<String> roles = const ['staff'],
+    List<Map<String, dynamic>> scopes = const [],
+    String onboardingMethod = 'temporary_password',
+  });
+  Future<EmployeeUserDto> updateEmployeeStatus(
+    String userId,
+    String status, {
+    String? reason,
+  });
+  Future<EmployeeUserDto> updateEmployeeRoles(String userId, List<String> roles);
+  Future<EmployeeUserDto> updateEmployeeScopes(
+    String userId,
+    List<Map<String, dynamic>> scopes,
+  );
+  Future<void> revokeEmployeeSessions(String userId);
+  Future<String> resetEmployeePassword(String userId);
+  Future<String> reinviteEmployee(String userId);
+
+  // --- ETL Pipeline (Phase 2) ---
+  Future<List<EtlConnectionDto>> getEtlConnections({String? branchId});
+  Future<EtlConnectionDto> createEtlConnection({
+    required String name,
+    required String type,
+    String? secretRef,
+    List<String>? allowlistSheets,
+    String? branchId,
+  });
+  Future<List<EtlPipelineDto>> getEtlPipelines({
+    String? target,
+    String? branchId,
+  });
+  Future<EtlPipelineDto> createEtlPipeline({
+    required String name,
+    required String target,
+    required String connectionId,
+    String? branchId,
+    String? locationId,
+    String? destinationLocationId,
+    String? scheduleCron,
+  });
+  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(String pipelineId);
+  Future<EtlMappingVersionDto> createEtlMappingVersion(
+    String pipelineId, {
+    required List<Map<String, dynamic>> mappingRules,
+    String duplicatePolicy = 'reject',
+  });
+  Future<EtlMappingVersionDto> publishEtlMappingVersion(
+    String pipelineId,
+    String versionId,
+  );
+  Future<EtlRunDto> triggerEtlRun(
+    String pipelineId, {
+    List<Map<String, dynamic>>? rawRows,
+    List<int>? fileBytes,
+    String? filename,
+    String? externalEventId,
+  });
+  Future<List<EtlRunDto>> getEtlRuns({
+    String? pipelineId,
+    String? status,
+  });
+  Future<EtlRunDto> getEtlRun(String runId);
+  Future<Map<String, dynamic>> getEtlRunRows(
+    String runId, {
+    bool? valid,
+    String? search,
+    int page = 1,
+    int pageSize = 50,
+  });
+  Future<EtlRunDto> reviewEtlRun(
+    String runId, {
+    required String decision,
+    String? note,
+  });
+  Future<Map<String, dynamic>> postEtlRun(String runId);
+  Future<String> getEtlErrorReport(String runId);
 }

@@ -10,6 +10,7 @@ class AppUser {
     required this.username,
     required this.displayName,
     required this.roles,
+    this.capabilities = const [],
     this.email,
     this.phoneNumber,
     this.branch,
@@ -20,6 +21,7 @@ class AppUser {
   final String username;
   final String displayName;
   final List<String> roles;
+  final List<String> capabilities;
   final String? email;
   final String? phoneNumber;
   final String? branch;
@@ -52,6 +54,7 @@ class AppUser {
     String? username,
     String? displayName,
     List<String>? roles,
+    List<String>? capabilities,
     String? email,
     String? phoneNumber,
     String? branch,
@@ -62,6 +65,7 @@ class AppUser {
       username: username ?? this.username,
       displayName: displayName ?? this.displayName,
       roles: roles ?? this.roles,
+      capabilities: capabilities ?? this.capabilities,
       email: email ?? this.email,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       branch: branch ?? this.branch,
@@ -106,26 +110,173 @@ class StockBalance {
     required this.locationId,
     required this.itemId,
     required this.quantity,
+    this.reservedQuantity = '0',
+    this.availableQuantity,
   });
 
   final String locationId;
   final String itemId;
   final String quantity;
+  final String reservedQuantity;
+  final String? availableQuantity;
+
+  double get qtyNumber => double.tryParse(quantity) ?? 0.0;
+  double get reservedNumber => double.tryParse(reservedQuantity) ?? 0.0;
+  double get availableNumber => availableQuantity != null
+      ? (double.tryParse(availableQuantity!) ?? 0.0)
+      : (qtyNumber - reservedNumber > 0 ? qtyNumber - reservedNumber : 0.0);
+}
+
+/// Định mức tồn kho (min_qty, max_qty).
+class StockLevelItem {
+  const StockLevelItem({
+    required this.id,
+    required this.locationId,
+    required this.itemId,
+    required this.minQty,
+    this.maxQty,
+  });
+
+  final String id;
+  final String locationId;
+  final String itemId;
+  final String minQty;
+  final String? maxQty;
+}
+
+/// Cảnh báo thiếu tồn kho.
+class LowStockAlertItem {
+  const LowStockAlertItem({
+    required this.locationId,
+    required this.locationCode,
+    required this.locationName,
+    required this.itemId,
+    required this.sku,
+    required this.itemName,
+    required this.unit,
+    required this.currentQty,
+    required this.minQty,
+    this.maxQty,
+    required this.status,
+    required this.deficit,
+    required this.suggestedAction,
+  });
+
+  final String locationId;
+  final String locationCode;
+  final String locationName;
+  final String itemId;
+  final String sku;
+  final String itemName;
+  final String unit;
+  final String currentQty;
+  final String minQty;
+  final String? maxQty;
+  final String status; // 'low' | 'empty'
+  final String deficit;
+  final String suggestedAction;
+}
+
+/// Dòng kiểm kê kho.
+class StocktakeLineItem {
+  const StocktakeLineItem({
+    required this.id,
+    required this.itemId,
+    required this.bookQty,
+    required this.countedQty,
+    required this.variance,
+    this.reason,
+  });
+
+  final String id;
+  final String itemId;
+  final String bookQty;
+  final String countedQty;
+  final String variance;
+  final String? reason;
+}
+
+/// Đợt kiểm kê định kỳ & đối soát.
+class StocktakeItem {
+  const StocktakeItem({
+    required this.id,
+    required this.locationId,
+    required this.status,
+    this.note,
+    required this.makerId,
+    this.approverId,
+    this.adjustmentRequestId,
+    required this.createdAt,
+    this.completedAt,
+    this.lines = const [],
+  });
+
+  final String id;
+  final String locationId;
+  final String status; // 'open' | 'submitted' | 'closed'
+  final String? note;
+  final String makerId;
+  final String? approverId;
+  final String? adjustmentRequestId;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+  final List<StocktakeLineItem> lines;
 }
 
 /// Tài sản theo serial.
 class AssetRecord {
   const AssetRecord({
+    this.id,
     required this.serial,
     required this.itemId,
     required this.locationId,
     required this.status,
+    this.assignee,
   });
 
+  final String? id;
   final String serial;
   final String itemId;
   final String locationId;
   final AssetStatus status;
+  final String? assignee;
+}
+
+/// Nhật ký vòng đời và bàn giao ấn chỉ.
+class AssetLogItem {
+  const AssetLogItem({
+    required this.id,
+    required this.serial,
+    this.fromLocationId,
+    this.fromLocationName,
+    this.toLocationId,
+    this.toLocationName,
+    this.fromAssignee,
+    this.toAssignee,
+    this.statusBefore,
+    required this.statusAfter,
+    this.actorId,
+    this.actorName,
+    this.requestId,
+    this.notes,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String serial;
+  final String? fromLocationId;
+  final String? fromLocationName;
+  final String? toLocationId;
+  final String? toLocationName;
+  final String? fromAssignee;
+  final String? toAssignee;
+  final String? statusBefore;
+  final String statusAfter;
+  final String? actorId;
+  final String? actorName;
+  final String? requestId;
+  final String? notes;
+  final DateTime createdAt;
 }
 
 /// Movement ledger.
@@ -171,6 +322,7 @@ class StockRequest {
     this.approvedBy,
     this.approvedByName,
     this.rejectReason,
+    this.returnReason,
     this.destinationLocationId,
   });
 
@@ -187,6 +339,7 @@ class StockRequest {
   final String? approvedBy;
   final String? approvedByName;
   final String? rejectReason;
+  final String? returnReason;
   final String? destinationLocationId;
 }
 
@@ -256,6 +409,7 @@ class CashRequest {
     this.approvedBy,
     this.approvedByName,
     this.rejectReason,
+    this.returnReason,
   });
 
   final String id;
@@ -272,6 +426,7 @@ class CashRequest {
   final String? approvedBy;
   final String? approvedByName;
   final String? rejectReason;
+  final String? returnReason;
 }
 
 /// Approval inbox item.
@@ -283,6 +438,7 @@ class ApprovalItem {
     required this.impact,
     required this.detail,
     this.approvalDetail,
+    this.status = 'pending',
   });
 
   final String id;
@@ -291,6 +447,7 @@ class ApprovalItem {
   final String impact;
   final String detail;
   final Map<String, dynamic>? approvalDetail;
+  final String status;
 }
 
 /// Activity event.
@@ -421,3 +578,396 @@ class AiRiskAssessment {
   }
 }
 
+/// Tổ chức chi nhánh ngân hàng.
+class BranchDto {
+  const BranchDto({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.address,
+    this.active = true,
+  });
+
+  final String id;
+  final String code;
+  final String name;
+  final String? address;
+  final bool active;
+
+  factory BranchDto.fromJson(Map<String, dynamic> json) {
+    return BranchDto(
+      id: json['id'] as String? ?? '',
+      code: json['code'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      address: json['address'] as String?,
+      active: json['active'] as bool? ?? true,
+    );
+  }
+}
+
+/// Vai trò và danh sách capability tương ứng.
+class RoleDto {
+  const RoleDto({
+    required this.code,
+    required this.name,
+    this.description,
+    this.capabilities = const [],
+  });
+
+  final String code;
+  final String name;
+  final String? description;
+  final List<String> capabilities;
+
+  factory RoleDto.fromJson(Map<String, dynamic> json) {
+    return RoleDto(
+      code: json['code'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      description: json['description'] as String?,
+      capabilities: (json['capabilities'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+    );
+  }
+}
+
+/// Phạm vi dữ liệu cấp phát cho nhân viên (Scope Grant).
+class ScopeGrantDto {
+  const ScopeGrantDto({
+    required this.id,
+    required this.userId,
+    this.branchId,
+    this.branchName,
+    this.locationId,
+    this.locationName,
+    this.capability,
+    this.validFrom,
+    this.validTo,
+  });
+
+  final String id;
+  final String userId;
+  final String? branchId;
+  final String? branchName;
+  final String? locationId;
+  final String? locationName;
+  final String? capability;
+  final DateTime? validFrom;
+  final DateTime? validTo;
+
+  factory ScopeGrantDto.fromJson(Map<String, dynamic> json) {
+    return ScopeGrantDto(
+      id: json['id'] as String? ?? '',
+      userId: json['user_id'] as String? ?? '',
+      branchId: json['branch_id'] as String?,
+      branchName: json['branch_name'] as String?,
+      locationId: json['location_id'] as String?,
+      locationName: json['location_name'] as String?,
+      capability: json['capability'] as String?,
+      validFrom: json['valid_from'] != null ? DateTime.tryParse(json['valid_from'].toString()) : null,
+      validTo: json['valid_to'] != null ? DateTime.tryParse(json['valid_to'].toString()) : null,
+    );
+  }
+}
+
+/// Nhân viên ngân hàng được quản trị bởi Admin IAM.
+class EmployeeUserDto {
+  const EmployeeUserDto({
+    required this.id,
+    required this.username,
+    required this.displayName,
+    this.email,
+    this.phoneNumber,
+    required this.status,
+    this.branchId,
+    this.branchName,
+    this.roles = const [],
+    this.capabilities = const [],
+    this.mustChangePassword = false,
+    this.hasPendingInvite = false,
+    this.inviteExpiresAt,
+    this.authVersion = 1,
+    this.scopes = const [],
+  });
+
+  final String id;
+  final String username;
+  final String displayName;
+  final String? email;
+  final String? phoneNumber;
+  final String status;
+  final String? branchId;
+  final String? branchName;
+  final List<String> roles;
+  final List<String> capabilities;
+  final bool mustChangePassword;
+  final bool hasPendingInvite;
+  final DateTime? inviteExpiresAt;
+  final int authVersion;
+  final List<ScopeGrantDto> scopes;
+
+  bool get isActive => status == 'active';
+  bool get isLocked => status == 'locked';
+
+  factory EmployeeUserDto.fromJson(Map<String, dynamic> json) {
+    return EmployeeUserDto(
+      id: json['id'] as String? ?? '',
+      username: json['username'] as String? ?? '',
+      displayName: (json['display_name'] ?? json['username'] ?? '') as String,
+      email: json['email'] as String?,
+      phoneNumber: json['phone_number'] as String?,
+      status: json['status'] as String? ?? 'active',
+      branchId: json['branch_id'] as String?,
+      branchName: json['branch_name'] as String?,
+      roles: (json['roles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      capabilities: (json['capabilities'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      mustChangePassword: json['must_change_password'] as bool? ?? false,
+      hasPendingInvite: json['has_pending_invite'] as bool? ?? false,
+      inviteExpiresAt: json['invite_expires_at'] != null ? DateTime.tryParse(json['invite_expires_at'].toString()) : null,
+      authVersion: (json['auth_version'] as num?)?.toInt() ?? 1,
+      scopes: (json['scopes'] as List?)
+              ?.map((e) => ScopeGrantDto.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+  }
+}
+
+/// ETL Connection.
+class EtlConnectionDto {
+  const EtlConnectionDto({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.status,
+    this.secretRef,
+    this.allowlistSheets = const [],
+    this.configJson = const {},
+    this.branchId,
+    this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final String type;
+  final String status;
+  final String? secretRef;
+  final List<String> allowlistSheets;
+  final Map<String, dynamic> configJson;
+  final String? branchId;
+  final DateTime? createdAt;
+
+  factory EtlConnectionDto.fromJson(Map<String, dynamic> json) {
+    return EtlConnectionDto(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      type: json['type'] as String? ?? 'csv',
+      status: json['status'] as String? ?? 'active',
+      secretRef: json['secret_ref'] as String?,
+      allowlistSheets: (json['allowlist_sheets'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      configJson: (json['config_json'] as Map<String, dynamic>?) ?? const {},
+      branchId: json['branch_id'] as String?,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+    );
+  }
+}
+
+/// ETL Pipeline.
+class EtlPipelineDto {
+  const EtlPipelineDto({
+    required this.id,
+    required this.name,
+    required this.target,
+    required this.connectionId,
+    this.branchId,
+    this.locationId,
+    this.destinationLocationId,
+    this.scheduleCron,
+    required this.status,
+    this.configJson = const {},
+    this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final String target;
+  final String connectionId;
+  final String? branchId;
+  final String? locationId;
+  final String? destinationLocationId;
+  final String? scheduleCron;
+  final String status;
+  final Map<String, dynamic> configJson;
+  final DateTime? createdAt;
+
+  factory EtlPipelineDto.fromJson(Map<String, dynamic> json) {
+    return EtlPipelineDto(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      target: json['target'] as String? ?? 'catalog_upsert',
+      connectionId: json['connection_id'] as String? ?? '',
+      branchId: json['branch_id'] as String?,
+      locationId: json['location_id'] as String?,
+      destinationLocationId: json['destination_location_id'] as String?,
+      scheduleCron: json['schedule_cron'] as String?,
+      status: json['status'] as String? ?? 'active',
+      configJson: (json['config_json'] as Map<String, dynamic>?) ?? const {},
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+    );
+  }
+}
+
+/// ETL Mapping Version.
+class EtlMappingVersionDto {
+  const EtlMappingVersionDto({
+    required this.id,
+    required this.pipelineId,
+    required this.version,
+    required this.status,
+    required this.mappingJson,
+    this.validationRulesJson = const {},
+    required this.duplicatePolicy,
+    this.publishedAt,
+    this.createdAt,
+  });
+
+  final String id;
+  final String pipelineId;
+  final int version;
+  final String status;
+  final List<dynamic> mappingJson;
+  final Map<String, dynamic> validationRulesJson;
+  final String duplicatePolicy;
+  final DateTime? publishedAt;
+  final DateTime? createdAt;
+
+  factory EtlMappingVersionDto.fromJson(Map<String, dynamic> json) {
+    return EtlMappingVersionDto(
+      id: json['id'] as String? ?? '',
+      pipelineId: json['pipeline_id'] as String? ?? '',
+      version: (json['version'] as num?)?.toInt() ?? 1,
+      status: json['status'] as String? ?? 'draft',
+      mappingJson: (json['mapping_json'] as List?) ?? const [],
+      validationRulesJson: (json['validation_rules_json'] as Map<String, dynamic>?) ?? const {},
+      duplicatePolicy: json['duplicate_policy'] as String? ?? 'reject',
+      publishedAt: json['published_at'] != null ? DateTime.tryParse(json['published_at'].toString()) : null,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+    );
+  }
+}
+
+/// ETL Run.
+class EtlRunDto {
+  const EtlRunDto({
+    required this.id,
+    required this.pipelineId,
+    this.mappingVersionId,
+    required this.mappingVersionNum,
+    required this.runnerId,
+    required this.status,
+    required this.progressPct,
+    required this.totalRows,
+    required this.validRows,
+    required this.invalidRows,
+    required this.sourceFingerprint,
+    this.singleAdminOverride = false,
+    this.reviewerId,
+    this.reviewDecision,
+    this.reviewNote,
+    this.postedAt,
+    this.generatedReferenceType,
+    this.generatedReferenceId,
+    this.errorCode,
+    this.errorMessage,
+    this.createdAt,
+  });
+
+  final String id;
+  final String pipelineId;
+  final String? mappingVersionId;
+  final int mappingVersionNum;
+  final String runnerId;
+  final String status;
+  final int progressPct;
+  final int totalRows;
+  final int validRows;
+  final int invalidRows;
+  final String sourceFingerprint;
+  final bool singleAdminOverride;
+  final String? reviewerId;
+  final String? reviewDecision;
+  final String? reviewNote;
+  final DateTime? postedAt;
+  final String? generatedReferenceType;
+  final String? generatedReferenceId;
+  final String? errorCode;
+  final String? errorMessage;
+  final DateTime? createdAt;
+
+  bool get isStaged => status == 'staged' || status == 'reviewing';
+  bool get isPosted => status == 'posted';
+  bool get isRejected => status == 'rejected';
+
+  factory EtlRunDto.fromJson(Map<String, dynamic> json) {
+    return EtlRunDto(
+      id: json['id'] as String? ?? '',
+      pipelineId: json['pipeline_id'] as String? ?? '',
+      mappingVersionId: json['mapping_version_id'] as String?,
+      mappingVersionNum: (json['mapping_version_num'] as num?)?.toInt() ?? 1,
+      runnerId: json['runner_id'] as String? ?? '',
+      status: json['status'] as String? ?? 'staged',
+      progressPct: (json['progress_pct'] as num?)?.toInt() ?? 0,
+      totalRows: (json['total_rows'] as num?)?.toInt() ?? 0,
+      validRows: (json['valid_rows'] as num?)?.toInt() ?? 0,
+      invalidRows: (json['invalid_rows'] as num?)?.toInt() ?? 0,
+      sourceFingerprint: json['source_fingerprint'] as String? ?? '',
+      singleAdminOverride: json['single_admin_override'] as bool? ?? false,
+      reviewerId: json['reviewer_id'] as String?,
+      reviewDecision: json['review_decision'] as String?,
+      reviewNote: json['review_note'] as String?,
+      postedAt: json['posted_at'] != null ? DateTime.tryParse(json['posted_at'].toString()) : null,
+      generatedReferenceType: json['generated_reference_type'] as String?,
+      generatedReferenceId: json['generated_reference_id'] as String?,
+      errorCode: json['error_code'] as String?,
+      errorMessage: json['error_message'] as String?,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+    );
+  }
+}
+
+/// ETL Run Row.
+class EtlRunRowDto {
+  const EtlRunRowDto({
+    required this.id,
+    required this.runId,
+    required this.rowNumber,
+    this.sourceRowKey,
+    required this.rawDataJson,
+    this.canonicalDataJson,
+    required this.valid,
+    this.errorsJson = const [],
+    this.actionPreview = const {},
+  });
+
+  final String id;
+  final String runId;
+  final int rowNumber;
+  final String? sourceRowKey;
+  final Map<String, dynamic> rawDataJson;
+  final Map<String, dynamic>? canonicalDataJson;
+  final bool valid;
+  final List<String> errorsJson;
+  final Map<String, dynamic> actionPreview;
+
+  factory EtlRunRowDto.fromJson(Map<String, dynamic> json) {
+    return EtlRunRowDto(
+      id: json['id'] as String? ?? '',
+      runId: json['run_id'] as String? ?? '',
+      rowNumber: (json['row_number'] as num?)?.toInt() ?? 0,
+      sourceRowKey: json['source_row_key'] as String?,
+      rawDataJson: (json['raw_data_json'] as Map<String, dynamic>?) ?? const {},
+      canonicalDataJson: json['canonical_data_json'] as Map<String, dynamic>?,
+      valid: json['valid'] as bool? ?? true,
+      errorsJson: (json['errors_json'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      actionPreview: (json['action_preview'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+}

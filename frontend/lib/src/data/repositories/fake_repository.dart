@@ -262,11 +262,76 @@ class FakeBankOpsRepository implements BankOpsRepository {
           .where((b) => locationId == null || b.locationId == locationId)
           .toList());
 
+  static AssetStatus _assetStatus(String raw) {
+    for (final s in AssetStatus.values) {
+      if (s.name == raw) return s;
+    }
+    return AssetStatus.available;
+  }
+
+  final _assets = <AssetRecord>[];
+  final _assetLogs = <AssetLogItem>[];
+
   @override
-  Future<List<AssetRecord>> getAssets({String? locationId}) =>
-      _delay(_seedAssets()
-          .where((a) => locationId == null || a.locationId == locationId)
-          .toList());
+  Future<List<AssetRecord>> getAssets({String? locationId}) {
+    if (_assets.isEmpty) _assets.addAll(_seedAssets());
+    return _delay(_assets
+        .where((a) => locationId == null || a.locationId == locationId)
+        .toList());
+  }
+
+  @override
+  Future<List<AssetLogItem>> getAssetHistory(String assetId) async {
+    if (_assets.isEmpty) _assets.addAll(_seedAssets());
+    if (_assetLogs.isEmpty) _assetLogs.addAll(_seedAssetLogs());
+    final asset = _assets.firstWhere(
+      (a) => a.id == assetId || a.serial == assetId,
+      orElse: () => _assets.first,
+    );
+    final logs = _assetLogs.where((l) => l.serial == asset.serial).toList();
+    return _delay(logs);
+  }
+
+  @override
+  Future<void> handoverAsset(
+    String assetId, {
+    String? toLocationId,
+    String? toAssignee,
+    String? status,
+    String? notes,
+  }) async {
+    if (_assets.isEmpty) _assets.addAll(_seedAssets());
+    if (_assetLogs.isEmpty) _assetLogs.addAll(_seedAssetLogs());
+    final idx = _assets.indexWhere((a) => a.id == assetId || a.serial == assetId);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy ấn chỉ');
+    final cur = _assets[idx];
+    final newStatus = status != null ? _assetStatus(status) : cur.status;
+    _assets[idx] = AssetRecord(
+      id: cur.id,
+      serial: cur.serial,
+      itemId: cur.itemId,
+      locationId: toLocationId ?? cur.locationId,
+      status: newStatus,
+      assignee: toAssignee ?? cur.assignee,
+    );
+    _assetLogs.insert(
+      0,
+      AssetLogItem(
+        id: 'log-${_assetLogs.length + 1}',
+        serial: cur.serial,
+        fromLocationId: cur.locationId,
+        toLocationId: toLocationId ?? cur.locationId,
+        fromAssignee: cur.assignee,
+        toAssignee: toAssignee ?? cur.assignee,
+        statusBefore: cur.status.name,
+        statusAfter: newStatus.name,
+        actorName: 'Trần Tuấn Bình (KSV)',
+        notes: notes,
+        createdAt: DateTime.now().toUtc(),
+      ),
+    );
+    return _delay(null);
+  }
 
   @override
   Future<List<StockMovement>> getMovements({String? itemId}) =>
@@ -275,6 +340,192 @@ class FakeBankOpsRepository implements BankOpsRepository {
           .toList());
 
   final _stockRequests = <StockRequest>[];
+  final _stockLevels = <StockLevelItem>[];
+  final _stocktakes = <StocktakeItem>[];
+
+  @override
+  Future<List<StockLevelItem>> getStockLevels({String? locationId, String? itemId}) async {
+    return _delay(_stockLevels.where((l) {
+      if (locationId != null && l.locationId != locationId) return false;
+      if (itemId != null && l.itemId != itemId) return false;
+      return true;
+    }).toList());
+  }
+
+  @override
+  Future<StockLevelItem> putStockLevel({
+    required String locationId,
+    required String itemId,
+    required String minQty,
+    String? maxQty,
+  }) async {
+    final idx = _stockLevels.indexWhere((l) => l.locationId == locationId && l.itemId == itemId);
+    final item = StockLevelItem(
+      id: idx >= 0 ? _stockLevels[idx].id : 'sl-${_stockLevels.length + 1}',
+      locationId: locationId,
+      itemId: itemId,
+      minQty: minQty,
+      maxQty: maxQty,
+    );
+    if (idx >= 0) {
+      _stockLevels[idx] = item;
+    } else {
+      _stockLevels.add(item);
+    }
+    return _delay(item);
+  }
+
+  @override
+  Future<List<LowStockAlertItem>> getLowStockAlerts({String? locationId}) async {
+    final alerts = <LowStockAlertItem>[];
+    final balances = await getBalances(locationId: locationId);
+    final items = await getItems();
+    final locs = await getLocations();
+
+    for (final level in _stockLevels) {
+      if (locationId != null && level.locationId != locationId) continue;
+      final bal = balances.firstWhere(
+        (b) => b.locationId == level.locationId && b.itemId == level.itemId,
+        orElse: () => StockBalance(locationId: level.locationId, itemId: level.itemId, quantity: '0'),
+      );
+      final cur = double.tryParse(bal.quantity) ?? 0.0;
+      final min = double.tryParse(level.minQty) ?? 0.0;
+      if (cur < min) {
+        final loc = locs.firstWhere((l) => l.id == level.locationId, orElse: () => InventoryLocation(id: level.locationId, code: 'LOC', name: 'Kho'));
+        final it = items.firstWhere((i) => i.id == level.itemId, orElse: () => InventoryItem(id: level.itemId, sku: 'ITEM', name: 'Mặt hàng', unit: 'cái', trackedSerial: false));
+        final deficit = (min - cur).toStringAsFixed(0);
+        alerts.add(LowStockAlertItem(
+          locationId: level.locationId,
+          locationCode: loc.code,
+          locationName: loc.name,
+          itemId: level.itemId,
+          sku: it.sku,
+          itemName: it.name,
+          unit: it.unit,
+          currentQty: cur.toStringAsFixed(0),
+          minQty: level.minQty,
+          maxQty: level.maxQty,
+          status: cur <= 0 ? 'empty' : 'low',
+          deficit: deficit,
+          suggestedAction: 'Bổ sung tối thiểu $deficit ${it.unit} cho kho ${loc.name}',
+        ));
+      }
+    }
+    return _delay(alerts);
+  }
+
+  @override
+  Future<List<StocktakeItem>> getStocktakes({String? locationId}) async {
+    return _delay(_stocktakes.where((s) => locationId == null || s.locationId == locationId).toList());
+  }
+
+  @override
+  Future<StocktakeItem> getStocktake(String id) async {
+    final st = _stocktakes.firstWhere((s) => s.id == id, orElse: () => throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê'));
+    return _delay(st);
+  }
+
+  @override
+  Future<StocktakeItem> createStocktake({required String locationId, String? note}) async {
+    final st = StocktakeItem(
+      id: 'st-${_stocktakes.length + 1}',
+      locationId: locationId,
+      status: 'open',
+      note: note,
+      makerId: 'u_maker',
+      createdAt: DateTime.now().toUtc(),
+      lines: const [],
+    );
+    _stocktakes.insert(0, st);
+    return _delay(st);
+  }
+
+  @override
+  Future<StocktakeItem> updateStocktakeLines(String id, List<Map<String, dynamic>> lines) async {
+    final idx = _stocktakes.indexWhere((s) => s.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê');
+    final st = _stocktakes[idx];
+    final balances = await getBalances(locationId: st.locationId);
+
+    final lineItems = <StocktakeLineItem>[];
+    for (var i = 0; i < lines.length; i++) {
+      final l = lines[i];
+      final itemId = l['item_id']?.toString() ?? '';
+      final bal = balances.firstWhere((b) => b.itemId == itemId, orElse: () => StockBalance(locationId: st.locationId, itemId: itemId, quantity: '0'));
+      final book = double.tryParse(bal.quantity) ?? 0.0;
+      final counted = double.tryParse(l['counted_qty']?.toString() ?? '0') ?? 0.0;
+      final diff = counted - book;
+      lineItems.add(StocktakeLineItem(
+        id: 'stl-$i',
+        itemId: itemId,
+        bookQty: book.toStringAsFixed(0),
+        countedQty: counted.toStringAsFixed(0),
+        variance: diff.toStringAsFixed(0),
+        reason: l['reason']?.toString(),
+      ));
+    }
+    final updated = StocktakeItem(
+      id: st.id,
+      locationId: st.locationId,
+      status: st.status,
+      note: st.note,
+      makerId: st.makerId,
+      approverId: st.approverId,
+      adjustmentRequestId: st.adjustmentRequestId,
+      createdAt: st.createdAt,
+      completedAt: st.completedAt,
+      lines: lineItems,
+    );
+    _stocktakes[idx] = updated;
+    return _delay(updated);
+  }
+
+  @override
+  Future<StocktakeItem> submitStocktake(String id) async {
+    final idx = _stocktakes.indexWhere((s) => s.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê');
+    final st = _stocktakes[idx];
+    final updated = StocktakeItem(
+      id: st.id,
+      locationId: st.locationId,
+      status: 'submitted',
+      note: st.note,
+      makerId: st.makerId,
+      approverId: st.approverId,
+      adjustmentRequestId: st.adjustmentRequestId,
+      createdAt: st.createdAt,
+      completedAt: st.completedAt,
+      lines: st.lines,
+    );
+    _stocktakes[idx] = updated;
+    return _delay(updated);
+  }
+
+  @override
+  Future<StocktakeItem> approveStocktake(String id) async {
+    final idx = _stocktakes.indexWhere((s) => s.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê');
+    final st = _stocktakes[idx];
+    final hasVariance = st.lines.any((l) => (double.tryParse(l.variance) ?? 0.0) != 0.0);
+    String? adjReqId;
+    if (hasVariance) {
+      adjReqId = 'sr-adj-${DateTime.now().millisecondsSinceEpoch}';
+    }
+    final updated = StocktakeItem(
+      id: st.id,
+      locationId: st.locationId,
+      status: 'closed',
+      note: st.note,
+      makerId: st.makerId,
+      approverId: 'u_checker',
+      adjustmentRequestId: adjReqId,
+      createdAt: st.createdAt,
+      completedAt: DateTime.now().toUtc(),
+      lines: st.lines,
+    );
+    _stocktakes[idx] = updated;
+    return _delay(updated);
+  }
 
   @override
   Future<List<StockRequest>> getStockRequests() async {
@@ -336,16 +587,20 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<StockRequest> rejectStockRequest(String id, String reason) =>
-      _transitionStock(id, RequestStatus.rejected);
+      _transitionStock(id, RequestStatus.rejected, reason: reason);
 
-  Future<StockRequest> _transitionStock(String id, RequestStatus to) async {
+  @override
+  Future<StockRequest> returnStockRequest(String id, {required String reason}) =>
+      _transitionStock(id, RequestStatus.returned, reason: reason);
+
+  Future<StockRequest> _transitionStock(String id, RequestStatus to, {String? reason}) async {
     final idx = _stockRequests.indexWhere((r) => r.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
     final r = _stockRequests[idx];
     if (r.status.isFinal) {
       throw ApiException('INVALID_STATE', 'Phiếu đã chốt trạng thái');
     }
-    _stockRequests[idx] = _copyStock(r, to);
+    _stockRequests[idx] = _copyStock(r, to, reason: reason);
     if (to == RequestStatus.pending) {
       _approvalStreamCtrl.add('new_request:$id:kho');
     } else {
@@ -354,7 +609,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     return _delay(_stockRequests[idx]);
   }
 
-  StockRequest _copyStock(StockRequest r, RequestStatus to) => StockRequest(
+  StockRequest _copyStock(StockRequest r, RequestStatus to, {String? reason}) => StockRequest(
         id: r.id,
         kind: r.kind,
         status: to,
@@ -365,9 +620,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
         items: r.items,
         reason: r.reason,
         createdAt: r.createdAt,
-        approvedBy: r.approvedBy,
-        approvedByName: r.approvedByName,
-        rejectReason: r.rejectReason,
+        approvedBy: to == RequestStatus.posted ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2' : r.approvedBy,
+        approvedByName: to == RequestStatus.posted ? 'Trần Tuấn Bình (KSV)' : r.approvedByName,
+        rejectReason: to == RequestStatus.rejected ? (reason ?? r.rejectReason) : r.rejectReason,
+        returnReason: to == RequestStatus.returned ? (reason ?? r.returnReason) : r.returnReason,
         destinationLocationId: r.destinationLocationId,
       );
 
@@ -486,9 +742,13 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<CashRequest> rejectCashRequest(String id, String reason) =>
-      _transitionCash(id, RequestStatus.rejected);
+      _transitionCash(id, RequestStatus.rejected, reason: reason);
 
-  Future<CashRequest> _transitionCash(String id, RequestStatus to) async {
+  @override
+  Future<CashRequest> returnCashRequest(String id, {required String reason}) =>
+      _transitionCash(id, RequestStatus.returned, reason: reason);
+
+  Future<CashRequest> _transitionCash(String id, RequestStatus to, {String? reason}) async {
     final idx = _cashRequests.indexWhere((r) => r.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
     final r = _cashRequests[idx];
@@ -507,9 +767,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
       createdBy: r.createdBy,
       createdByName: r.createdByName,
       createdAt: r.createdAt,
-      approvedBy: r.approvedBy,
-      approvedByName: r.approvedByName,
-      rejectReason: r.rejectReason,
+      approvedBy: to == RequestStatus.posted ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2' : r.approvedBy,
+      approvedByName: to == RequestStatus.posted ? 'Trần Tuấn Bình (KSV)' : r.approvedByName,
+      rejectReason: to == RequestStatus.rejected ? (reason ?? r.rejectReason) : r.rejectReason,
+      returnReason: to == RequestStatus.returned ? (reason ?? r.returnReason) : r.returnReason,
     );
     if (to == RequestStatus.pending) {
       _approvalStreamCtrl.add('new_request:$id:quỹ');
@@ -961,4 +1222,450 @@ class FakeBankOpsRepository implements BankOpsRepository {
     int criticalDays = 90,
   }) =>
       _delay(_seedStagnation());
+
+  // =========================================================================
+  // Admin IAM (Phase 1)
+  // =========================================================================
+
+  final List<BranchDto> _branches = [
+    const BranchDto(id: 'br_ho', code: 'HO', name: 'Hội sở chính', address: 'Quận 1, TP.HCM', active: true),
+    const BranchDto(id: 'br_bt', code: 'CN_BEN_THANH', name: 'Chi nhánh Bến Thành', address: 'Quận 1, TP.HCM', active: true),
+    const BranchDto(id: 'br_hk', code: 'CN_HOAN_KIEM', name: 'Chi nhánh Hoàn Kiếm', address: 'Hoàn Kiếm, Hà Nội', active: true),
+  ];
+
+  final List<RoleDto> _roles = [
+    const RoleDto(code: 'admin', name: 'Quản trị viên hệ thống', capabilities: ['iam:admin', 'etl:admin', 'etl:design', 'etl:run', 'etl:review', 'etl:post_balance']),
+    const RoleDto(code: 'staff', name: 'Nhân viên giao dịch (Maker)', capabilities: ['inventory:create_request', 'etl:run']),
+    const RoleDto(code: 'approver', name: 'Kiểm soát viên (Checker)', capabilities: ['inventory:approve_request', 'etl:review']),
+    const RoleDto(code: 'auditor', name: 'Kiểm toán nội bộ', capabilities: ['audit:view']),
+  ];
+
+  final List<EmployeeUserDto> _employees = [
+    const EmployeeUserDto(
+      id: 'emp_1',
+      username: 'demo_admin',
+      displayName: 'Phạm Minh Trị (Admin)',
+      email: 'admin@bankops.vn',
+      status: 'active',
+      roles: ['admin'],
+      capabilities: ['iam:admin', 'etl:admin', 'etl:design', 'etl:run', 'etl:review', 'etl:post_balance'],
+    ),
+    const EmployeeUserDto(
+      id: 'emp_2',
+      username: 'demo_maker',
+      displayName: 'Nguyễn Hoàng An (GDV)',
+      email: 'maker@bankops.vn',
+      status: 'active',
+      roles: ['staff'],
+      capabilities: ['inventory:create_request', 'etl:run'],
+    ),
+    const EmployeeUserDto(
+      id: 'emp_3',
+      username: 'demo_checker',
+      displayName: 'Trần Tuấn Bình (KSV)',
+      email: 'checker@bankops.vn',
+      status: 'active',
+      roles: ['approver'],
+      capabilities: ['inventory:approve_request', 'etl:review'],
+    ),
+  ];
+
+  @override
+  Future<List<BranchDto>> getBranches() => _delay(_branches);
+
+  @override
+  Future<List<RoleDto>> getRoles() => _delay(_roles);
+
+  @override
+  Future<List<EmployeeUserDto>> getEmployees({
+    String? search,
+    String? branchId,
+    String? role,
+    String? status,
+  }) {
+    var list = _employees;
+    if (search != null && search.isNotEmpty) {
+      list = list.where((e) => e.username.contains(search) || e.displayName.contains(search)).toList();
+    }
+    if (status != null && status.isNotEmpty) {
+      list = list.where((e) => e.status == status).toList();
+    }
+    return _delay(list);
+  }
+
+  @override
+  Future<EmployeeUserDto> createEmployee({
+    required String username,
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branchId,
+    List<String> roles = const ['staff'],
+    List<Map<String, dynamic>> scopes = const [],
+    String onboardingMethod = 'temporary_password',
+  }) {
+    final emp = EmployeeUserDto(
+      id: 'emp_${DateTime.now().millisecondsSinceEpoch}',
+      username: username,
+      displayName: displayName,
+      email: email,
+      phoneNumber: phoneNumber,
+      branchId: branchId,
+      status: 'active',
+      roles: roles,
+      mustChangePassword: onboardingMethod == 'temporary_password',
+      hasPendingInvite: onboardingMethod != 'temporary_password',
+    );
+    _employees.add(emp);
+    return _delay(emp);
+  }
+
+  @override
+  Future<EmployeeUserDto> updateEmployeeStatus(
+    String userId,
+    String status, {
+    String? reason,
+  }) {
+    final idx = _employees.indexWhere((e) => e.id == userId);
+    if (idx >= 0) {
+      final old = _employees[idx];
+      final updated = EmployeeUserDto(
+        id: old.id,
+        username: old.username,
+        displayName: old.displayName,
+        email: old.email,
+        phoneNumber: old.phoneNumber,
+        status: status,
+        branchId: old.branchId,
+        branchName: old.branchName,
+        roles: old.roles,
+        capabilities: old.capabilities,
+        mustChangePassword: old.mustChangePassword,
+        hasPendingInvite: old.hasPendingInvite,
+        inviteExpiresAt: old.inviteExpiresAt,
+        authVersion: old.authVersion + 1,
+        scopes: old.scopes,
+      );
+      _employees[idx] = updated;
+      return _delay(updated);
+    }
+    throw ApiException('NOT_FOUND', 'Không tìm thấy nhân viên');
+  }
+
+  @override
+  Future<EmployeeUserDto> updateEmployeeRoles(String userId, List<String> roles) {
+    final idx = _employees.indexWhere((e) => e.id == userId);
+    if (idx >= 0) {
+      final old = _employees[idx];
+      final updated = EmployeeUserDto(
+        id: old.id,
+        username: old.username,
+        displayName: old.displayName,
+        email: old.email,
+        phoneNumber: old.phoneNumber,
+        status: old.status,
+        branchId: old.branchId,
+        branchName: old.branchName,
+        roles: roles,
+        capabilities: old.capabilities,
+        mustChangePassword: old.mustChangePassword,
+        hasPendingInvite: old.hasPendingInvite,
+        inviteExpiresAt: old.inviteExpiresAt,
+        authVersion: old.authVersion + 1,
+        scopes: old.scopes,
+      );
+      _employees[idx] = updated;
+      return _delay(updated);
+    }
+    throw ApiException('NOT_FOUND', 'Không tìm thấy nhân viên');
+  }
+
+  @override
+  Future<EmployeeUserDto> updateEmployeeScopes(
+    String userId,
+    List<Map<String, dynamic>> scopes,
+  ) {
+    final idx = _employees.indexWhere((e) => e.id == userId);
+    if (idx >= 0) {
+      return _delay(_employees[idx]);
+    }
+    throw ApiException('NOT_FOUND', 'Không tìm thấy nhân viên');
+  }
+
+  @override
+  Future<void> revokeEmployeeSessions(String userId) => _delay(null);
+
+  @override
+  Future<String> resetEmployeePassword(String userId) => _delay('BankOps#TEMP123!');
+
+  @override
+  Future<String> reinviteEmployee(String userId) => _delay('inv_mock_token_123');
+
+  // =========================================================================
+  // ETL Pipeline (Phase 2)
+  // =========================================================================
+
+  final List<EtlConnectionDto> _etlConnections = [
+    const EtlConnectionDto(
+      id: 'conn_1',
+      name: 'Nguồn Tệp Excel/CSV Kế toán Kho',
+      type: 'csv',
+      status: 'active',
+    ),
+  ];
+
+  final List<EtlPipelineDto> _etlPipelines = [
+    const EtlPipelineDto(
+      id: 'pipe_1',
+      name: 'Cân đối Tồn kho Quản trị & Điều chỉnh',
+      target: 'balance_adjustment_admin',
+      connectionId: 'conn_1',
+      status: 'active',
+    ),
+  ];
+
+  final List<EtlMappingVersionDto> _etlMappingVersions = [
+    const EtlMappingVersionDto(
+      id: 'mv_1',
+      pipelineId: 'pipe_1',
+      version: 1,
+      status: 'published',
+      mappingJson: [
+        {'source_field': 'sku', 'target_field': 'sku', 'required': true, 'transform': 'trim_upper'},
+        {'source_field': 'target_quantity', 'target_field': 'target_quantity', 'required': false, 'transform': 'to_float'},
+        {'source_field': 'reason', 'target_field': 'reason', 'required': false, 'transform': 'trim'},
+      ],
+      duplicatePolicy: 'reject',
+    ),
+  ];
+
+  final List<EtlRunDto> _etlRuns = [
+    const EtlRunDto(
+      id: 'run_1',
+      pipelineId: 'pipe_1',
+      mappingVersionNum: 1,
+      runnerId: 'emp_1',
+      status: 'staged',
+      progressPct: 100,
+      totalRows: 10,
+      validRows: 9,
+      invalidRows: 1,
+      sourceFingerprint: 'mock_fp_123',
+    ),
+  ];
+
+  @override
+  Future<List<EtlConnectionDto>> getEtlConnections({String? branchId}) => _delay(_etlConnections);
+
+  @override
+  Future<EtlConnectionDto> createEtlConnection({
+    required String name,
+    required String type,
+    String? secretRef,
+    List<String>? allowlistSheets,
+    String? branchId,
+  }) {
+    final conn = EtlConnectionDto(
+      id: 'conn_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      type: type,
+      status: 'active',
+      secretRef: secretRef,
+      allowlistSheets: allowlistSheets ?? const [],
+      branchId: branchId,
+    );
+    _etlConnections.add(conn);
+    return _delay(conn);
+  }
+
+  @override
+  Future<List<EtlPipelineDto>> getEtlPipelines({
+    String? target,
+    String? branchId,
+  }) {
+    var list = _etlPipelines;
+    if (target != null && target.isNotEmpty) {
+      list = list.where((p) => p.target == target).toList();
+    }
+    return _delay(list);
+  }
+
+  @override
+  Future<EtlPipelineDto> createEtlPipeline({
+    required String name,
+    required String target,
+    required String connectionId,
+    String? branchId,
+    String? locationId,
+    String? destinationLocationId,
+    String? scheduleCron,
+  }) {
+    final pipe = EtlPipelineDto(
+      id: 'pipe_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      target: target,
+      connectionId: connectionId,
+      branchId: branchId,
+      locationId: locationId,
+      destinationLocationId: destinationLocationId,
+      scheduleCron: scheduleCron,
+      status: 'active',
+    );
+    _etlPipelines.add(pipe);
+    return _delay(pipe);
+  }
+
+  @override
+  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(String pipelineId) => _delay(_etlMappingVersions);
+
+  @override
+  Future<EtlMappingVersionDto> createEtlMappingVersion(
+    String pipelineId, {
+    required List<Map<String, dynamic>> mappingRules,
+    String duplicatePolicy = 'reject',
+  }) {
+    final mv = EtlMappingVersionDto(
+      id: 'mv_${DateTime.now().millisecondsSinceEpoch}',
+      pipelineId: pipelineId,
+      version: _etlMappingVersions.length + 1,
+      status: 'draft',
+      mappingJson: mappingRules,
+      duplicatePolicy: duplicatePolicy,
+    );
+    _etlMappingVersions.add(mv);
+    return _delay(mv);
+  }
+
+  @override
+  Future<EtlMappingVersionDto> publishEtlMappingVersion(
+    String pipelineId,
+    String versionId,
+  ) {
+    final idx = _etlMappingVersions.indexWhere((m) => m.id == versionId);
+    if (idx >= 0) {
+      final old = _etlMappingVersions[idx];
+      final pub = EtlMappingVersionDto(
+        id: old.id,
+        pipelineId: old.pipelineId,
+        version: old.version,
+        status: 'published',
+        mappingJson: old.mappingJson,
+        duplicatePolicy: old.duplicatePolicy,
+        publishedAt: DateTime.now(),
+      );
+      _etlMappingVersions[idx] = pub;
+      return _delay(pub);
+    }
+    throw ApiException('NOT_FOUND', 'Không tìm thấy mapping version');
+  }
+
+  @override
+  Future<EtlRunDto> triggerEtlRun(
+    String pipelineId, {
+    List<Map<String, dynamic>>? rawRows,
+    List<int>? fileBytes,
+    String? filename,
+    String? externalEventId,
+  }) {
+    final run = EtlRunDto(
+      id: 'run_${DateTime.now().millisecondsSinceEpoch}',
+      pipelineId: pipelineId,
+      mappingVersionNum: 1,
+      runnerId: 'emp_1',
+      status: 'staged',
+      progressPct: 100,
+      totalRows: 5,
+      validRows: 5,
+      invalidRows: 0,
+      sourceFingerprint: 'mock_fp_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    _etlRuns.add(run);
+    return _delay(run);
+  }
+
+  @override
+  Future<List<EtlRunDto>> getEtlRuns({
+    String? pipelineId,
+    String? status,
+  }) => _delay(_etlRuns);
+
+  @override
+  Future<EtlRunDto> getEtlRun(String runId) {
+    final run = _etlRuns.firstWhere((r) => r.id == runId, orElse: () => _etlRuns.first);
+    return _delay(run);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getEtlRunRows(
+    String runId, {
+    bool? valid,
+    String? search,
+    int page = 1,
+    int pageSize = 50,
+  }) {
+    final sampleRows = [
+      const EtlRunRowDto(
+        id: 'rr_1',
+        runId: 'run_1',
+        rowNumber: 1,
+        sourceRowKey: 'IP15-128',
+        rawDataJson: {'sku': 'IP15-128', 'target_quantity': 20},
+        canonicalDataJson: {'sku': 'IP15-128', 'target_quantity': 20.0},
+        valid: true,
+        actionPreview: {
+          'action': 'balance_adjustment',
+          'sku': 'IP15-128',
+          'current_quantity': 15.0,
+          'target_quantity': 20.0,
+          'delta_quantity': 5.0,
+          'direction': 'increase',
+        },
+      ),
+    ];
+    return _delay({
+      'total': sampleRows.length,
+      'page': page,
+      'page_size': pageSize,
+      'rows': sampleRows,
+    });
+  }
+
+  @override
+  Future<EtlRunDto> reviewEtlRun(
+    String runId, {
+    required String decision,
+    String? note,
+  }) {
+    final idx = _etlRuns.indexWhere((r) => r.id == runId);
+    if (idx >= 0) {
+      final old = _etlRuns[idx];
+      final reviewed = EtlRunDto(
+        id: old.id,
+        pipelineId: old.pipelineId,
+        mappingVersionNum: old.mappingVersionNum,
+        runnerId: old.runnerId,
+        status: decision == 'approved' ? 'reviewing' : 'rejected',
+        progressPct: 100,
+        totalRows: old.totalRows,
+        validRows: old.validRows,
+        invalidRows: old.invalidRows,
+        sourceFingerprint: old.sourceFingerprint,
+        reviewDecision: decision,
+        reviewNote: note,
+      );
+      _etlRuns[idx] = reviewed;
+      return _delay(reviewed);
+    }
+    throw ApiException('NOT_FOUND', 'Không tìm thấy run');
+  }
+
+  @override
+  Future<Map<String, dynamic>> postEtlRun(String runId) {
+    return _delay({'status': 'posted', 'run_id': runId, 'movements_count': 5, 'single_admin_override': true});
+  }
+
+  @override
+  Future<String> getEtlErrorReport(String runId) {
+    return _delay('Dòng,Mã SKU,Chi tiết lỗi\n2,ERR_SKU_999,SKU không tồn tại trong danh mục\n');
+  }
 }

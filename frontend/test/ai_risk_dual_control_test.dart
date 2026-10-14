@@ -91,7 +91,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Xác Thực Kiểm Soát Kép (4 Mắt)'), findsOneWidget);
+      expect(find.text('Xác Thực Quyền Kiểm Soát Kép (Supervisor Authorization)'), findsOneWidget);
       expect(find.byKey(const Key('supervisor-pin-input')), findsOneWidget);
 
       // Enter incorrect PIN -> shows error message

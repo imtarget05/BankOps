@@ -335,6 +335,7 @@ def _cash_req_out(r: CashRequest, extra: dict | None = None) -> dict:
         "maker_id": str(r.maker_id),
         "approver_id": str(r.approver_id) if r.approver_id else None,
         "reason": r.reason,
+        "return_reason": getattr(r, "return_reason", None),
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "simulation": True,
         "currency": "VND",
@@ -448,7 +449,7 @@ async def submit_cash_request(
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) != str(user.id):
         raise AppError(403, "FORBIDDEN", "only the maker can submit")
-    if req.status != "draft":
+    if req.status not in ("draft", "returned"):
         raise AppError(409, "STATE_CONFLICT", f"cannot submit từ {req.status}")
     _check_if_match(request, req.version)
 
@@ -611,6 +612,47 @@ async def reject_cash_request(
         status="rejected",
         message=f"Phiếu quỹ {req.kind} ({req.id}) đã bị từ chối",
         meta={"sub_kind": req.kind, "approver_id": str(user.id), "reason": req.reason},
+    )
+    return _cash_req_out(req)
+
+
+@router.post("/cash-sim/requests/{request_id}/return")
+async def return_cash_request(
+    request_id: str,
+    request: Request,
+    payload: dict[str, Any] | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    req = await _load_request(db, uuid.UUID(request_id))
+    if req is None:
+        raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
+    if str(req.maker_id) == str(user.id):
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự trả về phiếu của mình (A1)")
+    caps = await _user_capabilities(db, user.id)
+    if "cash:approve_request" not in caps:
+        raise AppError(403, "FORBIDDEN", "missing capability: cash:approve_request")
+    if req.status != "submitted":
+        raise AppError(409, "STATE_CONFLICT", f"cannot return từ {req.status}")
+    _check_if_match(request, req.version)
+
+    reason = str(payload.get("reason", "")).strip() if payload else ""
+    if len(reason) < 3:
+        raise AppError(422, "MISSING_REASON", "Lý do trả về yêu cầu chỉnh sửa phải có ít nhất 3 ký tự")
+
+    req.status = "returned"
+    req.return_reason = reason
+    req.version += 1
+    req.approver_id = user.id
+    await db.commit()
+    await db.refresh(req)
+    await broadcast_approval_event(
+        action="returned",
+        request_id=str(req.id),
+        kind="cash",
+        status="returned",
+        message=f"Phiếu quỹ {req.kind} ({req.id}) đã được trả về để chỉnh sửa",
+        meta={"sub_kind": req.kind, "approver_id": str(user.id), "reason": reason},
     )
     return _cash_req_out(req)
 

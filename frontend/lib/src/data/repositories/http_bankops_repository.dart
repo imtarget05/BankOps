@@ -110,6 +110,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return headers;
   }
 
+  Map<String, String> _idem() => {
+        'Idempotency-Key': 'fe_${DateTime.now().microsecondsSinceEpoch}',
+      };
+
   Never _throwEnvelope(http.Response resp) {
     String code = 'HTTP_${resp.statusCode}';
     String message = 'Máy chủ trả lỗi ${resp.statusCode}.';
@@ -492,6 +496,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
               locationId: _str(m, 'location_id'),
               itemId: _str(m, 'item_id'),
               quantity: _str(m, 'quantity', '0'),
+              reservedQuantity: _str(m, 'reserved_quantity', '0'),
+              availableQuantity: m['available_quantity']?.toString(),
             ))
         .toList();
   }
@@ -500,13 +506,60 @@ class HttpBankOpsRepository implements BankOpsRepository {
   Future<List<AssetRecord>> getAssets({String? locationId}) async {
     final body = await _get('/inventory/assets');
     final all = _asList(body, 'assets').whereType<Map>().map((m) => AssetRecord(
+          id: m['id']?.toString(),
           serial: _str(m, 'serial'),
           itemId: _str(m, 'item_id'),
           locationId: _str(m, 'location_id'),
           status: _assetStatus(_str(m, 'status')),
+          assignee: m['assignee']?.toString(),
         ));
     if (locationId == null) return all.toList();
     return all.where((a) => a.locationId == locationId).toList();
+  }
+
+  @override
+  Future<List<AssetLogItem>> getAssetHistory(String assetId) async {
+    final body = await _get('/inventory/assets/$assetId/history');
+    return _asList(body, 'logs')
+        .whereType<Map>()
+        .map((m) => AssetLogItem(
+              id: _str(m, 'id'),
+              serial: _str(m, 'serial'),
+              fromLocationId: m['from_location_id']?.toString(),
+              fromLocationName: m['from_location_name']?.toString(),
+              toLocationId: m['to_location_id']?.toString(),
+              toLocationName: m['to_location_name']?.toString(),
+              fromAssignee: m['from_assignee']?.toString(),
+              toAssignee: m['to_assignee']?.toString(),
+              statusBefore: m['status_before']?.toString(),
+              statusAfter: _str(m, 'status_after', 'in_stock'),
+              actorId: m['actor_id']?.toString(),
+              actorName: m['actor_name']?.toString(),
+              requestId: m['request_id']?.toString(),
+              notes: m['notes']?.toString(),
+              createdAt: _date(m, 'created_at'),
+            ))
+        .toList();
+  }
+
+  @override
+  Future<void> handoverAsset(
+    String assetId, {
+    String? toLocationId,
+    String? toAssignee,
+    String? status,
+    String? notes,
+  }) async {
+    await _post(
+      '/inventory/assets/$assetId/handover',
+      {
+        if (toLocationId != null) 'to_location_id': toLocationId,
+        if (toAssignee != null) 'to_assignee': toAssignee,
+        if (status != null) 'status': status,
+        if (notes != null) 'notes': notes,
+      },
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
   }
 
   @override
@@ -524,6 +577,170 @@ class HttpBankOpsRepository implements BankOpsRepository {
             ));
     if (itemId == null) return all.toList();
     return all.where((x) => x.itemId == itemId).toList();
+  }
+
+  // ---- stock levels & low stock alerts ----
+
+  @override
+  Future<List<StockLevelItem>> getStockLevels({String? locationId, String? itemId}) async {
+    final query = <String, String>{};
+    if (locationId != null) query['location_id'] = locationId;
+    if (itemId != null) query['item_id'] = itemId;
+    final path = query.isEmpty
+        ? '/inventory/stock-levels'
+        : '/inventory/stock-levels?${Uri(queryParameters: query).query}';
+    final res = await _get(path);
+    return _asList(res, 'stock_levels')
+        .whereType<Map>()
+        .map((m) => StockLevelItem(
+              id: _str(m, 'id'),
+              locationId: _str(m, 'location_id'),
+              itemId: _str(m, 'item_id'),
+              minQty: _str(m, 'min_qty', '0'),
+              maxQty: m['max_qty']?.toString(),
+            ))
+        .toList();
+  }
+
+  @override
+  Future<StockLevelItem> putStockLevel({
+    required String locationId,
+    required String itemId,
+    required String minQty,
+    String? maxQty,
+  }) async {
+    final res = await _put(
+      '/inventory/stock-levels',
+      {
+        'location_id': locationId,
+        'item_id': itemId,
+        'min_qty': minQty,
+        if (maxQty != null && maxQty.isNotEmpty) 'max_qty': maxQty,
+      },
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return StockLevelItem(
+      id: _str(res, 'id'),
+      locationId: _str(res, 'location_id'),
+      itemId: _str(res, 'item_id'),
+      minQty: _str(res, 'min_qty', '0'),
+      maxQty: res['max_qty']?.toString(),
+    );
+  }
+
+  @override
+  Future<List<LowStockAlertItem>> getLowStockAlerts({String? locationId}) async {
+    final path = locationId == null
+        ? '/inventory/low-stock'
+        : '/inventory/low-stock?location_id=$locationId';
+    final res = await _get(path);
+    return _asList(res, 'items')
+        .whereType<Map>()
+        .map((m) => LowStockAlertItem(
+              locationId: _str(m, 'location_id'),
+              locationCode: _str(m, 'location_code', 'N/A'),
+              locationName: _str(m, 'location_name', 'N/A'),
+              itemId: _str(m, 'item_id'),
+              sku: _str(m, 'sku', 'N/A'),
+              itemName: _str(m, 'item_name', 'N/A'),
+              unit: _str(m, 'unit', 'đơn vị'),
+              currentQty: _str(m, 'current_qty', '0'),
+              minQty: _str(m, 'min_qty', '0'),
+              maxQty: m['max_qty']?.toString(),
+              status: _str(m, 'status', 'low'),
+              deficit: _str(m, 'deficit', '0'),
+              suggestedAction: _str(m, 'suggested_action', ''),
+            ))
+        .toList();
+  }
+
+  // ---- stocktakes ----
+
+  StocktakeItem _parseStocktake(Map m) {
+    final lines = (m['lines'] is List ? m['lines'] as List : const [])
+        .whereType<Map>()
+        .map((l) => StocktakeLineItem(
+              id: _str(l, 'id'),
+              itemId: _str(l, 'item_id'),
+              bookQty: _str(l, 'book_qty', '0'),
+              countedQty: _str(l, 'counted_qty', '0'),
+              variance: _str(l, 'variance', '0'),
+              reason: l['reason']?.toString(),
+            ))
+        .toList();
+    return StocktakeItem(
+      id: _str(m, 'id'),
+      locationId: _str(m, 'location_id'),
+      status: _str(m, 'status', 'open'),
+      note: m['note']?.toString(),
+      makerId: _str(m, 'maker_id'),
+      approverId: m['approver_id']?.toString(),
+      adjustmentRequestId: m['adjustment_request_id']?.toString(),
+      createdAt: _date(m, 'created_at'),
+      completedAt: m['completed_at'] != null ? _date(m, 'completed_at') : null,
+      lines: lines,
+    );
+  }
+
+  @override
+  Future<List<StocktakeItem>> getStocktakes({String? locationId}) async {
+    final path = locationId == null
+        ? '/inventory/stocktakes'
+        : '/inventory/stocktakes?location_id=$locationId';
+    final res = await _get(path);
+    return _asList(res, 'stocktakes')
+        .whereType<Map>()
+        .map(_parseStocktake)
+        .toList();
+  }
+
+  @override
+  Future<StocktakeItem> getStocktake(String id) async {
+    final res = await _get('/inventory/stocktakes/$id');
+    return _parseStocktake(res);
+  }
+
+  @override
+  Future<StocktakeItem> createStocktake({required String locationId, String? note}) async {
+    final res = await _post(
+      '/inventory/stocktakes',
+      {
+        'location_id': locationId,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return _parseStocktake(res);
+  }
+
+  @override
+  Future<StocktakeItem> updateStocktakeLines(String id, List<Map<String, dynamic>> lines) async {
+    final res = await _put(
+      '/inventory/stocktakes/$id/lines',
+      {'lines': lines},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return _parseStocktake(res);
+  }
+
+  @override
+  Future<StocktakeItem> submitStocktake(String id) async {
+    final res = await _post(
+      '/inventory/stocktakes/$id/submit',
+      {},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return _parseStocktake(res);
+  }
+
+  @override
+  Future<StocktakeItem> approveStocktake(String id) async {
+    final res = await _post(
+      '/inventory/stocktakes/$id/approve',
+      {},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return _parseStocktake(res);
   }
 
   @override
@@ -607,6 +824,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
       approvedBy: m['approved_by']?.toString(),
       approvedByName: m['approved_by_name']?.toString(),
       rejectReason: m['reject_reason']?.toString(),
+      returnReason: m['return_reason']?.toString(),
       destinationLocationId: destId,
     );
   }
@@ -637,6 +855,17 @@ class HttpBankOpsRepository implements BankOpsRepository {
   Future<StockRequest> rejectStockRequest(String id, String reason) async {
     final res = _parseStockRequest(await _post(
       '/inventory/requests/$id/reject',
+      {'reason': reason},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('processed:$id');
+    return res;
+  }
+
+  @override
+  Future<StockRequest> returnStockRequest(String id, {required String reason}) async {
+    final res = _parseStockRequest(await _post(
+      '/inventory/requests/$id/return',
       {'reason': reason},
       extraHeaders: {'Idempotency-Key': _idemKey()},
     ));
@@ -751,6 +980,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
       approvedBy: m['approved_by']?.toString(),
       approvedByName: m['approved_by_name']?.toString(),
       rejectReason: m['reject_reason']?.toString(),
+      returnReason: m['return_reason']?.toString(),
     );
   }
 
@@ -821,26 +1051,44 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return res;
   }
 
+  @override
+  Future<CashRequest> returnCashRequest(String id, {required String reason}) async {
+    final res = _parseCashRequest(await _post(
+      '/cash-sim/requests/$id/return',
+      {'reason': reason},
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    ));
+    _approvalStreamCtrl.add('processed:$id');
+    return res;
+  }
+
   // ---- approvals ----
 
   @override
   Future<List<ApprovalItem>> getApprovalInbox() async {
-    final body = await _get('/approvals/inbox');
-    return _asList(body, 'approvals').whereType<Map>().map((m) {
-      final id = _str(m, 'id');
-      return ApprovalItem(
-        id: id,
-        kind: _str(m, 'kind'),
-        maker: _str(m, 'maker'),
-        impact: _str(m, 'impact', _str(m, 'status')),
-        detail: _str(m, 'detail', id),
-        approvalDetail: m['approval_detail'] is Map
-            ? Map<String, dynamic>.from(m['approval_detail'] as Map)
-            : (m['approval_detail'] is String
-                ? _decodeMap(m['approval_detail'] as String)
-                : null),
-      );
-    }).toList();
+    try {
+      final body = await _get('/approvals/inbox');
+      return _asList(body, 'approvals').whereType<Map>().map((m) {
+        final id = _str(m, 'id');
+        return ApprovalItem(
+          id: id,
+          kind: _str(m, 'kind'),
+          maker: _str(m, 'maker'),
+          impact: _str(m, 'impact', _str(m, 'status')),
+          detail: _str(m, 'detail', id),
+          approvalDetail: m['approval_detail'] is Map
+              ? Map<String, dynamic>.from(m['approval_detail'] as Map)
+              : (m['approval_detail'] is String
+                  ? _decodeMap(m['approval_detail'] as String)
+                  : null),
+        );
+      }).toList();
+    } on ApiException catch (e) {
+      if (e.code == 'HTTP_403' || e.code == 'FORBIDDEN' || e.message.contains('quyền')) {
+        return const <ApprovalItem>[];
+      }
+      rethrow;
+    }
   }
 
   Map<String, dynamic>? _decodeMap(String source) {
@@ -947,7 +1195,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
   @override
   Future<List<ActivityEvent>> getActivity({String? cursor}) async {
     final body = await _get(
-        '/activity/', {if (cursor != null) 'cursor': cursor});
+        '/activity', {if (cursor != null) 'cursor': cursor});
     return _asList(body, 'events')
         .whereType<Map>()
         .map((m) => ActivityEvent(
@@ -1285,5 +1533,343 @@ class HttpBankOpsRepository implements BankOpsRepository {
               severity: _str(m, 'severity', 'normal'),
             ))
         .toList();
+  }
+
+  // =========================================================================
+  // Admin IAM (Phase 1)
+  // =========================================================================
+
+  @override
+  Future<List<BranchDto>> getBranches() async {
+    final body = await _get('/admin/branches');
+    return _asList(body, 'branches')
+        .whereType<Map<String, dynamic>>()
+        .map(BranchDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<List<RoleDto>> getRoles() async {
+    final body = await _get('/admin/roles');
+    return _asList(body, 'roles')
+        .whereType<Map<String, dynamic>>()
+        .map(RoleDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<List<EmployeeUserDto>> getEmployees({
+    String? search,
+    String? branchId,
+    String? role,
+    String? status,
+  }) async {
+    final query = <String, String>{};
+    if (search != null && search.isNotEmpty) query['search'] = search;
+    if (branchId != null && branchId.isNotEmpty) query['branch_id'] = branchId;
+    if (role != null && role.isNotEmpty) query['role'] = role;
+    if (status != null && status.isNotEmpty) query['status'] = status;
+    final body = await _get('/admin/users', query.isEmpty ? null : query);
+    return _asList(body, 'users')
+        .whereType<Map<String, dynamic>>()
+        .map(EmployeeUserDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<EmployeeUserDto> createEmployee({
+    required String username,
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branchId,
+    List<String> roles = const ['staff'],
+    List<Map<String, dynamic>> scopes = const [],
+    String onboardingMethod = 'temporary_password',
+  }) async {
+    final payload = <String, dynamic>{
+      'username': username,
+      'display_name': displayName,
+      'email': email,
+      'phone_number': phoneNumber,
+      'branch_id': branchId,
+      'roles': roles,
+      'scopes': scopes,
+      'onboarding_method': onboardingMethod,
+    };
+    final body = await _post('/admin/users', payload, extraHeaders: _idem());
+    final userMap = body['user'] as Map<String, dynamic>? ?? body;
+    return EmployeeUserDto.fromJson(userMap);
+  }
+
+  @override
+  Future<EmployeeUserDto> updateEmployeeStatus(
+    String userId,
+    String status, {
+    String? reason,
+  }) async {
+    final body = await _post(
+      '/admin/users/$userId/status',
+      {'status': status, 'reason': reason},
+      extraHeaders: _idem(),
+    );
+    final userMap = body['user'] as Map<String, dynamic>? ?? body;
+    return EmployeeUserDto.fromJson(userMap);
+  }
+
+  @override
+  Future<EmployeeUserDto> updateEmployeeRoles(String userId, List<String> roles) async {
+    final body = await _put(
+      '/admin/users/$userId/roles',
+      {'roles': roles},
+      extraHeaders: _idem(),
+    );
+    final userMap = body['user'] as Map<String, dynamic>? ?? body;
+    return EmployeeUserDto.fromJson(userMap);
+  }
+
+  @override
+  Future<EmployeeUserDto> updateEmployeeScopes(
+    String userId,
+    List<Map<String, dynamic>> scopes,
+  ) async {
+    final body = await _put(
+      '/admin/users/$userId/scopes',
+      {'scopes': scopes},
+      extraHeaders: _idem(),
+    );
+    final userMap = body['user'] as Map<String, dynamic>? ?? body;
+    return EmployeeUserDto.fromJson(userMap);
+  }
+
+  @override
+  Future<void> revokeEmployeeSessions(String userId) async {
+    await _post('/admin/users/$userId/sessions/revoke', {}, extraHeaders: _idem());
+  }
+
+  @override
+  Future<String> resetEmployeePassword(String userId) async {
+    final body = await _post('/admin/users/$userId/reset-password', {}, extraHeaders: _idem());
+    return body['temporary_password'] as String? ?? '';
+  }
+
+  @override
+  Future<String> reinviteEmployee(String userId) async {
+    final body = await _post('/admin/users/$userId/invite', {}, extraHeaders: _idem());
+    return body['invite_token'] as String? ?? '';
+  }
+
+  // =========================================================================
+  // ETL Pipeline (Phase 2)
+  // =========================================================================
+
+  @override
+  Future<List<EtlConnectionDto>> getEtlConnections({String? branchId}) async {
+    final query = branchId != null ? {'branch_id': branchId} : null;
+    final body = await _get('/etl/connections', query);
+    return _asList(body, 'connections')
+        .whereType<Map<String, dynamic>>()
+        .map(EtlConnectionDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<EtlConnectionDto> createEtlConnection({
+    required String name,
+    required String type,
+    String? secretRef,
+    List<String>? allowlistSheets,
+    String? branchId,
+  }) async {
+    final body = await _post('/etl/connections', {
+      'name': name,
+      'type': type,
+      'secret_ref': secretRef,
+      'allowlist_sheets': allowlistSheets,
+      'branch_id': branchId,
+    });
+    return EtlConnectionDto.fromJson(body);
+  }
+
+  @override
+  Future<List<EtlPipelineDto>> getEtlPipelines({
+    String? target,
+    String? branchId,
+  }) async {
+    final query = <String, String>{};
+    if (target != null && target.isNotEmpty) query['target'] = target;
+    if (branchId != null && branchId.isNotEmpty) query['branch_id'] = branchId;
+    final body = await _get('/etl/pipelines', query.isEmpty ? null : query);
+    return _asList(body, 'pipelines')
+        .whereType<Map<String, dynamic>>()
+        .map(EtlPipelineDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<EtlPipelineDto> createEtlPipeline({
+    required String name,
+    required String target,
+    required String connectionId,
+    String? branchId,
+    String? locationId,
+    String? destinationLocationId,
+    String? scheduleCron,
+  }) async {
+    final body = await _post('/etl/pipelines', {
+      'name': name,
+      'target': target,
+      'connection_id': connectionId,
+      'branch_id': branchId,
+      'location_id': locationId,
+      'destination_location_id': destinationLocationId,
+      'schedule_cron': scheduleCron,
+    });
+    return EtlPipelineDto.fromJson(body);
+  }
+
+  @override
+  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(String pipelineId) async {
+    final body = await _get('/etl/pipelines/$pipelineId/mapping-versions');
+    return _asList(body, 'mapping_versions')
+        .whereType<Map<String, dynamic>>()
+        .map(EtlMappingVersionDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<EtlMappingVersionDto> createEtlMappingVersion(
+    String pipelineId, {
+    required List<Map<String, dynamic>> mappingRules,
+    String duplicatePolicy = 'reject',
+  }) async {
+    final body = await _post('/etl/pipelines/$pipelineId/mapping-versions', {
+      'mapping_rules': mappingRules,
+      'duplicate_policy': duplicatePolicy,
+    });
+    return EtlMappingVersionDto.fromJson(body);
+  }
+
+  @override
+  Future<EtlMappingVersionDto> publishEtlMappingVersion(
+    String pipelineId,
+    String versionId,
+  ) async {
+    final body = await _post(
+      '/etl/pipelines/$pipelineId/mapping-versions/$versionId/publish',
+      {},
+    );
+    return EtlMappingVersionDto.fromJson(body);
+  }
+
+  @override
+  Future<EtlRunDto> triggerEtlRun(
+    String pipelineId, {
+    List<Map<String, dynamic>>? rawRows,
+    List<int>? fileBytes,
+    String? filename,
+    String? externalEventId,
+  }) async {
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      final request = http.MultipartRequest('POST', _uri('/etl/pipelines/$pipelineId/runs'));
+      final token = await _tokenProvider?.call();
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: filename ?? 'upload.csv',
+      ));
+      final streamed = await _client.send(request);
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        _throwEnvelope(resp);
+      }
+      return EtlRunDto.fromJson(json.decode(resp.body) as Map<String, dynamic>);
+    }
+
+    final body = await _post('/etl/pipelines/$pipelineId/runs', {
+      'raw_rows': rawRows ?? [],
+      'external_event_id': externalEventId,
+    });
+    return EtlRunDto.fromJson(body);
+  }
+
+  @override
+  Future<List<EtlRunDto>> getEtlRuns({
+    String? pipelineId,
+    String? status,
+  }) async {
+    final query = <String, String>{};
+    if (pipelineId != null && pipelineId.isNotEmpty) query['pipeline_id'] = pipelineId;
+    if (status != null && status.isNotEmpty) query['status'] = status;
+    final body = await _get('/etl/runs', query.isEmpty ? null : query);
+    return _asList(body, 'runs')
+        .whereType<Map<String, dynamic>>()
+        .map(EtlRunDto.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<EtlRunDto> getEtlRun(String runId) async {
+    final body = await _get('/etl/runs/$runId');
+    return EtlRunDto.fromJson(body as Map<String, dynamic>);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getEtlRunRows(
+    String runId, {
+    bool? valid,
+    String? search,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '$pageSize',
+    };
+    if (valid != null) query['valid'] = '$valid';
+    if (search != null && search.isNotEmpty) query['search'] = search;
+    final body = await _get('/etl/runs/$runId/rows', query) as Map<String, dynamic>;
+    final rowsList = (body['rows'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(EtlRunRowDto.fromJson)
+            .toList() ??
+        <EtlRunRowDto>[];
+    return {
+      'total': body['total'] as int? ?? 0,
+      'page': body['page'] as int? ?? 1,
+      'page_size': body['page_size'] as int? ?? 50,
+      'rows': rowsList,
+    };
+  }
+
+  @override
+  Future<EtlRunDto> reviewEtlRun(
+    String runId, {
+    required String decision,
+    String? note,
+  }) async {
+    final body = await _post('/etl/runs/$runId/review', {
+      'decision': decision,
+      'note': note,
+    });
+    return EtlRunDto.fromJson(body);
+  }
+
+  @override
+  Future<Map<String, dynamic>> postEtlRun(String runId) async {
+    return await _post('/etl/runs/$runId/post', {});
+  }
+
+  @override
+  Future<String> getEtlErrorReport(String runId) async {
+    final headers = await _headers();
+    final resp = await _client.get(_uri('/etl/runs/$runId/error-report', {'format': 'csv'}), headers: headers);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      _throwEnvelope(resp);
+    }
+    return resp.body;
   }
 }

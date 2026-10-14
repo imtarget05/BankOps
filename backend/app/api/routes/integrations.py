@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,13 @@ from app.models.integration import (
 from app.models.inventory import InventoryRequest, InventoryRequestLine, Item, Location
 from app.services import idempotency
 
-router = APIRouter()
+
+async def _deprecate_integrations(response: Response):
+    response.headers["Warning"] = '299 - "Deprecated: use /api/v1/etl/* instead"'
+    response.headers["Deprecation"] = "true"
+
+
+router = APIRouter(dependencies=[Depends(_deprecate_integrations)])
 
 _MANAGE = ("integration:manage", "admin:user_management")
 _READ = ("integration:manage", "admin:user_management", "activity:view", "audit:view")

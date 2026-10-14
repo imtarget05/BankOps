@@ -253,7 +253,7 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   ),
                   DropdownMenuItem(
                     value: 'approver',
-                    child: Text('Checker — Kiểm soát viên (Duyệt lệnh 4 mắt)'),
+                    child: Text('Checker — Kiểm soát viên (Phê duyệt kiểm soát kép)'),
                   ),
                   DropdownMenuItem(
                     value: 'auditor',
@@ -274,7 +274,7 @@ class _RegisterDialogState extends State<RegisterDialog> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
                   labelText: 'Mã PIN bảo mật (6 số) *',
-                  hintText: '123456 (dùng duyệt lệnh 4 mắt)',
+                  hintText: '123456 (dùng xác thực kiểm soát kép)',
                   counterText: '',
                   prefixIcon: const Icon(Icons.pin_outlined, size: 20),
                   filled: true,

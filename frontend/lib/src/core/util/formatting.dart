@@ -90,6 +90,7 @@ extension RequestStatusX on RequestStatus {
   String get label => switch (this) {
         RequestStatus.draft => 'Bản nháp',
         RequestStatus.pending => 'Chờ duyệt',
+        RequestStatus.returned => 'Cần chỉnh sửa',
         RequestStatus.approved => 'Đã duyệt',
         RequestStatus.posted => 'Đã ghi sổ',
         RequestStatus.rejected => 'Bị từ chối',

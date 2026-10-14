@@ -269,7 +269,13 @@ class TestA3A4Idempotency:
 # --------------------------------------------------------------------------
 class TestI1I2Inventory:
     def test_issue_more_than_balance_is_409_and_balance_unchanged(self, api):
-        """I1: xuất quá tồn -> 409, balance giữ nguyên."""
+        """I1: xuất quá tồn -> 409, balance giữ nguyên.
+
+        Reservation is validated atomically at *submit* time: the whole request
+        is reserved under a row lock so an unfulfillable issue can never enter
+        the checker queue. The I1 invariant (balance unchanged) therefore holds
+        after a rejected submit.
+        """
         m = api.as_user("demo_maker")
         before = m.c.get(
             "/inventory/balances",
@@ -291,16 +297,10 @@ class TestI1I2Inventory:
         assert r.status_code in (200, 201), r.text[:300]
         rid = r.json()["id"]
         sub = m.c.post(f"/inventory/requests/{rid}/submit", headers=m.h("demo_maker"))
-        assert sub.status_code in (200, 201), sub.text[:300]
-
-        ap = api.c.post(
-            f"/inventory/requests/{rid}/approve",
-            headers={**api.h("demo_checker"), "Idempotency-Key": str(uuid.uuid4())},
+        assert sub.status_code == 409, (
+            f"I1: submit xuất quá tồn trả {sub.status_code} (mong đợi 409 INSUFFICIENT_STOCK)"
         )
-        assert ap.status_code == 409, (
-            f"I1: approve xuất quá tồn trả {ap.status_code} (mong đợi 409 INSUFFICIENT_STOCK)"
-        )
-        assert_error_code(ap, "INSUFFICIENT_STOCK", "I1")
+        assert_error_code(sub, "INSUFFICIENT_STOCK", "I1")
 
         after = m.c.get(
             "/inventory/balances",

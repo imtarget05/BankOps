@@ -1,7 +1,7 @@
 # BankOps — lệnh vận hành 1-click (thay cho chuỗi docker/flutter dài trong README).
 # Chạy ở thư mục này: `make <target>`. Xem danh sách: `make help`.
 
-.PHONY: help up down reset-demo logs ps test-backend analyze-backend test-frontend analyze-frontend build-frontend typecheck-worker verify-e2e test-all check-all
+.PHONY: help up down reset-demo logs ps test-backend analyze-backend test-frontend analyze-frontend build-frontend typecheck-worker check-secrets verify-e2e test-all check-all
 
 help: ## Hiện danh sách lệnh
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -39,9 +39,12 @@ build-frontend: ## Build Flutter Web release vào frontend/dist
 typecheck-worker: ## Kiểm tra TypeScript Cloudflare Worker
 	cd infra/cloudflare-worker && npm run typecheck
 
+check-secrets: ## Chặn credential phổ biến bị commit vào Git
+	python3 scripts/check_no_secrets.py
+
 verify-e2e: ## Chạy kiểm thử live E2E trên stack Docker đang chạy
 	python3 backend/tests/verify_live_e2e.py
 
 test-all: test-backend test-frontend ## Chạy toàn bộ test Backend + Frontend
 
-check-all: analyze-backend analyze-frontend typecheck-worker test-all ## Chạy toàn bộ lint, typecheck và tests
+check-all: check-secrets analyze-backend analyze-frontend typecheck-worker test-all ## Chạy toàn bộ guard, lint, typecheck và tests

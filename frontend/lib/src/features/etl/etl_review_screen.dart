@@ -601,14 +601,17 @@ class _EtlReviewScreenState extends State<EtlReviewScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            run.isPosted
-                ? '✅ Lượt chạy này đã được đẩy vào sổ cái (Posted).'
-                : run.isRejected
-                    ? '❌ Lượt chạy này đã bị từ chối.'
-                    : 'Sẵn sàng kiểm tra và xử lý ${run.validRows} dòng hợp lệ.',
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          Expanded(
+            child: Text(
+              run.isPosted
+                  ? '✅ Lượt chạy này đã được đẩy vào sổ cái (Posted).'
+                  : run.isRejected
+                      ? '❌ Lượt chạy này đã bị từ chối.'
+                      : 'Sẵn sàng kiểm tra và xử lý ${run.validRows} dòng hợp lệ.',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
+          const SizedBox(width: 12),
           Row(
             children: [
               if (isStaged) ...[

@@ -9,12 +9,19 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.models.iam import Capability, RoleCapability, User, UserRole
+from app.models.iam import (
+    Capability,
+    RoleCapability,
+    ScopeGrant,
+    User,
+    UserRole,
+    UserStatus,
+)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -197,7 +204,61 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+
+    # Enforce user active status immediately (locked/inactive users blocked on next command)
+    if user.status != UserStatus.active and user.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản đã bị khóa hoặc ngừng hoạt động.",
+        )
+
+    # Enforce immediate session revocation via auth_version
+    token_auth_version = payload.get("auth_version")
+    if token_auth_version is not None and getattr(user, "auth_version", 1) != token_auth_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Phiên đăng nhập đã bị thu hồi.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
+
+
+async def get_user_scope_grants(db: AsyncSession, user_id: str | uuid.UUID) -> list[ScopeGrant]:
+    """Retrieve currently active scope grants for user."""
+    now = datetime.now(UTC)
+    result = await db.execute(
+        select(ScopeGrant).where(
+            ScopeGrant.user_id == user_id,
+            or_(ScopeGrant.valid_from.is_(None), ScopeGrant.valid_from <= now),
+            or_(ScopeGrant.valid_to.is_(None), ScopeGrant.valid_to >= now),
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def check_user_scope(
+    db: AsyncSession,
+    user: User,
+    branch_id: str | uuid.UUID | None = None,
+    location_id: str | uuid.UUID | None = None,
+) -> bool:
+    """Checks if user has permission in the given branch or location."""
+    roles = await get_user_roles(db, user.id)
+    if any(r in ("admin", "system_admin") for r in roles):
+        return True
+
+    # User primary branch
+    if branch_id and user.branch_id and str(user.branch_id) == str(branch_id):
+        return True
+
+    scopes = await get_user_scope_grants(db, user.id)
+    for grant in scopes:
+        if branch_id and grant.branch_id and str(grant.branch_id) == str(branch_id):
+            return True
+        if location_id and grant.location_id and str(grant.location_id) == str(location_id):
+            return True
+    return False
 
 
 async def get_user_from_token_string(token: str, db: AsyncSession) -> User:

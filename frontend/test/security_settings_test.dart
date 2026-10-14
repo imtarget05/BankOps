@@ -264,6 +264,50 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ChangePinDialog), findsNothing);
     });
+
+    testWidgets('SettingsScreen does not display demo accounts, simulation disclaimers, or reset commands',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeRepo = FakeBankOpsRepository(latency: Duration.zero);
+      final auth = AuthService(baseUrl: 'http://localhost:8000');
+      final themeController = ThemeModeController();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthService>.value(value: auth),
+            ChangeNotifierProvider<ThemeModeController>.value(
+                value: themeController),
+          ],
+          child: MaterialApp(
+            home: RepositoryScope(
+              repository: fakeRepo,
+              child: const SettingsScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify demo elements are removed
+      expect(find.text('Dữ liệu demo'), findsNothing);
+      expect(find.text('Môi trường giả lập'), findsNothing);
+      expect(find.text('Tài khoản demo'), findsNothing);
+      expect(find.text('Reset demo về dữ liệu gốc'), findsNothing);
+      expect(find.byKey(const Key('settings-copy-reset-cmd-btn')), findsNothing);
+      expect(find.textContaining('DemoPass123!'), findsNothing);
+      expect(find.textContaining('Bản demo — mọi dữ liệu là giả lập.'), findsNothing);
+
+      // Verify enterprise sections exist
+      expect(find.text('Hồ Sơ Của Tôi'), findsOneWidget);
+      expect(find.text('Tài khoản & Bảo mật'), findsOneWidget);
+      expect(find.text('Hệ thống & Cổng kết nối API'), findsOneWidget);
+      expect(find.text('BankOps Core Banking v1.0.0'), findsOneWidget);
+      expect(find.text('Đăng xuất'), findsOneWidget);
+    });
   });
 
   group('ForgotPasswordDialog Tests', () {
@@ -628,7 +672,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Xác Thực Kiểm Soát Kép (4 Mắt)'), findsOneWidget);
+      expect(find.text('Xác Thực Quyền Kiểm Soát Kép (Supervisor Authorization)'), findsOneWidget);
       expect(find.text('Nhập PIN demo Kiểm soát viên (654321):'), findsOneWidget);
 
       // Enter old PIN 123456 -> rejected!

@@ -9,12 +9,14 @@ stateDiagram-v2
   draft --> cancelled: cancel
   pending --> posted: approve + atomic post
   pending --> rejected: reject(reason)
+  pending --> returned: return(reason)
+  returned --> pending: resubmit
   posted --> [*]
   rejected --> [*]
   cancelled --> [*]
 ```
 
-MVP có một checker, người khác maker. `approve` cần capability theo module, trạng thái pending, version khớp, chính sách tồn/số dư đạt. Rejected phải có lý do và yêu cầu mới nếu muốn tiếp tục. Không sửa posted; reversal hoặc adjustment là yêu cầu mới cần duyệt.
+MVP có một checker, người khác maker. `approve` cần capability theo module, trạng thái pending, version khớp, chính sách tồn/số dư đạt. Rejected và returned phải có lý do. Không sửa posted; reversal hoặc adjustment là yêu cầu mới cần duyệt.
 
 ## Transaction chuẩn
 
@@ -25,6 +27,22 @@ MVP có một checker, người khác maker. `approve` cần capability theo mod
 5. Commit rồi trả response; lỗi trước commit rollback toàn bộ.
 
 Đặt unique constraints ở DB là lớp bảo vệ cuối cùng khi hai checker cùng bấm. API trả 409 `CONFLICT_VERSION`/`ALREADY_FINAL` nhất quán. Token idempotency giữ ít nhất 24 giờ, tài liệu retention trong config; journal unique theo request bảo vệ lâu dài.
+
+## Đặt trước tồn kho (Reserved Inventory)
+
+Khi Maker lập phiếu xuất kho và bấm Gửi duyệt (submit), hệ thống ngay lập tức chuyển lượng hàng này vào trạng thái Đặt trước (`reserved_quantity`), làm giảm số lượng Khả dụng (`available_quantity = quantity - reserved_quantity`). Cơ chế này đảm bảo không xảy ra tình trạng nhiều phiếu cùng tranh chấp một lượng tồn kho. Khi Kiểm soát viên duyệt thành công, tồn kho thực tế bị trừ và giải phóng lượng đặt trước. Nếu phiếu bị từ chối hoặc trả về, lượng tồn đặt trước được hoàn trả về tồn khả dụng.
+
+## Trả về chỉnh sửa (Return for Rework)
+
+Kiểm soát viên có thể chọn Trả về (return) kèm ý kiến KSV bắt buộc (`return_reason`). Phiếu chuyển sang trạng thái `returned`. Maker nhận thông báo, xem lý do trả về trên giao diện, thực hiện chỉnh sửa và bấm Gửi duyệt lại (`resubmit`) mà không cần phải hủy phiếu và lập mới từ đầu.
+
+## Quản lý serial & ấn chỉ bảo mật (Asset Lifecycle & Handover)
+
+Mỗi phôi thẻ chip EMV, sổ séc, chứng chỉ tiền gửi được định danh bằng số serial duy nhất. Trạng thái ấn chỉ tuân thủ vòng đời: trong kho (`in_vault`), đã cấp phát (`assigned`), đang sử dụng (`in_use`), hỏng (`damaged`), thất lạc (`lost`). Mọi giao dịch điều chuyển hoặc bàn giao đều ghi vào sổ nhật ký ấn chỉ (`inv_asset_logs`) với thông tin người giao, người nhận, thời điểm và ghi chú biên bản.
+
+## Định mức an toàn tồn kho (Min/Max Safety Levels)
+
+Mỗi mặt hàng tại từng kho đều có định mức tối thiểu (`min_level`) và tối đa (`max_level`). Khi số lượng khả dụng chạm hoặc dưới ngưỡng tối thiểu, hệ thống tự động sinh cảnh báo và gợi ý lập phiếu điều chuyển/nhập kho bổ sung.
 
 ## Đối soát
 

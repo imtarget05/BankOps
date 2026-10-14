@@ -3,66 +3,24 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
-[ai]
-binding = "AI"
-
-# Cloudflare Workers luôn warm – không có cold start
-# V8 isolate khởi động < 5ms trên toàn cầu
+# ═══════════════════════════════════════════════════════════════════════════════
+# RETIRED / LEGACY BOUNDARY — health endpoints only (ADR 0001).
+# FastAPI (backend/) is the canonical business API. This Worker serves only
+# /api/v1/health/* and returns 410 Gone for every business path.
+# Business bindings (Workers AI, ratelimits) have been removed; full archive
+# of this Worker is Phase 2.
+# ═══════════════════════════════════════════════════════════════════════════════
 
 [vars]
 APP_ENV = "production"
-APP_NAME = "BankOps-API"
-AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
-# Backend LLM tự host, OpenAI-compatible. Để rỗng "" = dùng Workers AI.
-# Ưu tiên 1: Modal (GGUF fine-tune — khuyến nghị, miễn phí; HF Space Docker
-#   hiện yêu cầu gói PRO): modal deploy infra/modal/modal_app.py rồi đặt
-#   HF_LLM_BASE_URL = "https://<workspace>--bankops-llm-serve.modal.run"
-# Ưu tiên 2: HF Space llama.cpp (cần HF PRO): "https://<user>-bankops-llm.hf.space"
-# Workers AI tự thành fallback khi backend lỗi/đang ngủ.
-# Xem docs/17-hf-llm-space.md và infra/modal/README.md.
-HF_LLM_BASE_URL = "https://imtarget05--bankops-llm-serve.us-east.modal.run"
-# 90s: đủ chờ cold start của Modal (kéo container + load model) để request
-# đầu tiên sau khi ngủ vẫn đi vào bản fine-tune thay vì rơi xuống fallback.
-HF_LLM_TIMEOUT_MS = "90000"
-ACCESS_TOKEN_EXPIRE_MINUTES = "30"
-REFRESH_TOKEN_EXPIRE_DAYS = "7"
-GOOGLE_CLIENT_ID = "1070073470852-hc12cgovbt9h7micnu072vpkvigee28u.apps.googleusercontent.com,1070073470852-apcl0c8sgvt9c4f6qscpjgcrgtje4tjn.apps.googleusercontent.com"
-
-# ─── Rate Limiting bindings (Production) ─────────────────────────────────────
-# namespace_id là SỐ TỰ CHỌN (1–9999999999), KHÔNG phải KV namespace ID —
-# không cần tạo KV namespace nào. Chọn số chưa dùng trong account của bạn;
-# production và staging phải dùng số khác nhau. Yêu cầu wrangler >= 4.36.0.
-# Xác minh: npx wrangler deploy --dry-run (binding phải xuất hiện trong output).
-
-[[ratelimits]]
-name = "AI_CHAT_LIMIT"
-namespace_id = "1001"
-
-[ratelimits.simple]
-limit = 10
-period = 60
-
-[[ratelimits]]
-name = "AI_ASSESSMENT_LIMIT"
-namespace_id = "1002"
-
-[ratelimits.simple]
-limit = 10
-period = 60
 
 # ─── Secrets (Production) ─────────────────────────────────────────────────────
 # Set via wrangler CLI — NEVER hardcode values here:
 #
 #   wrangler secret put DATABASE_URL
-#   wrangler secret put JWT_SECRET
-#   wrangler secret put SESSION_SECRET
-#   wrangler secret put GOOGLE_CLIENT_ID
-#   wrangler secret put SUPERVISOR_PIN
 #
-# DATABASE_URL       – Neon connection string (pooled)
-# JWT_SECRET         – key dùng HS256 sign JWT
-# SESSION_SECRET     – Starlette session secret (không dùng trên Worker, để tương thích)
-# GOOGLE_CLIENT_ID   – OAuth audience
+# DATABASE_URL – Neon connection string (pooled); used only by
+#                GET /api/v1/health/ready.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Staging environment
@@ -70,32 +28,9 @@ period = 60
 
 [env.staging]
 name = "bankops-api-staging"
-vars = { APP_ENV = "staging", APP_NAME = "BankOps-API", AI_MODEL = "@cf/meta/llama-3.1-8b-instruct", HF_LLM_BASE_URL = "https://imtarget05--bankops-llm-serve.us-east.modal.run", HF_LLM_TIMEOUT_MS = "90000", ACCESS_TOKEN_EXPIRE_MINUTES = "30", REFRESH_TOKEN_EXPIRE_DAYS = "7" }
-
-[env.staging.ai]
-binding = "AI"
-
-[[env.staging.ratelimits]]
-name = "AI_CHAT_LIMIT"
-namespace_id = "2001"
-
-[env.staging.ratelimits.simple]
-limit = 10
-period = 60
-
-[[env.staging.ratelimits]]
-name = "AI_ASSESSMENT_LIMIT"
-namespace_id = "2002"
-
-[env.staging.ratelimits.simple]
-limit = 10
-period = 60
+vars = { APP_ENV = "staging" }
 
 # ─── Secrets (Staging) ────────────────────────────────────────────────────────
 # Set via wrangler CLI — NEVER hardcode values here:
 #
 #   wrangler secret put DATABASE_URL --env staging
-#   wrangler secret put JWT_SECRET --env staging
-#   wrangler secret put SESSION_SECRET --env staging
-#   wrangler secret put GOOGLE_CLIENT_ID --env staging
-#   wrangler secret put SUPERVISOR_PIN --env staging

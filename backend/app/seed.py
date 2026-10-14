@@ -47,80 +47,91 @@ async def seed_demo():
 
     async with AsyncSessionLocal() as db:
         # --- Roles ---
-        existing_roles = await db.execute(select(Role.code))
-        if not existing_roles.first():
-            roles = [
-                Role(code="admin", name="Admin", description="Full access"),
-                Role(code="staff", name="Staff (Maker)", description="Creates requests"),
-                Role(code="approver", name="Approver (Checker)", description="Approves requests"),
-                Role(code="inventory_manager", name="Inventory Manager", description="Manages catalog and stocktakes"),
-                Role(code="cash_sim_operator", name="Cash Simulation Operator", description="Reconciles cash ledger"),
-                Role(code="integration_admin", name="Integration Admin", description="Manages connectors"),
-                Role(code="auditor", name="Auditor", description="Read-only access"),
-                Role(code="system_admin", name="System Admin", description="User and config management"),
-            ]
-            db.add_all(roles)
+        # NOTE: add only the MISSING rows. A migration (013) may have already
+        # inserted a subset, so "insert only when the table is empty" would
+        # silently drop the rest of the catalog on a fresh database.
+        roles = [
+            Role(code="admin", name="Admin", description="Full access"),
+            Role(code="staff", name="Staff (Maker)", description="Creates requests"),
+            Role(code="approver", name="Approver (Checker)", description="Approves requests"),
+            Role(code="inventory_manager", name="Inventory Manager", description="Manages catalog and stocktakes"),
+            Role(code="cash_sim_operator", name="Cash Simulation Operator", description="Reconciles cash ledger"),
+            Role(code="integration_admin", name="Integration Admin", description="Manages connectors"),
+            Role(code="auditor", name="Auditor", description="Read-only access"),
+            Role(code="system_admin", name="System Admin", description="User and config management"),
+        ]
+        existing_role_codes = {code for (code,) in (await db.execute(select(Role.code))).all()}
+        new_roles = [r for r in roles if r.code not in existing_role_codes]
+        if new_roles:
+            db.add_all(new_roles)
             await db.commit()
-            print("Seeded roles")
+            print(f"Seeded {len(new_roles)} role(s)")
 
         # --- Capabilities ---
-        existing_caps = await db.execute(select(Capability.code))
-        if not existing_caps.first():
-            caps = [
-                Capability(code="inventory:create_request", name="Create inventory request"),
-                Capability(code="inventory:approve_request", name="Approve inventory request"),
-                Capability(code="inventory:manage_catalog", name="Manage inventory catalog"),
-                Capability(code="inventory:view_balances", name="View inventory balances"),
-                Capability(code="cash:create_request", name="Create cash request"),
-                Capability(code="cash:approve_request", name="Approve cash request"),
-                Capability(code="cash:reconcile", name="Reconcile cash ledger"),
-                Capability(code="cash:view_balances", name="View cash balances"),
-                Capability(code="approval:view_inbox", name="View approval inbox"),
-                Capability(code="activity:view", name="View activity feed"),
-                Capability(code="integration:manage", name="Manage integrations"),
-                Capability(code="audit:view", name="View audit logs"),
-                Capability(code="admin:user_management", name="Manage users"),
-            ]
-            db.add_all(caps)
+        caps = [
+            Capability(code="inventory:create_request", name="Create inventory request"),
+            Capability(code="inventory:approve_request", name="Approve inventory request"),
+            Capability(code="inventory:manage_catalog", name="Manage inventory catalog"),
+            Capability(code="inventory:view_balances", name="View inventory balances"),
+            Capability(code="cash:create_request", name="Create cash request"),
+            Capability(code="cash:approve_request", name="Approve cash request"),
+            Capability(code="cash:reconcile", name="Reconcile cash ledger"),
+            Capability(code="cash:view_balances", name="View cash balances"),
+            Capability(code="approval:view_inbox", name="View approval inbox"),
+            Capability(code="activity:view", name="View activity feed"),
+            Capability(code="integration:manage", name="Manage integrations"),
+            Capability(code="audit:view", name="View audit logs"),
+            Capability(code="admin:user_management", name="Manage users"),
+        ]
+        existing_cap_codes = {code for (code,) in (await db.execute(select(Capability.code))).all()}
+        new_caps = [c for c in caps if c.code not in existing_cap_codes]
+        if new_caps:
+            db.add_all(new_caps)
             await db.commit()
-            print("Seeded capabilities")
+            print(f"Seeded {len(new_caps)} capabilit(ies)")
 
         # --- Role-Capability mappings ---
-        result = await db.execute(select(RoleCapability).limit(1))
-        if not result.first():
-            mappings = [
-                RoleCapability(role_code="staff", capability_code="inventory:create_request"),
-                RoleCapability(role_code="approver", capability_code="inventory:approve_request"),
-                RoleCapability(role_code="inventory_manager", capability_code="inventory:manage_catalog"),
-                RoleCapability(role_code="inventory_manager", capability_code="inventory:view_balances"),
-                RoleCapability(role_code="staff", capability_code="cash:create_request"),
-                RoleCapability(role_code="approver", capability_code="cash:approve_request"),
-                RoleCapability(role_code="cash_sim_operator", capability_code="cash:reconcile"),
-                RoleCapability(role_code="cash_sim_operator", capability_code="cash:view_balances"),
-                RoleCapability(role_code="approver", capability_code="approval:view_inbox"),
-                RoleCapability(role_code="staff", capability_code="activity:view"),
-                RoleCapability(role_code="approver", capability_code="activity:view"),
-                RoleCapability(role_code="inventory_manager", capability_code="activity:view"),
-                RoleCapability(role_code="cash_sim_operator", capability_code="activity:view"),
-                RoleCapability(role_code="integration_admin", capability_code="integration:manage"),
-                RoleCapability(role_code="integration_admin", capability_code="activity:view"),
-                RoleCapability(role_code="auditor", capability_code="audit:view"),
-                RoleCapability(role_code="auditor", capability_code="inventory:view_balances"),
-                RoleCapability(role_code="auditor", capability_code="cash:view_balances"),
-                RoleCapability(role_code="auditor", capability_code="activity:view"),
-                RoleCapability(role_code="staff", capability_code="integration:manage"),
-                RoleCapability(role_code="staff", capability_code="inventory:view_balances"),
-                RoleCapability(role_code="staff", capability_code="cash:view_balances"),
-                RoleCapability(role_code="approver", capability_code="inventory:view_balances"),
-                RoleCapability(role_code="approver", capability_code="cash:view_balances"),
-                RoleCapability(role_code="approver", capability_code="cash:reconcile"),
-                RoleCapability(role_code="admin", capability_code="admin:user_management"),
-                RoleCapability(role_code="admin", capability_code="integration:manage"),
-                RoleCapability(role_code="system_admin", capability_code="admin:user_management"),
-            ]
-            db.add_all(mappings)
+        mappings = [
+            RoleCapability(role_code="staff", capability_code="inventory:create_request"),
+            RoleCapability(role_code="approver", capability_code="inventory:approve_request"),
+            RoleCapability(role_code="inventory_manager", capability_code="inventory:manage_catalog"),
+            RoleCapability(role_code="inventory_manager", capability_code="inventory:view_balances"),
+            RoleCapability(role_code="staff", capability_code="cash:create_request"),
+            RoleCapability(role_code="approver", capability_code="cash:approve_request"),
+            RoleCapability(role_code="cash_sim_operator", capability_code="cash:reconcile"),
+            RoleCapability(role_code="cash_sim_operator", capability_code="cash:view_balances"),
+            RoleCapability(role_code="approver", capability_code="approval:view_inbox"),
+            RoleCapability(role_code="staff", capability_code="activity:view"),
+            RoleCapability(role_code="approver", capability_code="activity:view"),
+            RoleCapability(role_code="inventory_manager", capability_code="activity:view"),
+            RoleCapability(role_code="cash_sim_operator", capability_code="activity:view"),
+            RoleCapability(role_code="integration_admin", capability_code="integration:manage"),
+            RoleCapability(role_code="integration_admin", capability_code="activity:view"),
+            RoleCapability(role_code="auditor", capability_code="audit:view"),
+            RoleCapability(role_code="auditor", capability_code="inventory:view_balances"),
+            RoleCapability(role_code="auditor", capability_code="cash:view_balances"),
+            RoleCapability(role_code="auditor", capability_code="activity:view"),
+            RoleCapability(role_code="staff", capability_code="integration:manage"),
+            RoleCapability(role_code="staff", capability_code="inventory:view_balances"),
+            RoleCapability(role_code="staff", capability_code="cash:view_balances"),
+            RoleCapability(role_code="approver", capability_code="inventory:view_balances"),
+            RoleCapability(role_code="approver", capability_code="cash:view_balances"),
+            RoleCapability(role_code="approver", capability_code="cash:reconcile"),
+            RoleCapability(role_code="admin", capability_code="admin:user_management"),
+            RoleCapability(role_code="admin", capability_code="integration:manage"),
+            RoleCapability(role_code="system_admin", capability_code="admin:user_management"),
+        ]
+        existing_pairs = {
+            (rc, cc)
+            for (rc, cc) in (
+                await db.execute(select(RoleCapability.role_code, RoleCapability.capability_code))
+            ).all()
+        }
+        new_mappings = [m for m in mappings if (m.role_code, m.capability_code) not in existing_pairs]
+        if new_mappings:
+            db.add_all(new_mappings)
             await db.commit()
-            print("Seeded role-capability mappings")
+            print(f"Seeded {len(new_mappings)} role-capability mapping(s)")
 
         # --- Users ---
         users_data = list(_load_sample_data("users.json"))

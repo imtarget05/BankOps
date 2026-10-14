@@ -77,6 +77,12 @@ class Job(Base, TimestampMixin):
     total: int = Column(Integer, nullable=True)
     error_code: str = Column(String(64), nullable=True)
     owner_id: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=True)
+    lease_owner: str = Column(String(128), nullable=True)
+    lease_token: str = Column(String(64), nullable=True)
+    lease_until: datetime = Column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: datetime = Column(DateTime(timezone=True), nullable=True)
+    retry_count: int = Column(Integer, default=0, nullable=False)
+    next_attempt: datetime = Column(DateTime(timezone=True), nullable=True)
     finished_at: datetime = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
@@ -93,7 +99,12 @@ class ActivityEvent(Base):
     message_key: str = Column(String(256), nullable=False)
     payload: dict = Column(JSON, nullable=False)
     occurred_at: datetime = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    outbox_event_id: str = Column(UUID(as_uuid=True), ForeignKey("outbox_events.id"), nullable=True)
+    outbox_event_id: str = Column(
+        UUID(as_uuid=True),
+        ForeignKey("outbox_events.id"),
+        nullable=True,
+        unique=True,
+    )
 
     def __repr__(self):
         return f"<ActivityEvent {self.type}>"

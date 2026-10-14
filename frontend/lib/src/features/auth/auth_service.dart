@@ -54,18 +54,28 @@ class AuthService extends ChangeNotifier {
 
   /// Per-platform default: Android emulator cannot reach host `localhost`,
   /// so use `10.0.2.2`; iOS simulator/desktop/web keep `localhost`.
-  /// On production Web (e.g. *.pages.dev), automatically connect to Cloudflare Worker API.
-  /// Overridable via `--dart-define=API_BASE_URL=...`.
+  /// Overridable (and REQUIRED for release web) via `--dart-define=API_BASE_URL=...`.
+  ///
+  /// Không còn fallback host cứng cho production web: host cũ
+  /// (`bankops-api.tanmainguyenbinh.pages.dev`) đã chết (DNS không phân giải),
+  /// nên release web KHÔNG có API_BASE_URL sẽ nhận chuỗi rỗng + log cảnh báo
+  /// thay vì trỏ vào một URL sai.
   static String get defaultBaseUrl {
     const env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (env.isNotEmpty) return env;
     if (kIsWeb) {
-      try {
-        final host = Uri.base.host.toLowerCase();
-        if (host.isNotEmpty && !host.contains('localhost') && !host.contains('127.0.0.1')) {
-          return 'https://bankops-api.tanmainguyenbinh.workers.dev/api/v1';
-        }
-      } catch (_) {}
+      if (!kDebugMode) {
+        // Release web thiếu cấu hình: KHÔNG trỏ vào host chết, trả chuỗi rỗng
+        // và báo lỗi rõ ràng để biết phải build lại với --dart-define.
+        debugPrint(
+          'BankOps ERROR: API_BASE_URL is not set for release web build. '
+          'Rebuild with --dart-define=API_BASE_URL=https://<your-api-host>/api/v1',
+        );
+        return ''; // normalizeApiBaseUrl('') -> '/api/v1' (same-origin, sẽ 404 + log rõ)
+      }
+      debugPrint(
+        'BankOps: API_BASE_URL chưa cấu hình, dùng http://localhost:8000/api/v1 (debug web).',
+      );
       return 'http://localhost:8000/api/v1';
     }
     switch (defaultTargetPlatform) {
@@ -271,6 +281,7 @@ class AuthService extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     String? idToken = customToken;
+    String? googleAccessToken;
     if (idToken == null) {
       if (!isGoogleSignInConfigured) {
         _lastError =
@@ -287,7 +298,8 @@ class AuthService extends ChangeNotifier {
             return false;
           }
         } else {
-          final account = await _resolveGoogleSignIn().signIn();
+          final googleSignIn = _resolveGoogleSignIn();
+          final account = await googleSignIn.signIn();
           if (account == null) {
             _lastError = 'Đã hủy đăng nhập Google.';
             notifyListeners();
@@ -295,6 +307,20 @@ class AuthService extends ChangeNotifier {
           }
           final auth = await account.authentication;
           idToken = auth.idToken;
+          googleAccessToken = auth.accessToken;
+
+          // Fallback trên Flutter Web nếu idToken và accessToken đều null
+          if ((idToken == null || idToken.isEmpty) &&
+              (googleAccessToken == null || googleAccessToken.isEmpty)) {
+            try {
+              final silent = await googleSignIn.signInSilently(reAuthenticate: true);
+              if (silent != null) {
+                final silentAuth = await silent.authentication;
+                idToken = silentAuth.idToken ?? idToken;
+                googleAccessToken = silentAuth.accessToken ?? googleAccessToken;
+              }
+            } catch (_) {}
+          }
         }
       } catch (e) {
         _lastError = 'Google Sign-In lỗi: $e';
@@ -302,16 +328,30 @@ class AuthService extends ChangeNotifier {
         return false;
       }
     }
-    if (idToken == null || idToken.isEmpty) {
-      _lastError = 'Google không trả ID token (kiểm tra cấu hình OAuth client).';
+
+    final hasIdToken = idToken != null && idToken.isNotEmpty;
+    final hasAccessToken =
+        googleAccessToken != null && googleAccessToken.isNotEmpty;
+
+    if (!hasIdToken && !hasAccessToken) {
+      _lastError =
+          'Google không trả token xác thực (kiểm tra cấu hình OAuth client).';
       notifyListeners();
       return false;
     }
     try {
+      final payload = <String, dynamic>{};
+      if (hasIdToken) {
+        payload['id_token'] = idToken;
+      }
+      if (hasAccessToken) {
+        payload['access_token'] = googleAccessToken;
+      }
+
       final resp = await _http.post(
         Uri.parse('$_baseUrl/auth/google'),
         headers: const {'Content-Type': 'application/json'},
-        body: json.encode({'id_token': idToken}),
+        body: json.encode(payload),
       );
       if (resp.statusCode != 200) {
         _lastError = _serverMessage(resp.body);
@@ -485,6 +525,7 @@ class AuthService extends ChangeNotifier {
         username: json['username'] as String,
         displayName: (json['display_name'] ?? json['username']) as String,
         roles: List<String>.from(json['roles'] as List? ?? const []),
+        capabilities: List<String>.from(json['capabilities'] as List? ?? const []),
         email: json['email'] as String?,
         phoneNumber: json['phone_number'] as String?,
         branch: json['branch'] as String?,

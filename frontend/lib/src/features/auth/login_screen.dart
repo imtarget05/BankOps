@@ -6,7 +6,6 @@ import '../../core/widgets/google_logo.dart';
 import '../../data/repositories/bankops_repository.dart';
 import 'auth_service.dart';
 import 'widgets/forgot_password_dialog.dart';
-import 'widgets/google_sso_dialog.dart';
 import 'widgets/register_dialog.dart';
 
 /// Màn hình đăng nhập phong cách Enterprise Banking Portal:
@@ -75,19 +74,66 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!ok) {
         final auth = context.read<AuthService>();
         final msg = auth.lastError;
-        if (msg != null && msg.contains('Đã hủy')) {
+        if (msg == null ||
+            msg.contains('Đã hủy') ||
+            msg.toLowerCase().contains('popup_closed') ||
+            msg.toLowerCase().contains('closed_by_user')) {
+          // Người dùng chủ động tắt popup Google – giữ nguyên trạng thái
           return;
         }
-        await showDialog<bool>(
-          context: context,
-          builder: (_) => GoogleSsoDialog(initialError: msg),
+
+        String userFriendlyMsg = msg;
+        if (msg.contains('origin') ||
+            msg.contains('invalid_client') ||
+            msg.contains('registered origin')) {
+          userFriendlyMsg =
+              'Google OAuth: Nguồn gốc trang web chưa được khai báo trong Authorized JavaScript origins của Google Cloud Console.';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    userFriendlyMsg,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       }
     } catch (e) {
       if (!mounted) return;
-      await showDialog<bool>(
-        context: context,
-        builder: (_) => GoogleSsoDialog(initialError: 'Lỗi xác thực Google: $e'),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Lỗi xác thực Google: $e',
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -247,7 +293,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Cổng Quản Lý Vận Hành Kho Quỹ & Phê Duyệt 4 Mắt',
+          'Cổng Quản Lý Kho Quỹ & Kiểm Soát Kép Chuẩn Ngân Hàng',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w500,
@@ -359,8 +405,8 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 20),
               _buildFeatureItem(
                 icon: Icons.checklist_rtl_rounded,
-                title: 'Quy trình 4 Mắt (Maker - Checker)',
-                desc: 'Phân định độc lập giữa người lập và người duyệt lệnh.',
+                title: 'Cơ Chế Kiểm Soát Kép (Maker - Checker)',
+                desc: 'Phân định trách nhiệm độc lập giữa người khởi tạo và cấp phê duyệt.',
               ),
               const SizedBox(height: 14),
               _buildFeatureItem(

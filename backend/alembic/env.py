@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app.models.activity  # noqa: F401
 import app.models.approval  # noqa: F401
 import app.models.cash_sim  # noqa: F401
+import app.models.etl  # noqa: F401
 import app.models.iam  # noqa: F401
 import app.models.integration  # noqa: F401
 import app.models.inventory  # noqa: F401

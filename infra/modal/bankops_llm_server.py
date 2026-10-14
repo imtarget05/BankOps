@@ -83,6 +83,21 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
 
 
+@app.get("/")
+def root() -> dict:
+    model_path = GGUF_DIR / GGUF_NAME
+    return {
+        "service": "BankOps Small LLM Server (Modal)",
+        "status": "online",
+        "model_file": GGUF_NAME,
+        "model_present": model_path.is_file(),
+        "model_loaded": _llm is not None,
+        "health": "/health",
+        "docs": "/docs",
+        "chat_completions": "/v1/chat/completions",
+    }
+
+
 @app.get("/health")
 def health() -> dict:
     model_path = GGUF_DIR / GGUF_NAME

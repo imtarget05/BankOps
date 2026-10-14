@@ -41,10 +41,10 @@ void main() {
         repo: FakeBankOpsRepository(latency: Duration.zero),
       );
 
-      await tester.tap(find.text('Xử lý Hộp thư duyệt 4-Mắt'));
+      await tester.tap(find.text('Phê duyệt Kiểm Soát Kép'));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Hộp Thư Phê Duyệt 4 Mắt'),
+        find.textContaining('Hộp Thư Phê Duyệt Kiểm Soát Kép'),
         findsOneWidget,
       );
     },
@@ -61,7 +61,7 @@ void main() {
       await tester.tap(find.byKey(const Key('kpi-inbox-card')));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Hộp Thư Phê Duyệt 4 Mắt'),
+        find.textContaining('Hộp Thư Phê Duyệt Kiểm Soát Kép'),
         findsOneWidget,
       );
     },
@@ -91,7 +91,7 @@ void main() {
       expect(find.byKey(const Key('nav-reports')), findsOneWidget);
       // Quick action tạo/duyệt cũng bị ẩn, chỉ còn Đối soát.
       expect(find.text('Lập phiếu Quỹ tiền mặt'), findsNothing);
-      expect(find.text('Xử lý Hộp thư duyệt 4-Mắt'), findsNothing);
+      expect(find.text('Phê duyệt Kiểm Soát Kép'), findsNothing);
       expect(find.text('Đối soát Sổ cái tức thì'), findsOneWidget);
     },
   );
@@ -149,6 +149,38 @@ void main() {
       await tester.tap(find.byKey(const Key('activity-refresh-btn')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('activity-live-bar')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Maker (Staff) dashboard displays enterprise business logic without 403 error',
+    (WidgetTester tester) async {
+      const maker = AppUser(
+        id: 'u-maker',
+        username: 'demo_maker',
+        displayName: 'Nguyễn Văn An (GDV)',
+        roles: ['staff'],
+      );
+
+      await pumpShell(
+        tester,
+        user: maker,
+        repo: FakeBankOpsRepository(latency: Duration.zero),
+      );
+
+      // Maker header shows quầy giao dịch viên
+      expect(find.text('Bàn vận hành Giao dịch viên'), findsOneWidget);
+      expect(find.text('QUẦY GIAO DỊCH VIÊN'), findsOneWidget);
+
+      // KPI card shows YÊU CẦU ĐANG CHỜ DUYỆT
+      expect(find.text('YÊU CẦU ĐANG CHỜ DUYỆT'), findsOneWidget);
+
+      // Maker request queue shows Yêu Cầu Của Bạn Đang Chờ Phê Duyệt
+      expect(find.text('Yêu Cầu Của Bạn Đang Chờ Phê Duyệt'), findsOneWidget);
+
+      // Quick action shows Theo dõi Yêu cầu của tôi instead of Phê duyệt Kiểm Soát Kép
+      expect(find.text('Theo dõi Yêu cầu của tôi'), findsOneWidget);
+      expect(find.text('Phê duyệt Kiểm Soát Kép'), findsNothing);
     },
   );
 }

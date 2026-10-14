@@ -8,6 +8,7 @@ enum RequestStatus {
   approved,
   posted,
   rejected,
+  returned,
   cancelled;
 
   /// Phiếu đã chốt (không transition được nữa).
