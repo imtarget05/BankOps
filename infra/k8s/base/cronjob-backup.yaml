@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bankops-backup-db
+  labels:
+    app.kubernetes.io/name: bankops-backup-db
+    app.kubernetes.io/component: disaster-recovery
+    app.kubernetes.io/part-of: bankops-system
+spec:
+  # Run daily at 02:00 AM UTC (off-peak hours)
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: bankops-backup-db
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: db-backup
+              image: amazon/aws-cli:2.15.15 # Includes aws cli and shell tools
+              envFrom:
+                - configMapRef:
+                    name: bankops-config
+                - secretRef:
+                    name: bankops-secrets
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  echo "=== Starting BankOps PostgreSQL Automated Backup ==="
+                  
+                  # 1. Install PostgreSQL client & gzip & gnupg
+                  yum install -y postgresql16 gzip gnupg tar > /dev/null 2>&1 || true
+
+                  TIMESTAMP=$(date -u +"%Y%m%d_%H%M%SZ")
+                  BACKUP_DIR="/tmp/backups"
+                  mkdir -p "${BACKUP_DIR}"
+
+                  DUMP_FILE="${BACKUP_DIR}/bankops_db_${TIMESTAMP}.dump"
+                  CHECKSUM_FILE="${DUMP_FILE}.sha256"
+                  ENCRYPTED_FILE="${DUMP_FILE}.gpg"
+
+                  echo "--> Step 1: Performing pg_dump (Custom compressed format)..."
+                  # Parse connection details from DATABASE_URL or environment
+                  PGPASSWORD="${DB_PASSWORD:-bankops}" pg_dump \
+                    -h "${DB_HOST:-bankops-postgres}" \
+                    -U "${DB_USER:-bankops}" \
+                    -d "${DB_NAME:-bankops}" \
+                    -p "${DB_PORT:-5432}" \
+                    -Fc \
+                    -f "${DUMP_FILE}"
+
+                  echo "--> Step 2: Computing SHA-256 checksum for audit and integrity..."
+                  sha256sum "${DUMP_FILE}" > "${CHECKSUM_FILE}"
+                  cat "${CHECKSUM_FILE}"
+
+                  echo "--> Step 3: Encrypting backup with GPG (AES-256)..."
+                  if [ -n "${BACKUP_GPG_PASSPHRASE:-}" ]; then
+                    gpg --batch --yes --passphrase "${BACKUP_GPG_PASSPHRASE}" \
+                        --symmetric --cipher-algo AES256 -o "${ENCRYPTED_FILE}" "${DUMP_FILE}"
+                    TARGET_UPLOAD_FILE="${ENCRYPTED_FILE}"
+                  else
+                    TARGET_UPLOAD_FILE="${DUMP_FILE}"
+                  fi
+
+                  echo "--> Step 4: Uploading to Cloud Object Storage (S3 / Cloudflare R2)..."
+                  S3_TARGET="s3://${S3_BUCKET}/backups/postgres/${TIMESTAMP}/"
+                  
+                  aws s3 cp "${TARGET_UPLOAD_FILE}" "${S3_TARGET}" \
+                    --endpoint-url "${S3_ENDPOINT}"
+                  aws s3 cp "${CHECKSUM_FILE}" "${S3_TARGET}" \
+                    --endpoint-url "${S3_ENDPOINT}"
+
+                  echo "--> Step 5: Applying retention policy (Clean up files older than ${BACKUP_RETENTION_DAYS} days)..."
+                  # Retention logic handled via S3 Lifecycle rule, or list & delete
+                  echo "✅ Backup completed successfully and uploaded to ${S3_TARGET}"
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi

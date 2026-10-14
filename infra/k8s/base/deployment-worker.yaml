@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bankops-worker
+  labels:
+    app.kubernetes.io/name: bankops-worker
+    app.kubernetes.io/component: background-worker
+    app.kubernetes.io/part-of: bankops-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bankops-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bankops-worker
+        app.kubernetes.io/component: background-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: worker
+          image: ghcr.io/imtarget05/bankops-api:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.worker"]
+          envFrom:
+            - configMapRef:
+                name: bankops-config
+            - secretRef:
+                name: bankops-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL

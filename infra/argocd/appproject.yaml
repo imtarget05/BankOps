@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: bankops
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bankops-project
+    app.kubernetes.io/part-of: bankops-system
+spec:
+  description: "BankOps Core Banking Operations System Project"
+  # Allowed source Git repositories
+  sourceRepos:
+    - "https://github.com/imtarget05/BankOps.git"
+    - "git@github.com:imtarget05/BankOps.git"
+  # Allowed destination clusters and namespaces
+  destinations:
+    - namespace: "bankops-prod"
+      server: "https://kubernetes.default.svc"
+    - namespace: "bankops-staging"
+      server: "https://kubernetes.default.svc"
+  # Cluster-scoped resources whitelist (keep minimal for security)
+  clusterResourceWhitelist:
+    - group: "networking.k8s.io"
+      kind: "IngressClass"
+  # Namespace-scoped resources whitelist
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

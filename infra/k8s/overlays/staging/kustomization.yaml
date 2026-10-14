@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bankops-staging
+namePrefix: staging-
+
+resources:
+  - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      name: bankops-api
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      name: bankops-frontend
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.bankops.yourbank.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: staging.bankops.yourbank.com
+    target:
+      kind: Ingress
+      name: bankops-ingress
+
+images:
+  - name: ghcr.io/imtarget05/bankops-api
+    newTag: staging-latest
+  - name: ghcr.io/imtarget05/bankops-frontend
+    newTag: staging-latest

@@ -1,0 +1,184 @@
+name: CI/CD & GitOps ArgoCD Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Target environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+permissions:
+  contents: write
+  packages: write
+  security-events: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  FLUTTER_VERSION: "3.47.7"
+  REGISTRY: ghcr.io
+  API_IMAGE_NAME: ${{ github.repository_owner }}/bankops-api
+  FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/bankops-frontend
+
+jobs:
+  # =========================================================================
+  # 1. Quality & Security Gates
+  # =========================================================================
+  test:
+    name: Lint, Test & Secret Guard
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bankops
+          POSTGRES_PASSWORD: bankops
+          POSTGRES_DB: bankops
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bankops"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Secret Guard
+        run: python3 scripts/check_no_secrets.py
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Lint Backend (Ruff)
+        run: |
+          pip install "ruff==0.17.0"
+          ruff check backend/
+
+      - name: Install Backend Dependencies & Run Pytest
+        run: |
+          pip install poetry poetry-plugin-export
+          cd backend
+          poetry export -o requirements.txt --without-hashes --with dev
+          pip install -r requirements.txt
+          DATABASE_URL="postgresql+psycopg2://bankops:bankops@localhost:5432/bankops" alembic upgrade head
+          DATABASE_URL="postgresql+psycopg2://bankops:bankops@localhost:5432/bankops" pytest tests/ -v
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Analyze & Test Frontend
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+  # =========================================================================
+  # 2. Immutable Container Image Build & Security Scan
+  # =========================================================================
+  build-and-push:
+    name: Build & Push Images
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Compute Image Tag
+        id: vars
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Backend API Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.API_IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.API_IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy Security Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.API_IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
+          format: 'table'
+          exit-code: '0' # Log warnings without breaking demo build; set to 1 for strict compliance
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  # =========================================================================
+  # 3. GitOps Tag Update for ArgoCD
+  # =========================================================================
+  gitops-deploy:
+    name: Update GitOps Manifests for ArgoCD
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code with write access
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Kustomize Image Tags
+        run: |
+          TARGET_DIR="infra/k8s/overlays/${{ github.event.inputs.target_env || 'production' }}"
+          echo "Updating image tag to ${{ needs.build-and-push.outputs.image_tag }} in ${TARGET_DIR}"
+          
+          cd "${TARGET_DIR}"
+          kustomize edit set image "ghcr.io/imtarget05/bankops-api=ghcr.io/${{ env.API_IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }}" || \
+          sed -i 's/newTag: .*/newTag: '"${{ needs.build-and-push.outputs.image_tag }}"'/g' kustomization.yaml
+
+      - name: Commit & Push GitOps Changes
+        run: |
+          git config --global user.name "bankops-gitops-bot"
+          git config --global user.email "bot@bankops.internal"
+          git add infra/k8s/overlays/
+          if git diff --staged --quiet; then
+            echo "No manifest changes detected."
+          else
+            git commit -m "chore(gitops): bump release image to ${{ needs.build-and-push.outputs.image_tag }} [skip ci]"
+            git push origin main
+          fi

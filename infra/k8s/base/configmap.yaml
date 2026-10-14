@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bankops-config
+  labels:
+    app.kubernetes.io/name: bankops
+    app.kubernetes.io/part-of: bankops-system
+data:
+  APP_ENV: "production"
+  PORT: "8000"
+  LOG_LEVEL: "INFO"
+  AI_PROVIDER: "cloudflare"
+  CLOUDFLARE_MODEL: "@cf/meta/llama-3.1-8b-instruct"
+  ALLOWED_ORIGINS: '["https://bankops.yourbank.com"]'
+  BACKUP_RETENTION_DAYS: "30"
+  S3_BUCKET: "bankops-backups"
+  S3_ENDPOINT: "https://<account-id>.r2.cloudflarestorage.com"
