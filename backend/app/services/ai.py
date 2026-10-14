@@ -228,3 +228,25 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
         raise HTTPException(503, UNAVAILABLE) from None
     return {'answer': answer.strip(), 'provider': provider, 'model': model, 'simulation': True}
 
+
+async def stream_ollama(message: str, settings: Settings, client: httpx.AsyncClient):
+    """Yield Ollama tokens as they arrive; the route wraps them as SSE frames."""
+    payload = {
+        'model': settings.ollama_model,
+        'messages': [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': message}],
+        'stream': True,
+        'options': {'temperature': 0.2, 'num_predict': 512, 'num_ctx': 2048, 'num_gpu': 0},
+    }
+    try:
+        async with client.stream('POST', f'{settings.ollama_base_url.rstrip("/")}/api/chat', json=payload, timeout=settings.ai_timeout_seconds) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line:
+                    continue
+                body = json.loads(line)
+                token = body.get('message', {}).get('content', '')
+                if isinstance(token, str) and token:
+                    yield token
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
+        raise HTTPException(503, UNAVAILABLE) from None
+

@@ -10,12 +10,64 @@ class AppUser {
     required this.username,
     required this.displayName,
     required this.roles,
+    this.email,
+    this.phoneNumber,
+    this.branch,
+    this.employeeCode,
   });
 
   final String id;
   final String username;
   final String displayName;
   final List<String> roles;
+  final String? email;
+  final String? phoneNumber;
+  final String? branch;
+  final String? employeeCode;
+
+  String get effectiveEmail =>
+      (email != null && email!.trim().isNotEmpty) ? email!.trim() : '$username@bankops.vn';
+
+  String get effectivePhone =>
+      (phoneNumber != null && phoneNumber!.trim().isNotEmpty)
+          ? phoneNumber!.trim()
+          : '0901 234 567';
+
+  String get effectiveBranch =>
+      (branch != null && branch!.trim().isNotEmpty)
+          ? branch!.trim()
+          : 'Chi nhánh Bến Thành (Hội sở)';
+
+  String get effectiveEmployeeCode {
+    if (employeeCode != null && employeeCode!.trim().isNotEmpty) {
+      return employeeCode!.trim();
+    }
+    final clean = id.replaceAll('-', '');
+    final code = clean.length >= 4 ? clean.substring(0, 4).toUpperCase() : '8892';
+    return 'BO-$code';
+  }
+
+  AppUser copyWith({
+    String? id,
+    String? username,
+    String? displayName,
+    List<String>? roles,
+    String? email,
+    String? phoneNumber,
+    String? branch,
+    String? employeeCode,
+  }) {
+    return AppUser(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      displayName: displayName ?? this.displayName,
+      roles: roles ?? this.roles,
+      email: email ?? this.email,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      branch: branch ?? this.branch,
+      employeeCode: employeeCode ?? this.employeeCode,
+    );
+  }
 }
 
 /// Kho/địa điểm.

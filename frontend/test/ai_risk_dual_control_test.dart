@@ -44,7 +44,7 @@ void main() {
       await tester.tap(assessBtn);
       await tester.pumpAndSettle();
 
-      expect(find.text('AI Maker-Checker Copilot Thẩm Định Rủi Ro'), findsOneWidget);
+      expect(find.text('Đánh giá rủi ro bằng AI'), findsOneWidget);
       expect(find.textContaining('Phiếu: ${created.id}'), findsOneWidget);
       expect(find.text('Dấu kiểm toán số (Audit Stamp SHA-256):'), findsOneWidget);
       expect(find.text('Kiến nghị hành động cho Kiểm soát viên:'), findsOneWidget);

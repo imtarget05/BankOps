@@ -3,6 +3,7 @@
  */
 
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { Env } from "../index";
 import { db } from "../db/client";
 
@@ -31,6 +32,10 @@ interface CashPendingRow {
 
 // GET /approvals/inbox – danh sách request đang chờ duyệt (kho + quỹ)
 approvalsRoutes.get("/inbox", async (c) => {
+  const user = c.get("user" as never) as { sub: string; caps: string[] };
+  if (!user.caps.includes("approval:view_inbox")) {
+    return c.json({ detail: "Bạn không có quyền xem phiếu chờ duyệt." }, 403);
+  }
   const [invRows, cashRows] = await Promise.all([
     db<InvPendingRow>(c.env.DATABASE_URL)`
       SELECT r.id, r.kind, r.status, r.maker_id, r.reason,
@@ -55,7 +60,7 @@ approvalsRoutes.get("/inbox", async (c) => {
   ]);
 
   const approvals = [
-    ...invRows.map((r) => ({
+    ...invRows.filter((r) => r.maker_id !== user.sub).map((r) => ({
       id: r.id,
       kind: "inventory",
       sub_kind: r.kind,
@@ -69,7 +74,7 @@ approvalsRoutes.get("/inbox", async (c) => {
       }),
       detail: r.reason || r.id,
     })),
-    ...cashRows.map((r) => {
+    ...cashRows.filter((r) => r.maker_id !== user.sub).map((r) => {
       const sign = r.kind === "payment" ? "-" : "+";
       return {
         id: r.id,
@@ -85,4 +90,45 @@ approvalsRoutes.get("/inbox", async (c) => {
   ];
 
   return c.json({ approvals, total: approvals.length, simulation: true });
+});
+
+// GET /approvals/stream – Server-Sent Events (SSE) cho realtime approvals
+approvalsRoutes.get("/stream", async (c) => {
+  const user = c.get("user" as never) as
+    | { sub: string; username: string; caps: string[] }
+    | undefined;
+
+  const allowedCaps = [
+    "approval:view_inbox",
+    "inventory:view_requests",
+    "cash:view_requests",
+  ];
+  if (user?.caps && !user.caps.some((cap) => allowedCaps.includes(cap))) {
+    return c.json(
+      { detail: "User does not have permission to subscribe to approval stream" },
+      403
+    );
+  }
+
+  return streamSSE(c, async (stream) => {
+    // 1. Initial connected event (matches FastAPI format)
+    await stream.writeSSE({
+      event: "connected",
+      data: JSON.stringify({
+        status: "connected",
+        username: user?.username ?? "unknown",
+        user_id: user?.sub ?? "",
+      }),
+    });
+
+    // 2. Keepalive ping loop every 15 seconds
+    while (!stream.aborted) {
+      await stream.sleep(15000);
+      if (stream.aborted) break;
+      await stream.writeSSE({
+        event: "ping",
+        data: JSON.stringify({ time: new Date().toISOString() }),
+      });
+    }
+  });
 });

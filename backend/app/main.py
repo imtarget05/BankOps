@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.errors import register_error_handlers
 from app.api.middleware.correlation import CorrelationIdMiddleware
@@ -45,10 +45,18 @@ app = FastAPI(
     description="Inventory and Cash Simulation System (Demo)",
     version="0.1.0",
     openapi_url="/api/v1/openapi.json",
-    docs_url="/api/v1/docs",
-    root_path="/api/v1",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+@app.get("/api/v1/docs", include_in_schema=False)
+async def redirect_api_v1_docs():
+    return RedirectResponse(url="/docs")
+
+@app.get("/openapi.json", include_in_schema=False)
+async def redirect_openapi_json():
+    return RedirectResponse(url="/api/v1/openapi.json")
 
 app.openapi = lambda: custom_openapi(app)
 
@@ -178,6 +186,7 @@ def _mount_routes(target: FastAPI | APIRouter, *, include_in_schema: bool = True
     target.include_router(reconciliations.router, tags=["reconciliations"], include_in_schema=include_in_schema)
     # docs/06:9 khai báo `GET /me` (không qua /auth) — alias tới cùng handler.
     target.add_api_route("/me", auth.get_current_user_info, methods=["GET"], tags=["auth"], include_in_schema=include_in_schema)
+    target.add_api_route("/me", auth.update_profile, methods=["PUT"], tags=["auth"], include_in_schema=include_in_schema)
 
 
 _mount_routes(app, include_in_schema=True)

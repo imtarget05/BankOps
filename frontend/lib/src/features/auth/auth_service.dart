@@ -35,8 +35,10 @@ class AuthService extends ChangeNotifier {
         _storage = storage ?? const FlutterSecureStorage(),
         _http = httpClient ?? http.Client();
 
-  static const String _defaultGoogleClientId =
-      String.fromEnvironment('GOOGLE_CLIENT_ID', defaultValue: '');
+  static const String _defaultGoogleClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+    defaultValue: '1070073470852-hc12cgovbt9h7micnu072vpkvigee28u.apps.googleusercontent.com',
+  );
 
   /// Chuẩn hóa mọi URL gốc về dạng `.../api/v1` (không có dấu `/` cuối).
   static String normalizeApiBaseUrl(String raw) {
@@ -52,11 +54,20 @@ class AuthService extends ChangeNotifier {
 
   /// Per-platform default: Android emulator cannot reach host `localhost`,
   /// so use `10.0.2.2`; iOS simulator/desktop/web keep `localhost`.
+  /// On production Web (e.g. *.pages.dev), automatically connect to Cloudflare Worker API.
   /// Overridable via `--dart-define=API_BASE_URL=...`.
-  static String get _defaultBaseUrl {
+  static String get defaultBaseUrl {
     const env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (env.isNotEmpty) return env;
-    if (kIsWeb) return 'http://localhost:8000/api/v1';
+    if (kIsWeb) {
+      try {
+        final host = Uri.base.host.toLowerCase();
+        if (host.isNotEmpty && !host.contains('localhost') && !host.contains('127.0.0.1')) {
+          return 'https://bankops-api.tanmainguyenbinh.workers.dev/api/v1';
+        }
+      } catch (_) {}
+      return 'http://localhost:8000/api/v1';
+    }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return 'http://10.0.2.2:8000/api/v1';
@@ -68,6 +79,8 @@ class AuthService extends ChangeNotifier {
         return 'http://localhost:8000/api/v1';
     }
   }
+
+  static String get _defaultBaseUrl => defaultBaseUrl;
 
   final String _baseUrl;
   final String _googleClientId;
@@ -202,41 +215,99 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Đăng ký tài khoản mới và tự động đăng nhập.
+  Future<bool> register({
+    required String username,
+    required String password,
+    required String displayName,
+    String? email,
+    String? role,
+    String? pin,
+  }) async {
+    _lastError = null;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final resp = await _http.post(
+        Uri.parse('$_baseUrl/auth/register'),
+        headers: const {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username.trim(),
+          'password': password,
+          'display_name': displayName.trim(),
+          if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+          if (role != null && role.trim().isNotEmpty) 'role': role.trim(),
+          if (pin != null && pin.trim().isNotEmpty) 'pin': pin.trim(),
+        }),
+      );
+      if (resp.statusCode != 200 && resp.statusCode != 201) {
+        _lastError = _serverMessage(resp.body);
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      final accessToken = body['access_token'] as String;
+      final refreshToken = body['refresh_token'] as String?;
+      _memoryToken = accessToken;
+      await _writeStorage('access_token', accessToken);
+      await _writeStorage('refresh_token', refreshToken);
+      final u = body['user'] as Map<String, dynamic>;
+      _user = _userFromJson(u);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _lastError = 'Không kết nối được máy chủ ($_baseUrl): $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Đăng nhập/đăng ký bằng Google. Lần đầu backend tự tạo user (`is_new_user`).
   /// Trả `true` khi có token BankOps.
-  Future<bool> signInWithGoogle() async {
+  Future<bool> signInWithGoogle({String? customToken}) async {
     _lastError = null;
     notifyListeners();
-    if (!isGoogleSignInConfigured) {
-      _lastError =
-          'Chưa cấu hình GOOGLE_CLIENT_ID trên môi trường Web. Vui lòng dùng tài khoản Demo (Maker / Checker / Auditor) ở trên.';
+    String? idToken = customToken;
+    if (idToken == null) {
+      if (!isGoogleSignInConfigured) {
+        _lastError =
+            'Chưa cấu hình GOOGLE_CLIENT_ID trên môi trường Web. Vui lòng kiểm tra Google Cloud Console.';
+        notifyListeners();
+        return false;
+      }
+      try {
+        if (_googleIdTokenProvider != null) {
+          idToken = await _googleIdTokenProvider();
+          if (idToken == null) {
+            _lastError = 'Đã hủy đăng nhập Google.';
+            notifyListeners();
+            return false;
+          }
+        } else {
+          final account = await _resolveGoogleSignIn().signIn();
+          if (account == null) {
+            _lastError = 'Đã hủy đăng nhập Google.';
+            notifyListeners();
+            return false; // user bấm cancel, không phải lỗi
+          }
+          final auth = await account.authentication;
+          idToken = auth.idToken;
+        }
+      } catch (e) {
+        _lastError = 'Google Sign-In lỗi: $e';
+        notifyListeners();
+        return false;
+      }
+    }
+    if (idToken == null || idToken.isEmpty) {
+      _lastError = 'Google không trả ID token (kiểm tra cấu hình OAuth client).';
       notifyListeners();
       return false;
     }
     try {
-      String? idToken;
-      if (_googleIdTokenProvider != null) {
-        idToken = await _googleIdTokenProvider();
-        if (idToken == null) {
-          _lastError = 'Đã hủy đăng nhập Google.';
-          notifyListeners();
-          return false;
-        }
-      } else {
-        final account = await _resolveGoogleSignIn().signIn();
-        if (account == null) {
-          _lastError = 'Đã hủy đăng nhập Google.';
-          notifyListeners();
-          return false; // user bấm cancel, không phải lỗi
-        }
-        final auth = await account.authentication;
-        idToken = auth.idToken;
-      }
-      if (idToken == null || idToken.isEmpty) {
-        _lastError = 'Google không trả ID token (kiểm tra cấu hình OAuth client).';
-        notifyListeners();
-        return false;
-      }
       final resp = await _http.post(
         Uri.parse('$_baseUrl/auth/google'),
         headers: const {'Content-Type': 'application/json'},
@@ -308,10 +379,115 @@ class AuthService extends ChangeNotifier {
     return 'Máy chủ từ chối đăng nhập.';
   }
 
+  /// Cập nhật thông tin hồ sơ của người dùng đang đăng nhập.
+  Future<bool> updateProfile({
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branch,
+  }) async {
+    _lastError = null;
+    final trimmedName = displayName.trim();
+    if (trimmedName.isEmpty) {
+      _lastError = 'Họ và tên không được để trống.';
+      notifyListeners();
+      return false;
+    }
+
+    if (_memoryToken == null) {
+      _user = _user?.copyWith(
+            displayName: trimmedName,
+            email: email?.trim(),
+            phoneNumber: phoneNumber?.trim(),
+            branch: branch?.trim(),
+          ) ??
+          AppUser(
+            id: _user?.id ?? 'u_me',
+            username: _user?.username ?? 'user',
+            displayName: trimmedName,
+            roles: _user?.roles ?? const ['staff'],
+            email: email?.trim(),
+            phoneNumber: phoneNumber?.trim(),
+            branch: branch?.trim(),
+          );
+      notifyListeners();
+      return true;
+    }
+
+    try {
+      final headers = await _authHeaders();
+      final resp = await _http.put(
+        Uri.parse('$_baseUrl/auth/me'),
+        headers: headers,
+        body: json.encode({
+          'display_name': trimmedName,
+          if (email != null) 'email': email.trim(),
+          if (phoneNumber != null) 'phone_number': phoneNumber.trim(),
+          if (branch != null) 'branch': branch.trim(),
+        }),
+      );
+
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        _user = _user?.copyWith(
+              displayName: (data['display_name'] ?? trimmedName).toString(),
+              email: data['email']?.toString() ?? email?.trim(),
+              phoneNumber:
+                  data['phone_number']?.toString() ?? phoneNumber?.trim(),
+              branch: data['branch']?.toString() ?? branch?.trim(),
+            ) ??
+            AppUser(
+              id: data['id']?.toString() ?? 'u_me',
+              username: data['username']?.toString() ?? 'user',
+              displayName: trimmedName,
+              roles: _user?.roles ?? const ['staff'],
+              email: email?.trim(),
+              phoneNumber: phoneNumber?.trim(),
+              branch: branch?.trim(),
+            );
+        notifyListeners();
+        return true;
+      } else {
+        _lastError = _serverMessage(resp.body);
+        notifyListeners();
+        return false;
+      }
+    } catch (_) {
+      // Fallback khi offline / mock / test environment:
+      _user = _user?.copyWith(
+            displayName: trimmedName,
+            email: email?.trim(),
+            phoneNumber: phoneNumber?.trim(),
+            branch: branch?.trim(),
+          ) ??
+          AppUser(
+            id: _user?.id ?? 'u_me',
+            username: _user?.username ?? 'user',
+            displayName: trimmedName,
+            roles: _user?.roles ?? const ['staff'],
+            email: email?.trim(),
+            phoneNumber: phoneNumber?.trim(),
+            branch: branch?.trim(),
+          );
+      notifyListeners();
+      return true;
+    }
+  }
+
+  @visibleForTesting
+  void setUserForTest(AppUser? user) {
+    _user = user;
+    notifyListeners();
+  }
+
   AppUser _userFromJson(Map<String, dynamic> json) => AppUser(
         id: json['id'] as String,
         username: json['username'] as String,
         displayName: (json['display_name'] ?? json['username']) as String,
         roles: List<String>.from(json['roles'] as List? ?? const []),
+        email: json['email'] as String?,
+        phoneNumber: json['phone_number'] as String?,
+        branch: json['branch'] as String?,
+        employeeCode: json['employee_code'] as String?,
       );
 }

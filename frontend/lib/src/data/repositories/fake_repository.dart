@@ -55,6 +55,107 @@ class FakeBankOpsRepository implements BankOpsRepository {
       (u) => u.username == username,
       orElse: () => throw ApiException('NOT_FOUND', 'Không tìm thấy user')));
 
+  @override
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    if (oldPassword.isEmpty) {
+      throw ApiException('VALIDATION_ERROR', 'Mật khẩu cũ không được để trống');
+    }
+    if (newPassword.length < 6) {
+      throw ApiException(
+          'VALIDATION_ERROR', 'Mật khẩu mới phải có ít nhất 6 ký tự');
+    }
+    if (newPassword == oldPassword) {
+      throw ApiException(
+          'VALIDATION_ERROR', 'Mật khẩu mới không được trùng mật khẩu cũ');
+    }
+    await _delay(null);
+  }
+
+  String _supervisorPin = '123456';
+  String get supervisorPin => _supervisorPin;
+
+  @override
+  Future<void> changePin({
+    required String currentPassword,
+    required String newPin,
+  }) async {
+    if (currentPassword.isEmpty) {
+      throw ApiException(
+          'VALIDATION_ERROR', 'Mật khẩu xác thực không được để trống');
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(newPin)) {
+      throw ApiException('VALIDATION_ERROR', 'Mã PIN mới phải gồm đúng 6 chữ số');
+    }
+    _supervisorPin = newPin;
+    await _delay(null);
+  }
+
+  @override
+  Future<PasswordResetResult> requestPasswordReset(String username) async {
+    final clean = username.trim().toLowerCase();
+    if (clean.isEmpty) {
+      throw ApiException('VALIDATION_ERROR', 'Tên đăng nhập không được để trống');
+    }
+    final allUsers = _users.isEmpty ? _seedUsers() : _users;
+    final exists = allUsers.any((u) => u.username.toLowerCase() == clean);
+    if (!exists) {
+      throw ApiException(
+          'NOT_FOUND', 'Không tìm thấy tài khoản với tên đăng nhập này.');
+    }
+    return _delay(PasswordResetResult(
+      username: username.trim(),
+      message: 'Mã xác thực OTP đã được tạo cho tài khoản ${username.trim()}.',
+      otpDemo: '123456',
+      expiresInSeconds: 900,
+    ));
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String username,
+    required String otp,
+    required String newPassword,
+  }) async {
+    if (otp.trim() != '123456') {
+      throw ApiException(
+          'BAD_REQUEST', 'Mã xác thực OTP không chính xác hoặc đã hết hạn.');
+    }
+    if (newPassword.length < 6) {
+      throw ApiException(
+          'VALIDATION_ERROR', 'Mật khẩu mới phải có ít nhất 6 ký tự.');
+    }
+    await _delay(null);
+  }
+
+  @override
+  Future<AppUser> updateProfile({
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branch,
+  }) async {
+    if (displayName.trim().isEmpty) {
+      throw ApiException('VALIDATION_ERROR', 'Họ và tên không được để trống.');
+    }
+    if (_users.isEmpty) _users.addAll(_seedUsers());
+    final idx = _users.indexWhere((u) => u.username == 'demo_maker');
+    final target = idx >= 0 ? _users[idx] : _users.first;
+    final updated = target.copyWith(
+      displayName: displayName.trim(),
+      email: email?.trim(),
+      phoneNumber: phoneNumber?.trim(),
+      branch: branch?.trim(),
+    );
+    if (idx >= 0) {
+      _users[idx] = updated;
+    }
+    return _delay(updated);
+  }
+
+
   // ---- inventory ----
   final _locations = <InventoryLocation>[];
 
@@ -226,8 +327,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
       _transitionStock(id, RequestStatus.pending);
 
   @override
-  Future<StockRequest> approveStockRequest(String id, {String? supervisorPin}) =>
-      _transitionStock(id, RequestStatus.posted);
+  Future<StockRequest> approveStockRequest(String id, {String? supervisorPin}) {
+    if (supervisorPin != null && supervisorPin != _supervisorPin) {
+      throw ApiException('FORBIDDEN', 'Mã PIN kiểm soát viên không đúng.');
+    }
+    return _transitionStock(id, RequestStatus.posted);
+  }
 
   @override
   Future<StockRequest> rejectStockRequest(String id, String reason) =>
@@ -372,8 +477,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
       _transitionCash(id, RequestStatus.pending);
 
   @override
-  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) =>
-      _transitionCash(id, RequestStatus.posted);
+  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) {
+    if (supervisorPin != null && supervisorPin != _supervisorPin) {
+      throw ApiException('FORBIDDEN', 'Mã PIN kiểm soát viên không đúng.');
+    }
+    return _transitionCash(id, RequestStatus.posted);
+  }
 
   @override
   Future<CashRequest> rejectCashRequest(String id, String reason) =>

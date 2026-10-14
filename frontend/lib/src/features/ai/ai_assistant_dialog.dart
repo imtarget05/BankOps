@@ -38,16 +38,16 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
     _ChatMessage(
       isUser: false,
       text: 'Xin chào! Tôi là Trợ lý Nghiệp vụ BankOps.\n'
-          'Tôi có thể hỗ trợ bạn tra cứu quy trình Maker - Checker, hạn mức két sắt, quản lý kho phôi thẻ chip, hoặc hướng dẫn xử lý lỗi import.',
+          'Tôi có thể tra cứu quy trình duyệt phiếu, kho quỹ, đối soát và nhập dữ liệu từ tài liệu nghiệp vụ.',
       model: 'Trợ lý BankOps',
     ),
   ];
 
   final List<String> _quickPrompts = [
-    'Quy trình Maker - Checker hoạt động ra sao?',
-    'Hạn mức tồn quỹ két sắt quầy giao dịch?',
-    'Cách xử lý khi file import staging bị lỗi?',
-    'Quy định quản lý phôi thẻ EMV và sổ séc?',
+    'Ai được lập và duyệt phiếu?',
+    'Khi đối soát có chênh lệch cần làm gì?',
+    'Dòng dữ liệu nhập bị lỗi thì xử lý thế nào?',
+    'Phiếu đã ghi sổ có sửa được không?',
   ];
 
   Future<void> _sendMessage(String text) async {
@@ -63,7 +63,9 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
     _scrollToBottom();
 
     String answer = '';
-    String? modelUsed;
+    final sources = <String>[];
+    final responseIndex = _messages.length;
+    setState(() => _messages.add(_ChatMessage(isUser: false, text: 'Đang tra cứu tài liệu…')));
 
     try {
       final repository = RepositoryScope.of(context);
@@ -72,71 +74,56 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           : await context.read<AuthService>().getAccessToken();
       final apiBaseUrl = repository is HttpBankOpsRepository
           ? repository.baseUrl
-          : const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: 'http://localhost:8000/api/v1',
-            );
-      final uri = Uri.parse('$apiBaseUrl/ai/chat');
-
-      final resp = await http.post(
-        uri,
-        headers: {
+          : AuthService.defaultBaseUrl;
+      final request = http.Request('POST', Uri.parse('$apiBaseUrl/ai/chat/stream'))
+        ..headers.addAll({
           'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
           if (token != null) 'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'message': query}),
-      ).timeout(const Duration(seconds: 15));
-
-      if (resp.statusCode == 200) {
-        final data = json.decode(utf8.decode(resp.bodyBytes));
-        answer = data['answer'] as String? ?? 'Không có phản hồi từ máy chủ.';
-        modelUsed = data['model'] as String?;
-      } else {
-        throw Exception('Mã phản hồi: ${resp.statusCode}');
+        })
+        ..body = json.encode({'message': query});
+      final client = http.Client();
+      try {
+        final response = await client.send(request).timeout(const Duration(seconds: 20));
+        if (response.statusCode != 200) {
+          throw Exception('Máy chủ trả mã ${response.statusCode}');
+        }
+        String event = '';
+        await for (final line in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
+          if (line.startsWith('event: ')) {
+            event = line.substring(7).trim();
+          } else if (line.startsWith('data: ')) {
+            final data = json.decode(line.substring(6));
+            if (event == 'delta' && data is Map && data['text'] is String) {
+              answer += data['text'] as String;
+              if (mounted && !_disposed) {
+                setState(() => _messages[responseIndex] = _ChatMessage(isUser: false, text: answer));
+                _scrollToBottom();
+              }
+            } else if (event == 'sources' && data is List) {
+              sources.addAll(data.whereType<Map>().map((source) =>
+                  '${source['source'] ?? ''} · ${source['section'] ?? ''}').where((source) => source.trim().isNotEmpty));
+            } else if (event == 'error') {
+              throw Exception(data is Map ? data['message'] : 'Trợ lý AI chưa sẵn sàng.');
+            }
+          }
+        }
+      } finally {
+        client.close();
       }
-    } catch (_) {
-      // Fallback nghiệp vụ ngân hàng đáng tin cậy
-      answer = _getGroundedBankingAnswer(query);
-      modelUsed = 'bankops-local-rules';
+      if (answer.isEmpty) throw Exception('Không nhận được nội dung trả lời.');
+      if (sources.isNotEmpty) answer += '\n\nNguồn: ${sources.join('; ')}';
+    } catch (error) {
+      answer = 'Không thể tra cứu lúc này. Vui lòng thử lại. ($error)';
     }
 
     if (mounted && !_disposed) {
       setState(() {
-        _messages.add(_ChatMessage(isUser: false, text: answer, model: modelUsed));
+        _messages[responseIndex] = _ChatMessage(isUser: false, text: answer);
         _isLoading = false;
       });
       _scrollToBottom();
     }
-  }
-
-  String _getGroundedBankingAnswer(String q) {
-    final lower = q.toLowerCase();
-    if (lower.contains('maker') || lower.contains('checker') || lower.contains('duyệt')) {
-      return 'Quy trình Maker - Checker (Four-Eyes Principle):\n'
-          '1. Maker lập phiếu yêu cầu (Draft) -> bấm Gửi duyệt (Pending).\n'
-          '2. Phiếu chuyển sang Hộp thư phê duyệt của Kiểm soát viên (Checker).\n'
-          '3. Checker độc lập kiểm tra chứng từ và Phê duyệt (Posted) hoặc Từ chối (Rejected).\n'
-          'Lưu ý: Maker tuyệt đối không được tự duyệt phiếu của chính mình!';
-    }
-    if (lower.contains('két') || lower.contains('quỹ') || lower.contains('hạn mức')) {
-      return 'Hệ thống Quỹ BankOps:\n'
-          '- Đại quỹ Hội sở (CB-MAIN-01): Số dư 25.000.000.000 VND (Két chính).\n'
-          '- Két quầy GDV 1 & 2 (CB-TELLER-01/02): Hạn mức định mức 100 - 500 triệu VND.\n'
-          '- Két ATM (CB-ATM-01): 500 triệu VND phục vụ chi tiền tự động.\n'
-          'Số dư chỉ thay đổi sau khi phiếu thu/chi đã được Checker duyệt thành công.';
-    }
-    if (lower.contains('import') || lower.contains('staging') || lower.contains('lỗi')) {
-      return 'Quy trình xử lý lỗi Import:\n'
-          '1. File CSV/JSON hoặc Google Sheets tải lên sẽ nằm tại vùng tạm (Staging).\n'
-          '2. Xem bảng Preview kiểm tra các dòng bị báo đỏ (lỗi SKU, sai định dạng ngày, số tiền âm).\n'
-          '3. Không nhấn Xác nhận (Confirm) khi còn dòng lỗi. Hãy tải lại file đã chuẩn hóa dữ liệu.';
-    }
-    if (lower.contains('phôi') || lower.contains('thẻ') || lower.contains('séc') || lower.contains('sổ')) {
-      return 'Quản lý Kho Ấn chỉ quan trọng:\n'
-          '- Phôi thẻ Visa Debit EMV Chip và Sổ séc bảo chi bắt buộc quản lý theo Serial (Tracked by Serial).\n'
-          '- Mỗi giao dịch xuất kho cấp phát cho GDV đều phải lưu vết dải serial cụ thể và có xác nhận của Thủ kho.';
-    }
-    return 'Chào bạn! Để đảm bảo an toàn vận hành ngân hàng, mọi thao tác ghi sổ và duyệt chi tiền đều cần tuân thủ quy trình Maker-Checker. Bạn có thể hỏi thêm về quy định két sắt, kho ấn chỉ, hoặc kiểm toán hash-chain.';
   }
 
   void _scrollToBottom() {
@@ -197,7 +184,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          'Hỗ trợ tra cứu quy trình kiểm soát nội bộ, kho quỹ & Maker-Checker',
+                          'Tra cứu quy trình nghiệp vụ có dẫn nguồn',
                           style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
                         ),
                       ],

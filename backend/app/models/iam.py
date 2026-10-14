@@ -19,8 +19,12 @@ class User(Base, TimestampMixin):
     id: str = Column(UUID(as_uuid=True), primary_key=True)
     username: str = Column(String(64), unique=True, nullable=False, index=True)
     password_hash: str = Column(String(256), nullable=False)
+    pin_hash: str | None = Column(String(256), nullable=True)
     status: UserStatus = Column(Enum(UserStatus), nullable=False, default=UserStatus.active)
     display_name_demo: str = Column(String(256), nullable=False)
+    email: str | None = Column(String(256), nullable=True)
+    phone_number: str | None = Column(String(32), nullable=True)
+    branch: str | None = Column(String(256), nullable=True)
 
     def __repr__(self):
         return f"<User {self.username}>"

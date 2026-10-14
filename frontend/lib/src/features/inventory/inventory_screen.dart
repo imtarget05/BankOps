@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
+import '../../core/util/role_visibility.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
@@ -272,6 +273,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
           );
         }
         final data = snapshot.data!;
+        final canManageCatalog = RoleVisibility.canManageCatalog(
+          RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user),
+        );
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
 
@@ -313,7 +317,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     spacing: 10,
                     runSpacing: 8,
                     children: [
-                      OutlinedButton.icon(
+                      if (canManageCatalog) OutlinedButton.icon(
                         key: const Key('btn-add-item'),
                         onPressed: () => _showCreateItemDialog(),
                         icon: const Icon(Icons.add_box_outlined, size: 18),
@@ -393,6 +397,30 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+
+              Text('Danh mục mặt hàng', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              if (data.items.isEmpty)
+                const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('Chưa có mặt hàng. Người quản lý kho có thể thêm mặt hàng mới.')))
+              else
+                Card(
+                  child: Column(
+                    children: [
+                      for (final item in data.items)
+                        ListTile(
+                          title: Text(item.name),
+                          subtitle: Text('${item.sku} · ${item.unit}${item.trackedSerial ? ' · Theo dõi số sê-ri' : ''}'),
+                          trailing: canManageCatalog
+                              ? Wrap(spacing: 4, children: [
+                                  IconButton(tooltip: 'Sửa mặt hàng', icon: const Icon(Icons.edit_outlined), onPressed: () => _showEditItemDialog(item)),
+                                  IconButton(tooltip: 'Ngừng sử dụng mặt hàng', icon: const Icon(Icons.delete_outline), onPressed: () => _confirmDeleteItem(item)),
+                                ])
+                              : null,
+                        ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 24),
 
               // Bảng Tồn kho vật tư
@@ -506,7 +534,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                     ),
                                   ],
                                 ),
-                                if (item != null) ...[
+                                if (item != null && canManageCatalog) ...[
                                   const SizedBox(width: 8),
                                   PopupMenuButton<String>(
                                     icon: const Icon(Icons.more_vert, size: 18),

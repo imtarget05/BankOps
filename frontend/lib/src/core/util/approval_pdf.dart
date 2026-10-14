@@ -1,28 +1,29 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:flutter/services.dart';
 
 import '../../data/models/dtos.dart';
 
 /// In phiếu duyệt thành PDF 1 trang (A5) để Checker lưu chứng từ.
 ///
 /// Pure-Dart (async vì `pdf` build font), test được không cần widget.
-/// Font PDF built-in (Helvetica/WinAnsi) KHÔNG có glyph tiếng Việt nên mọi
-/// text in ra đều qua [VnAscii.strip] (không dấu) để tránh ô vuông.
+/// Font Roboto nhúng hỗ trợ tiếng Việt trong chứng từ.
 /// Mọi con số là giả lập — đầu trang ghi rõ "PHIEU MO PHONG".
 class ApprovalPdf {
   const ApprovalPdf._();
 
   static Future<List<int>> encode(ApprovalItem item) async {
     final doc = pw.Document();
+    final font = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a5,
+        theme: pw.ThemeData.withFont(base: font, bold: font),
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              VnAscii.strip(
-                  'PHIẾU MÔ PHỎNG — KHÔNG CÓ GIÁ TRỊ THANH TOÁN'),
+              'PHIẾU NGHIỆP VỤ MÔ PHỎNG',
               style: pw.TextStyle(
                 fontSize: 10,
                 fontWeight: pw.FontWeight.bold,
@@ -31,28 +32,36 @@ class ApprovalPdf {
             ),
             pw.SizedBox(height: 8),
             pw.Text(
-              VnAscii.strip('Phiếu chờ duyệt: ${item.id}'),
+              'Phiếu chờ kiểm soát · ${item.id}',
               style: pw.TextStyle(
                 fontSize: 18,
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
             pw.SizedBox(height: 12),
-            _ApprovalRow.build('Loai phieu', VnAscii.strip(item.kind)),
-            _ApprovalRow.build(
-                'Nguoi lap (Maker)', VnAscii.strip(item.maker)),
-            _ApprovalRow.build(
-                'Tac dong so du', VnAscii.strip(item.impact)),
-            _ApprovalRow.build('Chi tiet',
-                VnAscii.strip(item.detail.isEmpty ? '—' : item.detail)),
+            _ApprovalRow.build('Loại phiếu', item.kind),
+            _ApprovalRow.build('Người lập', item.maker),
+            _ApprovalRow.build('Giá trị / số lượng', item.impact),
+            _ApprovalRow.build('Nội dung', item.detail.isEmpty ? '—' : item.detail),
             pw.Spacer(),
             pw.Divider(),
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                _buildSignBox('Người giao/nhận'),
+                _buildSignBox('Người lập'),
+                _buildSignBox('Thủ kho / thủ quỹ'),
+                _buildSignBox('Kiểm soát viên'),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Divider(),
             pw.Text(
-              VnAscii.strip(
-                  'In tu BankOps demo luc ${DateTime.now().toIso8601String()}. '
-                  'Phieu chi co hieu luc sau khi Checker duyet tren he thong.'),
+              'In từ BankOps lúc ${DateTime.now().toIso8601String()}. '
+              'Phiếu chỉ hoàn tất sau khi kiểm soát viên duyệt trên hệ thống.',
               style:
-                  const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                  const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
             ),
           ],
         ),
@@ -60,7 +69,25 @@ class ApprovalPdf {
     );
     return doc.save();
   }
+
+  static pw.Widget _buildSignBox(String title) {
+    return pw.Column(
+      children: [
+        pw.Text(
+          title,
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          '(Ký, ghi rõ họ tên)',
+          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+        ),
+        pw.SizedBox(height: 28),
+      ],
+    );
+  }
 }
+
 
 class _ApprovalRow {
   static pw.Widget build(String label, String value) {

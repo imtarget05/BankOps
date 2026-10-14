@@ -83,6 +83,36 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+# --- In-memory OTP storage for password reset (username_lower -> (otp, expire_epoch)) ---
+_password_reset_otps: dict[str, tuple[str, float]] = {}
+
+
+def generate_password_reset_otp(username: str, ttl_seconds: int = 900) -> str:
+    """Generate a secure 6-digit OTP for password reset."""
+    import secrets
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    key = _rate_key(username)
+    _password_reset_otps[key] = (otp, time.time() + ttl_seconds)
+    return otp
+
+
+def verify_password_reset_otp(username: str, otp: str) -> bool:
+    """Verify and consume the OTP for password reset."""
+    import secrets
+    key = _rate_key(username)
+    record = _password_reset_otps.get(key)
+    if not record:
+        return False
+    stored_otp, expires_at = record
+    if time.time() > expires_at:
+        _password_reset_otps.pop(key, None)
+        return False
+    if secrets.compare_digest(stored_otp, otp.strip()):
+        _password_reset_otps.pop(key, None)
+        return True
+    return False
+
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     # jwt.encode json-hóa payload; `sub` từ DB là UUID -> phải ép str trước.

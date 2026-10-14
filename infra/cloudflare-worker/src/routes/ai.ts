@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import { Env } from "../index";
 import { JwtPayload } from "../middleware/auth";
+import { knowledgePrompt, retrieveKnowledge } from "./ai-knowledge";
+
+import bcrypt from "bcryptjs";
 
 export const aiRoutes = new Hono<{ Bindings: Env }>();
 const MODEL_DEFAULT = "@cf/meta/llama-3.1-8b-instruct";
@@ -49,14 +52,29 @@ async function enforceRateLimit(limiter: RateLimit, userId: string): Promise<boo
   return success;
 }
 
-export async function requireSupervisorPin(provided: string | undefined, env: Env): Promise<boolean> {
+export async function requireSupervisorPin(
+  provided: string | undefined,
+  env: Env,
+  userPinHash?: string | null
+): Promise<boolean> {
+  if (!provided) return false;
+  if (userPinHash) {
+    return await bcrypt.compare(provided, userPinHash);
+  }
   if (env.APP_ENV === "demo") return provided === "123456";
   if (!env.SUPERVISOR_PIN) throw new Error("Supervisor PIN is not configured");
   const [providedDigest, expectedDigest] = await Promise.all([
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(provided ?? "")),
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(env.SUPERVISOR_PIN)),
   ]);
-  return crypto.subtle.timingSafeEqual(providedDigest, expectedDigest);
+  const a = new Uint8Array(providedDigest);
+  const b = new Uint8Array(expectedDigest);
+  if (a.byteLength !== b.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < a.byteLength; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
 }
 
 function boundedString(value: unknown, maxLength: number, fallback = ""): string {
@@ -98,6 +116,41 @@ async function hfChatCompletion(
       throw new Error("HF LLM backend returned an invalid response");
     }
     return content.trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function hfChatStream(env: Env, baseUrl: string, system: string, user: string, emit: (text: string) => void): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutMs = Number(env.HF_LLM_TIMEOUT_MS) > 0 ? Number(env.HF_LLM_TIMEOUT_MS) : HF_TIMEOUT_DEFAULT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let received = false;
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (env.HF_LLM_API_KEY) headers.Authorization = `Bearer ${env.HF_LLM_API_KEY}`;
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST", headers, signal: controller.signal,
+      body: JSON.stringify({ messages: [{ role: "system", content: system }, { role: "user", content: user }], max_tokens: HF_MAX_TOKENS_DEFAULT, temperature: 0.1, stream: true }),
+    });
+    if (!response.ok || !response.body) throw new Error("HF streaming unavailable");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+        const frame = JSON.parse(line.slice(6)) as { choices?: Array<{ delta?: { content?: string } }> };
+        const token = frame.choices?.[0]?.delta?.content;
+        if (token) { emit(token); received = true; }
+      }
+    }
+    return received;
   } finally {
     clearTimeout(timer);
   }
@@ -227,10 +280,13 @@ aiRoutes.post("/chat", async (c) => {
   const body: { message?: unknown } = await c.req.json<{ message?: unknown }>().catch(() => ({ message: undefined }));
   const message = boundedString(body.message, 2000);
   if (!message) return c.json({ detail: "message is required" }, 422);
+  const sources = retrieveKnowledge(message);
+  if (!sources.length) return c.json({ answer: "Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.", sources: [], simulation: true });
   try {
-    const { text: answer, source } = await modelText(c, SYSTEM_PROMPT, `Người dùng ${user.username} hỏi: ${message}`);
+    const { text: answer, source } = await modelText(c, SYSTEM_PROMPT, knowledgePrompt(message, sources));
     return c.json({
       answer,
+      sources: sources.map(({ source, section }) => ({ source, section })),
       provider: source === "hf-space" ? "hf-space" : "cloudflare-workers-ai",
       model:
         source === "hf-space"
@@ -241,6 +297,47 @@ aiRoutes.post("/chat", async (c) => {
   } catch {
     return c.json({ detail: "Trợ lý AI chưa sẵn sàng. Vui lòng thử lại sau." }, 503);
   }
+});
+
+aiRoutes.post("/chat/stream", async (c) => {
+  const user = userOf(c);
+  if (!(await enforceRateLimit(c.env.AI_CHAT_LIMIT, user.sub))) {
+    return c.json({ detail: "Bạn đã vượt giới hạn AI. Thử lại sau một phút." }, 429, { "Retry-After": "60" });
+  }
+  const body = await c.req.json<{ message?: unknown }>().catch((): { message?: unknown } => ({}));
+  const message = boundedString(body.message, 2000);
+  if (!message) return c.json({ detail: "Cần nhập câu hỏi." }, 422);
+  const sources = retrieveKnowledge(message);
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: string, data: unknown) => controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      send("sources", sources.map(({ source, section }) => ({ source, section })));
+      try {
+        if (sources.length && hfBaseUrl(c.env)) {
+          let streamed = false;
+          let emitted = false;
+          try {
+            streamed = await hfChatStream(c.env, hfBaseUrl(c.env)!, SYSTEM_PROMPT, knowledgePrompt(message, sources), (text) => { emitted = true; send("delta", { text }); });
+          } catch {
+            if (emitted) { send("error", { message: "Luồng trả lời bị gián đoạn. Vui lòng thử lại." }); return; }
+            // If the self-hosted model is unavailable, use Workers AI below.
+          }
+          if (streamed) { send("done", {}); return; }
+        }
+        const answer = sources.length
+          ? (await modelText(c, SYSTEM_PROMPT, knowledgePrompt(message, sources))).text
+          : "Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.";
+        for (let i = 0; i < answer.length; i += 80) send("delta", { text: answer.slice(i, i + 80) });
+        send("done", {});
+      } catch {
+        send("error", { message: "Trợ lý AI chưa sẵn sàng. Vui lòng thử lại sau." });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" } });
 });
 
 aiRoutes.post("/assess-request", async (c) => {

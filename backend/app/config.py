@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     rate_limit_login_attempts: int = Field(default=5)
     rate_limit_login_window_minutes: int = Field(default=15)
 
+    # SMTP Email Configuration (Gmail / Transactional Email)
+    smtp_host: str = Field(default=os.environ.get("SMTP_HOST", "smtp.gmail.com"))
+    smtp_port: int = Field(default=int(os.environ.get("SMTP_PORT", "587")))
+    smtp_user: str = Field(default=os.environ.get("SMTP_USER", ""))
+    smtp_password: str = Field(default=os.environ.get("SMTP_PASSWORD", ""))
+    smtp_from_name: str = Field(default=os.environ.get("SMTP_FROM_NAME", "BankOps Core Banking"))
+
     ai_provider: Literal['disabled', 'cloudflare', 'ollama'] = 'cloudflare'
     cloudflare_account_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{32})?$')
     cloudflare_api_token: SecretStr = SecretStr('')

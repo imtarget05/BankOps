@@ -518,7 +518,10 @@ async def approve_cash_request(
         payload.supervisor_pin if payload else None,
         settings,
         required=risk["risk_level"] == "high",
+        user=user,
     )
+
+
 
     cid = uuid.uuid4().hex[:12]
     now = _now()

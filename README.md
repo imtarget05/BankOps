@@ -9,6 +9,8 @@
 
 > **Lưu ý an toàn:** Tất cả số tiền, tồn quỹ, giao dịch, mã ấn chỉ và danh tính trong hệ thống là **mô phỏng nghiệp vụ** (`simulation: true`). Không kết nối trực tiếp core banking sản xuất và không sử dụng dữ liệu khách hàng thật.
 
+> **Thiết kế web/app nhân viên — khảo sát 14/10/2026:** Xem [bộ tài liệu hiện trạng, kiến trúc, luồng nghiệp vụ và backlog nghiệm thu](docs/employee-app/README.md). Tài liệu phân biệt phần đã có trong mã nguồn với phần đề xuất, đồng thời ghi nhận các khác biệt FastAPI/Worker và các vấn đề cần xử lý trước pilot. Các số liệu kiểm thử bên dưới là kết quả lịch sử, chưa chứng nhận working tree hiện tại.
+
 ---
 
 ## 1. Điểm Nhấn Kiến Trúc Nâng Cấp (Key Architectural Pillars)

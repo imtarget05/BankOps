@@ -6,6 +6,7 @@ import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 import 'request_timeline.dart';
+import 'widgets/denomination_breakdown_dialog.dart';
 
 /// Màn yêu cầu — tạo mới và gửi duyệt phiếu kho (stock) + phiếu quỹ (cash).
 class RequestsScreen extends StatefulWidget {
@@ -324,6 +325,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
     String cashboxId = data.cashboxes.first.id;
     final amountCtrl = TextEditingController(text: '500000');
     final reasonCtrl = TextEditingController(text: 'Thu nộp quỹ tiền mặt đầu ca');
+    Map<int, int>? denominationCounts;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -378,14 +380,55 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('cash-amount-input'),
-                    controller: amountCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Số tiền (VND)',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const Key('cash-amount-input'),
+                          controller: amountCtrl,
+                          decoration: InputDecoration(
+                            labelText: 'Số tiền (VND)',
+                            border: const OutlineInputBorder(),
+                            helperText: amountCtrl.text.isNotEmpty
+                                ? '${AppFormat.number(amountCtrl.text)} đ'
+                                : null,
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => setDialogState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Mở Bảng kê kiểm đếm mệnh giá',
+                        child: OutlinedButton.icon(
+                          key: const Key('open-denomination-btn'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                            side: const BorderSide(color: Color(0xFF059669)),
+                          ),
+                          icon: const Icon(Icons.calculate_outlined, color: Color(0xFF059669)),
+                          label: const Text('Bảng kê', style: TextStyle(color: Color(0xFF059669), fontSize: 13)),
+                          onPressed: () async {
+                            final res = await showDialog<DenominationResult>(
+                              context: ctx,
+                              builder: (_) => DenominationBreakdownDialog(initialCounts: denominationCounts),
+                            );
+                            if (res != null) {
+                              denominationCounts = res.counts;
+                              setDialogState(() {
+                                amountCtrl.text = res.totalAmount.toString();
+                                if (reasonCtrl.text.trim().isEmpty) {
+                                  reasonCtrl.text = res.breakdownSummary;
+                                } else if (!reasonCtrl.text.contains('Bảng kê:')) {
+                                  reasonCtrl.text = '${reasonCtrl.text.trim()} · ${res.breakdownSummary}';
+                                }
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -540,7 +583,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     ),
                   ),
                   Text(
-                    'Được kiểm duyệt bởi Checker trước khi xuất/nhập',
+                    'Kiểm soát viên duyệt trước khi ghi nhận nhập/xuất',
                     style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],

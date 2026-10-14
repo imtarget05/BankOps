@@ -44,6 +44,9 @@ class RepositoryScope extends InheritedWidget {
 
   final BankOpsRepository repository;
 
+  static BankOpsRepository? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<RepositoryScope>()?.repository;
+
   static BankOpsRepository of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<RepositoryScope>()!.repository;
 
@@ -183,7 +186,7 @@ class _AppShellState extends State<AppShell> {
     final user = session?.user;
     if (user == null) return true; // Giữ nguyên cho unauthenticated & widget tests
     return user.roles.any((r) =>
-        ['approver', 'checker', 'admin', 'supervisor'].contains(r.toLowerCase()));
+        ['approver', 'checker'].contains(r.toLowerCase()));
   }
 
   Widget _screenFor(int i, SessionScope? session) {
@@ -247,18 +250,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _openSettings() {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (context, _, __) => const SettingsScreen(),
-        transitionsBuilder: (context, animation, _, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          final tween = Tween(begin: begin, end: end)
-              .chain(CurveTween(curve: Curves.easeInOut));
-          return SlideTransition(position: animation.drive(tween), child: child);
-        },
-      ),
-    );
+    _go(8);
   }
 
   Future<void> _openSearch() async {

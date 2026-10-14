@@ -29,6 +29,21 @@ class HealthStatus {
   final String? error;
 }
 
+/// Kết quả yêu cầu khôi phục mật khẩu (bước 1 qua OTP).
+class PasswordResetResult {
+  const PasswordResetResult({
+    required this.username,
+    required this.message,
+    this.otpDemo,
+    this.expiresInSeconds = 900,
+  });
+
+  final String username;
+  final String message;
+  final String? otpDemo;
+  final int expiresInSeconds;
+}
+
 /// Hợp đồng repository theo docs/06-api.md. UI chỉ phụ thuộc interface này;
 /// backend FastAPI có thể nối sau bằng cùng contract.
 abstract class BankOpsRepository {
@@ -38,6 +53,26 @@ abstract class BankOpsRepository {
   // POST /auth/login, GET /me
   Future<List<AppUser>> loadUsers();
   Future<AppUser> login(String username);
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  });
+  Future<void> changePin({
+    required String currentPassword,
+    required String newPin,
+  });
+  Future<PasswordResetResult> requestPasswordReset(String username);
+  Future<void> resetPassword({
+    required String username,
+    required String otp,
+    required String newPassword,
+  });
+  Future<AppUser> updateProfile({
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branch,
+  });
 
   // GET /inventory/locations, /items, /balances, /assets
   Future<List<InventoryLocation>> getLocations();

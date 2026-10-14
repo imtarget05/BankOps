@@ -99,7 +99,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     bool isBatch = false,
     int batchCount = 1,
   }) {
-    final isDemoRepository = RepositoryScope.of(context) is FakeBankOpsRepository;
+    final repo = RepositoryScope.of(context);
+    final isDemoRepository = repo is FakeBankOpsRepository;
+    final demoPin = repo is FakeBankOpsRepository ? repo.supervisorPin : '123456';
     return showDialog<String?>(
       context: context,
       barrierDismissible: false,
@@ -109,6 +111,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         isBatch: isBatch,
         batchCount: batchCount,
         isDemoRepository: isDemoRepository,
+        demoPin: demoPin,
       ),
     );
   }
@@ -132,8 +135,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await repo.approveStockRequest(item.id, supervisorPin: supervisorPin);
       }
       if (!mounted) return;
-      final stampMsg = assessment != null ? ' (Audit Stamp: ${assessment.auditStamp.substring(0, 10)}...)' : '';
-      AppToast.success(context, 'Đã duyệt & ghi sổ thành công phiếu ${item.id}$stampMsg');
+      AppToast.success(context, 'Đã duyệt và ghi sổ phiếu ${item.id}');
       _reload();
     } catch (e) {
       if (!mounted) return;
@@ -156,7 +158,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Vui lòng nhập lý do từ chối để thông báo lại cho Giao dịch viên (Maker):',
+              'Nhập lý do để người lập phiếu biết cần bổ sung gì:',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -229,8 +231,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         context,
         title: 'Duyệt hàng loạt ${targets.length} phiếu',
         message:
-            'Mỗi phiếu được thẩm định Maker ≠ Checker và ghi sổ độc lập. '
-            'Phiếu lỗi không chặn các phiếu còn lại.',
+            'Mỗi phiếu được kiểm tra và ghi sổ riêng. Phiếu xử lý lỗi không ảnh hưởng các phiếu còn lại.',
         confirmLabel: 'Duyệt ${targets.length} phiếu',
       );
       if (!confirmed || !mounted) return;
@@ -358,7 +359,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'AI Maker-Checker Copilot Thẩm Định Rủi Ro',
+                        'Đánh giá rủi ro bằng AI',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                       ),
                       Text(
@@ -551,7 +552,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Hộp Thư Phê Duyệt 4 Mắt (Dual Control)',
+                          'Hộp Thư Phê Duyệt 4 Mắt (Phiếu chờ kiểm soát)',
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.5,
@@ -610,7 +611,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Nguyên tắc bất biến: Người lập lệnh (Maker) không được tự duyệt lệnh của chính mình. Mọi thao tác phê duyệt hoặc từ chối đều được lưu trữ vào vết kiểm toán.',
+                        'Người lập phiếu không được tự duyệt. Mọi quyết định đều được lưu vào nhật ký kiểm toán.',
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
@@ -808,7 +809,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                   ),
                                                 ),
                                                 TextSpan(
-                                                  text: 'Người lập lệnh (Maker): ',
+                                                  text: 'Người lập phiếu: ',
                                                   style: TextStyle(
                                                     fontSize: 12.5,
                                                     color: theme.colorScheme.onSurfaceVariant,
@@ -895,7 +896,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                       Icon(Icons.auto_awesome, size: 12, color: Color(0xFF2563EB)),
                                                       SizedBox(width: 4),
                                                       Text(
-                                                        'Thẩm định AI Copilot',
+                                                        'Xem đánh giá AI',
                                                         style: TextStyle(
                                                           fontSize: 10.5,
                                                           fontWeight: FontWeight.w700,
@@ -1041,6 +1042,7 @@ class _DualControlPinDialog extends StatefulWidget {
     required this.isBatch,
     required this.batchCount,
     required this.isDemoRepository,
+    this.demoPin = '123456',
   });
 
   final ApprovalItem item;
@@ -1048,6 +1050,7 @@ class _DualControlPinDialog extends StatefulWidget {
   final bool isBatch;
   final int batchCount;
   final bool isDemoRepository;
+  final String demoPin;
 
   @override
   State<_DualControlPinDialog> createState() => _DualControlPinDialogState();
@@ -1070,11 +1073,11 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
   }
 
   void _onConfirm() {
-    if (widget.isDemoRepository && _pinCtrl.text.trim() == '123456') {
+    if (widget.isDemoRepository && _pinCtrl.text.trim() == widget.demoPin) {
       Navigator.of(context).pop(_pinCtrl.text.trim());
     } else if (widget.isDemoRepository) {
       setState(() {
-        _errorText = 'Mã PIN không đúng (Demo: 123456)';
+        _errorText = 'Mã PIN không đúng (Demo: ${widget.demoPin})';
       });
     } else if (_pinCtrl.text.trim().isNotEmpty) {
       Navigator.of(context).pop(_pinCtrl.text.trim());
@@ -1130,7 +1133,7 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
                     child: Text(
                       widget.isBatch
                           ? 'Lô duyệt có phiếu giá trị lớn hoặc rủi ro cao. Bắt buộc Kiểm soát viên nhập PIN để cấp phép.'
-                          : 'Phiếu ${widget.item.id} có mức độ RỦI RO CAO (${widget.item.impact}). Bắt buộc xác thực PIN Kiểm soát viên và sinh mã Audit Stamp SHA-256.',
+                          : 'Phiếu ${widget.item.id} có rủi ro cao (${widget.item.impact}). Kiểm tra chứng từ và nhập PIN kiểm soát viên trước khi duyệt.',
                       style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -1140,7 +1143,7 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
             const SizedBox(height: 14),
             if (widget.assessment != null) ...[
               Text(
-                'Audit Stamp Hash (SHA-256):',
+                'Mã kiểm tra đánh giá:',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -1164,7 +1167,7 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
             ],
             Text(
               widget.isDemoRepository
-                  ? 'Nhập PIN demo Kiểm soát viên (123456):'
+                  ? 'Nhập PIN demo Kiểm soát viên (${widget.demoPin}):'
                   : 'Nhập PIN Kiểm soát viên được cấu hình bảo mật:',
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),

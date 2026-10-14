@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir poetry poetry-plugin-export && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
+COPY docs /app/docs
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
 

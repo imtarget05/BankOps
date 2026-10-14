@@ -1,11 +1,11 @@
 {
-    "name": "bankops",
-    "short_name": "bankops",
+    "name": "BankOps — Quản Lý Kho Ấn Chỉ & Quỹ Tiền Mặt (Core Banking)",
+    "short_name": "BankOps",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A2540",
+    "theme_color": "#0A2540",
+    "description": "Hệ thống quản lý kho ấn chỉ và quỹ tiền mặt mô phỏng ngân hàng số theo chuẩn Maker-Checker (Dual-Control).",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

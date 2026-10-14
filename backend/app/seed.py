@@ -147,6 +147,7 @@ async def seed_demo():
         ]
         if missing_specs:
             password_hash = get_password_hash(DEMO_PASSWORD)
+            default_pin_hash = get_password_hash("123456")
             users = []
             user_roles = []
             role_map = {
@@ -160,6 +161,7 @@ async def seed_demo():
                     id=uuid.UUID(u["id"]),
                     username=u["username"],
                     password_hash=password_hash,
+                    pin_hash=default_pin_hash,
                     status="active",
                     display_name_demo=u["display_name_demo"],
                 )

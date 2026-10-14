@@ -31,6 +31,20 @@ def get(url, token=None):
         return json.loads(resp.read().decode("utf-8"))
 
 
+def put(url, data, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(
+        f"{BASE}{url}",
+        data=json.dumps(data).encode("utf-8"),
+        headers=headers,
+        method="PUT",
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def main():
     print("=== BẮT ĐẦU KIỂM THỬ E2E LIVE DOCKER API ===")
 
@@ -128,6 +142,106 @@ def main():
     )
     diff = bal_after - bal_before
     print(f"9. Số dư sau khi ghi sổ: {bal_after:,.2f} VND (Tăng chính xác: +{diff:,.2f} VND)")
+
+    # 10. Kiểm thử Cập nhật hồ sơ (PUT /auth/me)
+    print("\n--- KIỂM THỬ TÍNH NĂNG BẢO MẬT & HỒ SƠ ---")
+    orig_name = maker_auth["user"]["display_name"]
+    updated_profile = put(
+        "/auth/me",
+        {
+            "display_name": "Nguyễn Hoàng An (Maker Lead)",
+            "email": "hoangan@bankops.vn",
+            "phone_number": "0912 345 678",
+            "branch": "Chi nhánh Bến Thành (Hội sở)",
+        },
+        maker_token,
+    )
+    assert updated_profile["display_name"] == "Nguyễn Hoàng An (Maker Lead)"
+    print(f"10. Cập nhật hồ sơ cá nhân thành công: {updated_profile['display_name']}")
+    # Revert profile back
+    put("/auth/me", {"display_name": orig_name}, maker_token)
+
+    # 11. Kiểm thử Đổi mã PIN Kiểm soát viên (POST /auth/change-pin)
+    pin_changed = post(
+        "/auth/change-pin",
+        {"current_password": "DemoPass123!", "new_pin": "777888"},
+        checker_token,
+    )
+    print(f"11. Đổi mã PIN kiểm soát viên thành công: {pin_changed['message']}")
+
+    # Tạo phiếu quỹ mới để thử duyệt với PIN mới
+    req2 = post(
+        "/cash-sim/requests",
+        {
+            "cashbox_id": box_id,
+            "kind": "receipt",
+            "amount": "600000000.00",
+            "currency": "VND",
+            "reason": "Tiếp quỹ thử nghiệm với PIN mới",
+        },
+        maker_token,
+    )
+    post(f"/cash-sim/requests/{req2['id']}/submit", {}, maker_token)
+
+    # Thử duyệt với PIN cũ 123456 -> Phải bị từ chối 403
+    try:
+        post(
+            f"/cash-sim/requests/{req2['id']}/approve",
+            {"supervisor_pin": "123456"},
+            checker_token,
+        )
+        print("X LỖI: PIN cũ 123456 lẽ ra phải bị từ chối sau khi đổi PIN!")
+    except urllib.error.HTTPError as e:
+        print(f"12. Xác thực an toàn: PIN cũ 123456 bị từ chối với HTTP {e.code} - ĐẠT!")
+
+    # Duyệt với PIN mới 777888 -> Phải thành công 200
+    app2 = post(
+        f"/cash-sim/requests/{req2['id']}/approve",
+        {"supervisor_pin": "777888"},
+        checker_token,
+    )
+    print(f"13. Duyệt thành công với mã PIN mới 777888. Trạng thái: {app2['status']}")
+
+    # Khôi phục lại PIN demo 123456
+    post(
+        "/auth/change-pin",
+        {"current_password": "DemoPass123!", "new_pin": "123456"},
+        checker_token,
+    )
+
+    # 14. Kiểm thử Đổi mật khẩu (POST /auth/change-password)
+    new_pw = "BrandNewPass2026!"
+    post(
+        "/auth/change-password",
+        {"old_password": "DemoPass123!", "new_password": new_pw},
+        maker_token,
+    )
+    # Đăng nhập bằng mật khẩu mới
+    new_maker_auth = post("/auth/login", {"username": "demo_maker", "password": new_pw})
+    print(f"14. Đổi mật khẩu & đăng nhập bằng mật khẩu mới thành công: {new_maker_auth['access_token'][:20]}...")
+    # Khôi phục lại mật khẩu demo
+    post(
+        "/auth/change-password",
+        {"old_password": new_pw, "new_password": "DemoPass123!"},
+        new_maker_auth["access_token"],
+    )
+
+    # 15. Kiểm thử Quên mật khẩu & Đặt lại bằng OTP (POST /auth/forgot-password & /auth/reset-password)
+    forgot_res = post("/auth/forgot-password", {"username": "demo_maker"})
+    otp = forgot_res["otp_demo"]
+    print(f"15. Sinh mã OTP khôi phục mật khẩu cho demo_maker: {otp}")
+    reset_res = post(
+        "/auth/reset-password",
+        {"username": "demo_maker", "otp": otp, "new_password": "ResetPass2026!"},
+    )
+    print(f"16. Đặt lại mật khẩu bằng OTP thành công: {reset_res['message']}")
+    reset_auth = post("/auth/login", {"username": "demo_maker", "password": "ResetPass2026!"})
+    # Khôi phục lại mật khẩu demo
+    post(
+        "/auth/change-password",
+        {"old_password": "ResetPass2026!", "new_password": "DemoPass123!"},
+        reset_auth["access_token"],
+    )
 
     print("\n=== TOÀN BỘ LUỒNG E2E ĐÃ HOÀN TẤT THÀNH CÔNG 100%! ===")
 

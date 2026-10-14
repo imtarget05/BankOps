@@ -26,6 +26,7 @@ HF_LLM_BASE_URL = "https://imtarget05--bankops-llm-serve.us-east.modal.run"
 HF_LLM_TIMEOUT_MS = "90000"
 ACCESS_TOKEN_EXPIRE_MINUTES = "30"
 REFRESH_TOKEN_EXPIRE_DAYS = "7"
+GOOGLE_CLIENT_ID = "1070073470852-hc12cgovbt9h7micnu072vpkvigee28u.apps.googleusercontent.com,1070073470852-apcl0c8sgvt9c4f6qscpjgcrgtje4tjn.apps.googleusercontent.com"
 
 # ─── Rate Limiting bindings (Production) ─────────────────────────────────────
 # namespace_id là SỐ TỰ CHỌN (1–9999999999), KHÔNG phải KV namespace ID —

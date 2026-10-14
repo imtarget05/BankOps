@@ -60,6 +60,22 @@ def client(app):
         )
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """Reset in-memory login failure rate limits between tests."""
+    try:
+        from app.api.routes.auth_utils import _login_failures
+        _login_failures.clear()
+    except Exception:
+        pass
+    yield
+    try:
+        from app.api.routes.auth_utils import _login_failures
+        _login_failures.clear()
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="session")
 def models():
     """Import every SQLAlchemy model module, failing loudly on any broken module."""

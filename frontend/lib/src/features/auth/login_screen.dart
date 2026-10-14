@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/app_shell.dart';
+import '../../core/widgets/google_logo.dart';
+import '../../data/repositories/bankops_repository.dart';
 import 'auth_service.dart';
+import 'widgets/forgot_password_dialog.dart';
+import 'widgets/google_sso_dialog.dart';
+import 'widgets/register_dialog.dart';
 
 /// Màn hình đăng nhập phong cách Enterprise Banking Portal:
 /// Thiết kế Split-screen trên desktop/tablet, giao diện chuyên nghiệp cho Maker/Checker/Auditor,
@@ -14,8 +20,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameCtrl = TextEditingController(text: 'demo_maker');
-  final _passwordCtrl = TextEditingController(text: 'demo12345');
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   bool _busy = false;
   bool _obscurePassword = true;
 
@@ -30,7 +36,6 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_busy) return;
     if (presetUser != null) {
       _usernameCtrl.text = presetUser;
-      _passwordCtrl.text = 'demo12345';
     }
     setState(() => _busy = true);
     try {
@@ -68,25 +73,61 @@ class _LoginScreenState extends State<LoginScreen> {
       final ok = await context.read<AuthService>().signInWithGoogle();
       if (!mounted) return;
       if (!ok) {
-        final msg =
-            context.read<AuthService>().lastError ?? 'Đăng nhập Google thất bại.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFB42318),
-            behavior: SnackBarBehavior.floating,
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text(msg)),
-              ],
-            ),
-          ),
+        final auth = context.read<AuthService>();
+        final msg = auth.lastError;
+        if (msg != null && msg.contains('Đã hủy')) {
+          return;
+        }
+        await showDialog<bool>(
+          context: context,
+          builder: (_) => GoogleSsoDialog(initialError: msg),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      await showDialog<bool>(
+        context: context,
+        builder: (_) => GoogleSsoDialog(initialError: 'Lỗi xác thực Google: $e'),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openForgotPassword() async {
+    BankOpsRepository? repo;
+    try {
+      repo = RepositoryScope.of(context);
+    } catch (_) {}
+    final username = await ForgotPasswordDialog.show(
+      context,
+      initialUsername: _usernameCtrl.text.trim(),
+      repository: repo,
+    );
+    if (username != null && mounted) {
+      _usernameCtrl.text = username;
+      _passwordCtrl.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child:
+                    Text('Khôi phục mật khẩu thành công! Vui lòng đăng nhập.'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openRegister() async {
+    await RegisterDialog.show(context);
   }
 
   @override
@@ -291,12 +332,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     Icon(Icons.shield_outlined, color: Color(0xFF34D399), size: 14),
                     SizedBox(width: 6),
-                    Text(
-                      'Bảo mật Ngân hàng & Kiểm soát kép',
-                      style: TextStyle(
-                        color: Color(0xFF6EE7B7),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        'Bảo mật Ngân hàng & Kiểm soát kép',
+                        style: TextStyle(
+                          color: Color(0xFF6EE7B7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -336,12 +380,15 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const Icon(Icons.lock_clock_outlined, color: Color(0xFF94A3B8), size: 16),
               const SizedBox(width: 8),
-              Text(
-                'Tuân thủ bảo mật ISO/IEC 27001 • v3.8.0',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+              Flexible(
+                child: Text(
+                  'Tuân thủ bảo mật ISO/IEC 27001 • v3.8.0',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -399,6 +446,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLoginForm(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final auth = context.watch<AuthService>();
 
     return Column(
@@ -454,7 +502,28 @@ class _LoginScreenState extends State<LoginScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            key: const Key('login-forgot-password-btn'),
+            onPressed: _busy ? null : _openForgotPassword,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Quên mật khẩu?',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2563EB),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
         FilledButton.icon(
           key: const Key('login-submit-btn'),
           onPressed: _busy ? null : () => _loginWithPassword(),
@@ -477,17 +546,18 @@ class _LoginScreenState extends State<LoginScreen> {
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         Row(
           children: [
             Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'CHỌN NHANH VAI TRÒ DEMO',
+                'HOẶC TIẾP TỤC VỚI',
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
+                  fontSize: 10,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -495,68 +565,78 @@ class _LoginScreenState extends State<LoginScreen> {
             Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
           ],
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.center,
-          children: [
-            ActionChip(
-              key: const Key('login-demo-maker-chip'),
-              avatar: const CircleAvatar(
-                radius: 10,
-                backgroundColor: Color(0xFF2563EB),
-                child: Icon(Icons.edit_document, size: 12, color: Colors.white),
-              ),
-              label: const Text('Maker (Lập lệnh)'),
-              onPressed: _busy ? null : () => _loginWithPassword('demo_maker'),
-            ),
-            ActionChip(
-              key: const Key('login-demo-checker-chip'),
-              avatar: const CircleAvatar(
-                radius: 10,
-                backgroundColor: Color(0xFF7C3AED),
-                child: Icon(Icons.verified, size: 12, color: Colors.white),
-              ),
-              label: const Text('Checker (Duyệt lệnh)'),
-              onPressed: _busy ? null : () => _loginWithPassword('demo_checker'),
-            ),
-            ActionChip(
-              key: const Key('login-demo-auditor-chip'),
-              avatar: const CircleAvatar(
-                radius: 10,
-                backgroundColor: Color(0xFF059669),
-                child: Icon(Icons.remove_red_eye, size: 12, color: Colors.white),
-              ),
-              label: const Text('Auditor (Kiểm toán)'),
-              onPressed: _busy ? null : () => _loginWithPassword('demo_auditor'),
-            ),
-          ],
-        ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
           key: const Key('login-google-btn'),
           onPressed: _busy ? null : _loginWithGoogle,
           style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+            foregroundColor:
+                isDark ? Colors.white : const Color(0xFF1F2937),
+            side: BorderSide(
+              color: isDark
+                  ? const Color(0xFF334155)
+                  : const Color(0xFFDADCE0),
+              width: 1,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: isDark ? 0 : 0.5,
           ),
-          icon: const Icon(Icons.account_circle, size: 20),
+          icon: const GoogleLogo(size: 20),
           label: const Text(
-            'Đăng nhập với Google Workspace',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            'Đăng nhập bằng Google',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              letterSpacing: 0.2,
+            ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
           auth.isGoogleSignInConfigured
-              ? 'Tài khoản Google tổ chức sẽ được tự động đồng bộ vai trò nhân viên.'
-              : 'Gợi ý: Chọn nhanh một trong các vai trò Demo ở trên để trải nghiệm đầy đủ quyền hạn.',
+              ? 'Tài khoản Google tổ chức sẽ được tự động phân quyền theo vai trò.'
+              : 'Hỗ trợ đăng nhập bảo mật với Google Workspace và Single Sign-On (SSO).',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
             fontSize: 11,
           ),
           textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Chưa có tài khoản?',
+              style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 4),
+            TextButton(
+              key: const Key('login-register-btn'),
+              onPressed: _busy ? null : _openRegister,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'Đăng ký ngay',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: Color(0xFF2563EB),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

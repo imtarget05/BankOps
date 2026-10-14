@@ -1,15 +1,18 @@
 """Authenticated advisory AI. Limits are per process (demo deployment)."""
+import json
 import time
 from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.routes.auth_utils import get_current_user
 from app.config import settings
 from app.models.iam import User
-from app.services.ai import assess_request, generate
+from app.services.ai import assess_request, generate, stream_ollama
+from app.services.ai_retrieval import grounded_prompt, retrieve
 
 router = APIRouter(prefix='/ai')
 _windows: dict[str, tuple[float, int]] = {}
@@ -56,6 +59,43 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
     if user.status != 'active':
         raise HTTPException(403, 'Tài khoản không hoạt động.')
     _enforce_ai_rate_limit(user)
+    sources = retrieve(body.message)
+    if not sources:
+        return {'answer': 'Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.', 'sources': [], 'simulation': True}
     async with httpx.AsyncClient() as client:
-        return await generate(body.message, settings, client)
+        result = await generate(grounded_prompt(body.message, sources), settings, client)
+    return {**result, 'sources': [{k: v for k, v in source.items() if k != 'content'} for source in sources]}
+
+
+@router.post('/chat/stream')
+async def chat_stream(body: ChatRequest, user: User = Depends(get_current_user)):
+    if user.status != 'active':
+        raise HTTPException(403, 'Tài khoản không hoạt động.')
+    _enforce_ai_rate_limit(user)
+    sources = retrieve(body.message)
+
+    async def events():
+        refs = [{k: v for k, v in source.items() if k != 'content'} for source in sources]
+        yield f"event: sources\ndata: {json.dumps(refs, ensure_ascii=False)}\n\n"
+        if not sources:
+            answer = 'Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.'
+        else:
+            try:
+                async with httpx.AsyncClient() as client:
+                    prompt = grounded_prompt(body.message, sources)
+                    if settings.ai_provider == 'ollama':
+                        async for token in stream_ollama(prompt, settings, client):
+                            yield f"event: delta\ndata: {json.dumps({'text': token}, ensure_ascii=False)}\n\n"
+                        yield 'event: done\ndata: {}\n\n'
+                        return
+                    result = await generate(prompt, settings, client)
+                    answer = result['answer']
+            except HTTPException:
+                yield 'event: error\ndata: {"message":"Trợ lý AI chưa sẵn sàng. Vui lòng thử lại sau."}\n\n'
+                return
+        for offset in range(0, len(answer), 80):
+            yield f"event: delta\ndata: {json.dumps({'text': answer[offset:offset + 80]}, ensure_ascii=False)}\n\n"
+        yield 'event: done\ndata: {}\n\n'
+
+    return StreamingResponse(events(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 

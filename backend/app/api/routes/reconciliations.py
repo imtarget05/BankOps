@@ -38,7 +38,7 @@ def _require_key(request: Request) -> str:
 async def run_reconciliation(
     payload: dict,
     request: Request,
-    user=Depends(require_any_capability(*_RECON_CAPS)),
+    user=Depends(require_any_capability("cash:reconcile")),
     db: AsyncSession = Depends(get_db),
 ):
     scope = str(payload.get("scope", "cash")).lower()
@@ -80,7 +80,8 @@ async def run_reconciliation(
             sums[k] = sums.get(k, 0.0) + float(m.quantity_signed)
         bals = (await db.execute(select(Balance))).scalars().all()
         bal_map = {(str(b.location_id), str(b.item_id)): float(b.quantity) for b in bals}
-        for k, expected in sums.items():
+        for k in sums.keys() | bal_map.keys():
+            expected = sums.get(k, 0.0)
             actual = bal_map.get(k)
             if actual is None or abs(expected - actual) > 1e-6:
                 exceptions.append(

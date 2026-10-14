@@ -75,12 +75,17 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (
   c,
   next
 ) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return c.json({ detail: "Missing or invalid Authorization header" }, 401);
+  let token = "";
+  const authHeader = c.req.header("Authorization") ?? c.req.header("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else {
+    token = c.req.query("token") ?? "";
   }
 
-  const token = authHeader.slice(7);
+  if (!token) {
+    return c.json({ detail: "Missing or invalid Authorization header" }, 401);
+  }
 
   try {
     const payload = await verifyToken(token, c.env.JWT_SECRET);

@@ -82,10 +82,66 @@ interface InvLineRow {
 inventoryRoutes.get("/items", async (c) => {
   const items = await db<InvItem>(c.env.DATABASE_URL)`
     SELECT id, sku, name, unit, tracked_serial, active
-    FROM inv_items
+    FROM inv_items WHERE active = true
     ORDER BY name ASC
   `;
   return c.json({ items, simulation: true });
+});
+
+function canManageCatalog(user: JwtPayload): boolean {
+  return user.caps.includes("inventory:manage_catalog") ||
+    user.caps.includes("admin:user_management");
+}
+
+inventoryRoutes.post("/items", async (c) => {
+  if (!canManageCatalog(getUser(c))) return c.json({ detail: "Bạn không có quyền quản lý danh mục kho." }, 403);
+  const body = await c.req.json<{ sku?: string; name?: string; unit?: string; tracked_serial?: boolean }>().catch((): { sku?: string; name?: string; unit?: string; tracked_serial?: boolean } => ({}));
+  const sku = body.sku?.trim().toUpperCase() ?? "";
+  const name = body.name?.trim() ?? "";
+  const unit = body.unit?.trim() || "đơn vị";
+  if (!sku || !name) return c.json({ detail: "Cần nhập mã và tên mặt hàng." }, 422);
+  const existing = await db<InvItem>(c.env.DATABASE_URL)`SELECT id FROM inv_items WHERE sku = ${sku} LIMIT 1`;
+  if (existing.length) return c.json({ detail: "Mã mặt hàng đã tồn tại." }, 409);
+  const id = crypto.randomUUID();
+  const rows = await db<InvItem>(c.env.DATABASE_URL)`
+    INSERT INTO inv_items (id, sku, name, unit, tracked_serial, active, created_at, updated_at)
+    VALUES (${id}::uuid, ${sku}, ${name}, ${unit}, ${body.tracked_serial === true}, true, NOW(), NOW())
+    RETURNING id, sku, name, unit, tracked_serial, active
+  `;
+  return c.json(rows[0], 201);
+});
+
+inventoryRoutes.put("/items/:id", async (c) => {
+  if (!canManageCatalog(getUser(c))) return c.json({ detail: "Bạn không có quyền quản lý danh mục kho." }, 403);
+  const id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ detail: "Mã mặt hàng không hợp lệ." }, 422);
+  const body = await c.req.json<{ name?: string; unit?: string; tracked_serial?: boolean }>().catch((): { name?: string; unit?: string; tracked_serial?: boolean } => ({}));
+  const name = body.name?.trim();
+  const unit = body.unit?.trim();
+  if (body.name !== undefined && !name) return c.json({ detail: "Tên mặt hàng không được để trống." }, 422);
+  if (body.unit !== undefined && !unit) return c.json({ detail: "Đơn vị tính không được để trống." }, 422);
+  const rows = await db<InvItem>(c.env.DATABASE_URL)`
+    UPDATE inv_items SET
+      name = COALESCE(${name ?? null}, name),
+      unit = COALESCE(${unit ?? null}, unit),
+      tracked_serial = COALESCE(${body.tracked_serial ?? null}, tracked_serial),
+      updated_at = NOW()
+    WHERE id = ${id}::uuid AND active = true
+    RETURNING id, sku, name, unit, tracked_serial, active
+  `;
+  if (!rows.length) return c.json({ detail: "Không tìm thấy mặt hàng." }, 404);
+  return c.json(rows[0]);
+});
+
+inventoryRoutes.delete("/items/:id", async (c) => {
+  if (!canManageCatalog(getUser(c))) return c.json({ detail: "Bạn không có quyền quản lý danh mục kho." }, 403);
+  const id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ detail: "Mã mặt hàng không hợp lệ." }, 422);
+  const rows = await db<InvItem>(c.env.DATABASE_URL)`
+    UPDATE inv_items SET active = false, updated_at = NOW() WHERE id = ${id}::uuid AND active = true RETURNING id
+  `;
+  if (!rows.length) return c.json({ detail: "Không tìm thấy mặt hàng." }, 404);
+  return c.json({ status: "deleted", id });
 });
 
 // GET /inventory/locations
@@ -161,6 +217,9 @@ async function formatStockRequest(databaseUrl: string, r: InvRequestRow) {
 
 // GET /inventory/requests
 inventoryRoutes.get("/requests", async (c) => {
+  const user = getUser(c);
+  const canApprove = user.caps.includes("inventory:approve_request");
+  if (!canApprove && !user.caps.includes("inventory:create_request")) return c.json({ detail: "Bạn không có quyền xem phiếu kho." }, 403);
   const status = c.req.query("status");
   const sql = db<InvRequestRow>(c.env.DATABASE_URL);
   const rows = status
@@ -168,7 +227,7 @@ inventoryRoutes.get("/requests", async (c) => {
         SELECT id, kind, status, maker_id, approver_id,
                source_id, dest_id, reason, version, created_at
         FROM inv_requests
-        WHERE status = ${status}
+        WHERE status = ${status} AND (${canApprove} OR maker_id = ${user.sub}::uuid)
         ORDER BY created_at DESC
         LIMIT 100
       `
@@ -176,17 +235,17 @@ inventoryRoutes.get("/requests", async (c) => {
         SELECT id, kind, status, maker_id, approver_id,
                source_id, dest_id, reason, version, created_at
         FROM inv_requests
+        WHERE ${canApprove} OR maker_id = ${user.sub}::uuid
         ORDER BY created_at DESC
         LIMIT 100
       `;
-  const requests = await Promise.all(
-    rows.map((r) => formatStockRequest(c.env.DATABASE_URL, r))
-  );
+  const requests = await Promise.all(rows.map((r) => formatStockRequest(c.env.DATABASE_URL, r)));
   return c.json({ requests, simulation: true });
 });
 
 // GET /inventory/requests/:id
 inventoryRoutes.get("/requests/:id", async (c) => {
+  const user = getUser(c);
   const id = c.req.param("id");
   const rows = await db<InvRequestRow>(c.env.DATABASE_URL)`
     SELECT id, kind, status, maker_id, approver_id,
@@ -198,12 +257,14 @@ inventoryRoutes.get("/requests/:id", async (c) => {
   if (!rows.length) {
     return c.json({ error: { code: "NOT_FOUND", message: "Request not found" } }, 404);
   }
+  if (rows[0].maker_id !== user.sub && !user.caps.includes("inventory:approve_request")) return c.json({ detail: "Bạn không có quyền xem phiếu này." }, 403);
   return c.json(await formatStockRequest(c.env.DATABASE_URL, rows[0]));
 });
 
 // POST /inventory/requests
 inventoryRoutes.post("/requests", async (c) => {
   const user = getUser(c);
+  if (!user.caps.includes("inventory:create_request")) return c.json({ detail: "Bạn không có quyền lập phiếu kho." }, 403);
   const body = await c.req.json<{
     kind: string;
     source_id?: string | null;
@@ -212,7 +273,8 @@ inventoryRoutes.post("/requests", async (c) => {
     lines: Array<{ item_id: string; quantity: string | number; serial?: string | null }>;
   }>();
 
-  if (!body.kind || !Array.isArray(body.lines) || body.lines.length === 0) {
+  if (!body || !["receipt", "issue", "transfer", "adjustment"].includes(body.kind) || !Array.isArray(body.lines) || body.lines.length === 0 ||
+      body.lines.some((line) => !line.item_id || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)) {
     return c.json(
       { error: { code: "VALIDATION_ERROR", message: "kind and lines are required" } },
       422
@@ -251,6 +313,8 @@ inventoryRoutes.post("/requests", async (c) => {
 
 // POST /inventory/requests/:id/submit
 inventoryRoutes.post("/requests/:id/submit", async (c) => {
+  const user = getUser(c);
+  if (!user.caps.includes("inventory:create_request")) return c.json({ detail: "Bạn không có quyền gửi duyệt phiếu kho." }, 403);
   const id = c.req.param("id");
   const rows = await db<InvRequestRow>(c.env.DATABASE_URL)`
     SELECT id, kind, status, maker_id, approver_id,
@@ -261,6 +325,7 @@ inventoryRoutes.post("/requests/:id/submit", async (c) => {
     return c.json({ error: { code: "NOT_FOUND", message: "Request not found" } }, 404);
   }
   const req = rows[0];
+  if (req.maker_id !== user.sub) return c.json({ detail: "Chỉ người lập mới được gửi duyệt phiếu." }, 403);
   if (req.status !== "draft") {
     return c.json(
       { error: { code: "INVALID_STATE", message: "Only draft can be submitted" } },
@@ -278,6 +343,20 @@ inventoryRoutes.post("/requests/:id/submit", async (c) => {
     FROM inv_requests WHERE id = ${id}::uuid LIMIT 1
   `;
   return c.json(await formatStockRequest(c.env.DATABASE_URL, updated[0]));
+});
+
+inventoryRoutes.delete("/requests/:id", async (c) => {
+  const user = getUser(c);
+  if (!user.caps.includes("inventory:create_request")) return c.json({ detail: "Bạn không có quyền xoá phiếu kho." }, 403);
+  const id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ detail: "Mã phiếu không hợp lệ." }, 422);
+  const rows = await db<InvRequestRow>(c.env.DATABASE_URL)`SELECT id, status, maker_id FROM inv_requests WHERE id = ${id}::uuid LIMIT 1`;
+  if (!rows.length) return c.json({ detail: "Không tìm thấy phiếu." }, 404);
+  if (rows[0].maker_id !== user.sub) return c.json({ detail: "Chỉ người lập được xoá phiếu nháp." }, 403);
+  if (rows[0].status !== "draft") return c.json({ detail: "Chỉ được xoá phiếu nháp." }, 409);
+  await db(c.env.DATABASE_URL)`DELETE FROM inv_request_lines WHERE request_id = ${id}::uuid`;
+  await db(c.env.DATABASE_URL)`DELETE FROM inv_requests WHERE id = ${id}::uuid AND status = 'draft' AND maker_id = ${user.sub}::uuid`;
+  return c.json({ status: "deleted", id });
 });
 
 // POST /inventory/requests/:id/approve
@@ -319,7 +398,11 @@ inventoryRoutes.post("/requests/:id/approve", async (c) => {
   if (needsPin) {
     try {
       const body = await c.req.json<{ supervisor_pin?: string }>().catch(() => ({} as { supervisor_pin?: string }));
-      if (!(await requireSupervisorPin(body.supervisor_pin, c.env))) {
+      const userRows = await db<{ pin_hash?: string | null }>(c.env.DATABASE_URL)`
+        SELECT pin_hash FROM iam_users WHERE id = ${user.sub}::uuid LIMIT 1
+      `;
+      const userPinHash = userRows[0]?.pin_hash;
+      if (!(await requireSupervisorPin(body.supervisor_pin, c.env, userPinHash))) {
         return c.json({ error: { code: "SUPERVISOR_PIN_INVALID", message: "Mã PIN kiểm soát viên không đúng." } }, 403);
       }
     } catch {

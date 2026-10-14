@@ -4,6 +4,7 @@ import 'package:bankops/src/data/models/dtos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('ReportExcel.encodeInventory produces non-empty xlsx bytes', () {
     final bytes = ReportExcel.encodeInventory([
       const InventoryBucket(

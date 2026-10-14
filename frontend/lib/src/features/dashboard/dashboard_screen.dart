@@ -447,6 +447,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required int tabIndex,
   }) {
     final go = widget.onNavigate;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return OutlinedButton.icon(
       key: Key('quick-action-$tabIndex-${icon.codePoint}'),
       onPressed: () {
@@ -463,15 +464,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       },
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        backgroundColor: color.withValues(alpha: isDark ? 0.12 : 0.05),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         side: BorderSide(color: color.withValues(alpha: 0.3)),
       ),
-      icon: Icon(icon, size: 16, color: color),
+      icon: Icon(icon, size: 17, color: color),
       label: Text(
         label,
         style: TextStyle(
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           fontSize: 12.5,
           color: color,
         ),
@@ -527,53 +529,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 16),
           for (final item in data.items.take(4)) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
+            InkWell(
+              onTap: () => widget.onNavigate?.call(1),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.file_copy_outlined, size: 18),
                     ),
-                    child: const Icon(Icons.file_copy_outlined, size: 18),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
-                        Text(
-                          'SKU: ${item.sku} • Đơn vị: ${item.unit} • Serial: ${item.trackedSerial ? "Có" : "Không"}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurfaceVariant,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'Khả dụng',
-                      style: TextStyle(
-                        color: Color(0xFF059669),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                          Text(
+                            'SKU: ${item.sku} • Đơn vị: ${item.unit} • Serial: ${item.trackedSerial ? "Có" : "Không"}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Khả dụng',
+                        style: TextStyle(
+                          color: Color(0xFF059669),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -652,57 +658,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
             )
           else
             for (final item in data.inbox.take(3)) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.pending_actions_rounded,
-                        color: Color(0xFFD97706),
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Phiếu ${item.id.length > 8 ? "${item.id.substring(0, 8)}…" : item.id} • ${item.kind}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                          ),
-                          Text(
-                            'Người lập: ${item.maker} • Tác động: ${item.impact}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'Chờ duyệt',
-                        style: TextStyle(
-                          color: Color(0xFFB45309),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+              InkWell(
+                onTap: () => widget.onNavigate?.call(4),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.pending_actions_rounded,
+                          color: Color(0xFFD97706),
+                          size: 18,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Phiếu ${item.id.length > 8 ? "${item.id.substring(0, 8)}…" : item.id} • ${item.kind}',
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
+                            Text(
+                              'Người lập: ${item.maker} • Tác động: ${item.impact}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Chờ duyệt',
+                          style: TextStyle(
+                            color: Color(0xFFB45309),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const Divider(height: 1),
@@ -881,6 +891,8 @@ class SummaryCard extends StatelessWidget {
             icon: Icons.account_balance_wallet_rounded,
             color: const Color(0xFF059669),
             badgeText: 'An toàn',
+            trendText: '+2.4% hôm nay',
+            progressRatio: 0.85,
           ),
           _buildExecutiveStatCard(
             context,
@@ -892,6 +904,8 @@ class SummaryCard extends StatelessWidget {
             icon: Icons.inventory_2_rounded,
             color: const Color(0xFF2563EB),
             badgeText: 'Đầy đủ',
+            trendText: 'Ổn định',
+            progressRatio: 0.92,
           ),
           _buildExecutiveStatCard(
             context,
@@ -903,6 +917,8 @@ class SummaryCard extends StatelessWidget {
             icon: Icons.fact_check_rounded,
             color: data.inbox.isNotEmpty ? const Color(0xFFD97706) : const Color(0xFF059669),
             badgeText: data.inbox.isNotEmpty ? 'Cần xử lý' : 'Đã duyệt hết',
+            trendText: data.inbox.isNotEmpty ? '${data.inbox.length} chờ' : '0 tồn',
+            progressRatio: data.inbox.isNotEmpty ? 0.45 : 1.0,
           ),
           _buildExecutiveStatCard(
             context,
@@ -914,6 +930,8 @@ class SummaryCard extends StatelessWidget {
             icon: Icons.task_alt_rounded,
             color: const Color(0xFF7C3AED),
             badgeText: 'Đạt chuẩn',
+            trendText: 'Khớp 100%',
+            progressRatio: 1.0,
           ),
         ];
 
@@ -970,6 +988,8 @@ class SummaryCard extends StatelessWidget {
     required IconData icon,
     required Color color,
     required String badgeText,
+    String? trendText,
+    double progressRatio = 0.8,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -1063,6 +1083,16 @@ class SummaryCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: progressRatio,
+              backgroundColor: color.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 3.5,
+            ),
           ),
         ],
       ),

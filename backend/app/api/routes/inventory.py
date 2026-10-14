@@ -17,7 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
-from app.api.routes.auth_utils import get_user_capabilities, require_any_capability
+from app.api.routes.auth_utils import (
+    get_current_user,
+    get_user_capabilities,
+    require_any_capability,
+)
 from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent, OutboxEvent
@@ -38,12 +42,14 @@ from app.services.approval_events import broadcast_approval_event
 router = APIRouter()
 
 _VIEW_CATALOG = (
+    "admin:user_management",
     "inventory:manage_catalog",
     "inventory:view_balances",
     "inventory:create_request",
     "inventory:approve_request",
 )
 _VIEW_ASSETS = (
+    "admin:user_management",
     "inventory:manage_catalog",
     "inventory:view_balances",
     "inventory:create_request",
@@ -59,6 +65,7 @@ class ApprovalInput(BaseModel):
 
 _SUBJECT = "inventory_request"
 _APPROVE_CAPS = ("inventory:create_request", "inventory:approve_request")
+_REQUEST_READ_CAPS = ("inventory:create_request", "inventory:approve_request")
 # Ghi lại quyết định của agent để reviewer đối chiếu (không dùng để đọc response).
 _write_caps = require_any_capability("inventory:create_request")
 _ZERO = Decimal("0")
@@ -272,7 +279,7 @@ async def list_items(
 @router.post("/inventory/items", status_code=201)
 async def create_item(
     payload: dict,
-    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     sku = str(payload.get("sku", "")).strip().upper()
@@ -311,7 +318,7 @@ async def create_item(
 async def update_item(
     item_id: str,
     payload: dict,
-    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     iid = _uuid(item_id, "item_id")
@@ -341,7 +348,7 @@ async def update_item(
 @router.delete("/inventory/items/{item_id}")
 async def delete_item(
     item_id: str,
-    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     iid = _uuid(item_id, "item_id")
@@ -370,7 +377,7 @@ async def list_locations(
 @router.post("/inventory/locations", status_code=201)
 async def create_location(
     payload: dict,
-    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     code = str(payload.get("code", "")).strip().upper()
@@ -398,7 +405,7 @@ async def create_location(
 async def update_location(
     location_id: str,
     payload: dict,
-    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     lid = _uuid(location_id, "location_id")
@@ -417,7 +424,7 @@ async def update_location(
 @router.delete("/inventory/locations/{location_id}")
 async def delete_location(
     location_id: str,
-    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     lid = _uuid(location_id, "location_id")
@@ -543,7 +550,7 @@ async def list_movements(
 
 @router.get("/inventory/requests")
 async def list_requests(
-    current_user=Depends(require_any_capability(*_APPROVE_CAPS)),
+    current_user=Depends(require_any_capability(*_REQUEST_READ_CAPS)),
     db: AsyncSession = Depends(get_db),
     status: str | None = None,
     mine: bool = False,
@@ -575,7 +582,7 @@ async def list_requests(
 @router.get("/inventory/requests/{request_id}")
 async def get_request(
     request_id: str,
-    current_user=Depends(require_any_capability(*_APPROVE_CAPS)),
+    current_user=Depends(require_any_capability(*_REQUEST_READ_CAPS)),
     db: AsyncSession = Depends(get_db),
 ):
     req = await _load_request_for_read(db, request_id, current_user)
@@ -704,7 +711,10 @@ async def approve_request(
     request_id: str,
     request: Request,
     payload: ApprovalInput | None = None,
-    user=Depends(require_any_capability(*_APPROVE_CAPS)),
+    # Authenticate before checking the maker/checker invariant.  Requiring an
+    # approval capability here would reject a maker before we could report the
+    # domain error that explains why self-approval is forbidden.
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Duyệt + post trong một transaction (docs/06 cấm 202 cho approve)."""
@@ -759,7 +769,10 @@ async def approve_request(
         payload.supervisor_pin if payload else None,
         settings,
         required=req.kind in ("issue", "transfer") and amount >= Decimal("50"),
+        user=user,
     )
+
+
 
     now = _now()
     for ln in lines:
@@ -847,7 +860,7 @@ async def reject_request(
     request_id: str,
     request: Request,
     payload: dict | None = None,
-    user=Depends(require_any_capability(*_APPROVE_CAPS)),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     req = await _load_request(db, request_id)

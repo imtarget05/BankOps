@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/util/role_visibility.dart';
 import '../../core/widgets/demo_banner.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
@@ -23,6 +24,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   ReportGranularity _granularity = ReportGranularity.daily;
   DateTimeRange? _dateRange;
   Future<_ReportsData>? _future;
+  bool _reconciling = false;
 
   @override
   void didChangeDependencies() {
@@ -38,6 +40,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
     });
   }
 
+  Future<void> _runReconciliation(String scope) async {
+    if (_reconciling) return;
+    setState(() => _reconciling = true);
+    try {
+      await RepositoryScope.of(context).runReconciliation(scope: scope);
+      _reload();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không thể chạy đối soát: $error')));
+    } finally {
+      if (mounted) setState(() => _reconciling = false);
+    }
+  }
+
   Future<_ReportsData> _load(BankOpsRepository repo) async {
     final dateFrom = _dateRange?.start.toIso8601String();
     final dateTo = _dateRange?.end.toIso8601String();
@@ -48,11 +63,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ? repo.getCashflowDaily(dateFrom: dateFrom, dateTo: dateTo)
         : repo.getCashflowMonthly(dateFrom: dateFrom, dateTo: dateTo);
 
+    final roles = RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user);
+    final canViewReconciliation = roles.isEmpty ||
+        roles.any((role) => const {'approver', 'checker', 'auditor', 'cash_sim_operator'}.contains(role));
     final results = await Future.wait([
       invFuture,
       cashFuture,
       repo.getStagnation(),
-      repo.getReconciliations(),
+      canViewReconciliation ? _loadReconciliations(repo) : Future.value(<ReconciliationRun>[]),
     ]);
     return _ReportsData(
       inventoryBuckets: results[0] as List<InventoryBucket>,
@@ -60,6 +78,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
       stagnationItems: results[2] as List<StagnationItem>,
       reconciliations: results[3] as List<ReconciliationRun>,
     );
+  }
+
+  Future<List<ReconciliationRun>> _loadReconciliations(BankOpsRepository repo) async {
+    try {
+      return await repo.getReconciliations();
+    } on ApiException catch (error) {
+      if (error.code == 'FORBIDDEN' || error.code == 'HTTP_403') return [];
+      rethrow;
+    }
   }
 
   @override
@@ -81,6 +108,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
             );
           }
           final data = snapshot.data!;
+          final roles = RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user);
+          final canRunReconciliation = roles.isEmpty ||
+              roles.any((role) => const {'approver', 'checker', 'cash_sim_operator'}.contains(role));
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -135,7 +165,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       padding: const EdgeInsets.all(16),
                       child: StagnationList(items: data.stagnationItems),
                     ),
-                    _ReconciliationTab(runs: data.reconciliations),
+                    _ReconciliationTab(
+                      runs: data.reconciliations,
+                      canRun: canRunReconciliation,
+                      busy: _reconciling,
+                      onRun: _runReconciliation,
+                    ),
                   ],
                 ),
               ),
@@ -148,24 +183,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
 }
 
 class _ReconciliationTab extends StatelessWidget {
-  const _ReconciliationTab({required this.runs});
+  const _ReconciliationTab({required this.runs, required this.canRun, required this.busy, required this.onRun});
 
   final List<ReconciliationRun> runs;
+  final bool canRun;
+  final bool busy;
+  final ValueChanged<String> onRun;
 
   @override
   Widget build(BuildContext context) {
-    if (runs.isEmpty) {
-      return const Center(
-          child: EmptyView(
-        title: 'Chưa có báo cáo đối soát',
-        subtitle:
-            'Chạy đối soát để so sánh sổ cái với số dư thực tế — chênh lệch sẽ hiện ở đây.',
-        icon: Icons.balance_outlined,
-      ));
-    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (canRun) Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Wrap(spacing: 8, children: [
+            OutlinedButton.icon(onPressed: busy ? null : () => onRun('cash'), icon: const Icon(Icons.savings_outlined), label: const Text('Đối soát quỹ')),
+            OutlinedButton.icon(onPressed: busy ? null : () => onRun('inventory'), icon: const Icon(Icons.inventory_2_outlined), label: const Text('Đối soát kho')),
+          ]),
+        ),
+        if (runs.isEmpty) const EmptyView(
+          title: 'Chưa có lượt đối soát',
+          subtitle: 'Chạy đối soát để kiểm tra chênh lệch giữa giao dịch và số dư.',
+          icon: Icons.balance_outlined,
+        ),
         for (final r in runs)
           Card(
             child: ListTile(

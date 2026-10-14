@@ -20,9 +20,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
     http.Client? client,
     Future<String?> Function()? tokenProvider,
   })  : _baseUrl = AuthService.normalizeApiBaseUrl(
-          baseUrl ??
-              const String.fromEnvironment('API_BASE_URL',
-                  defaultValue: 'http://localhost:8000/api/v1'),
+          baseUrl ?? AuthService.defaultBaseUrl,
         ),
         _client = client ?? http.Client(),
         _tokenProvider = tokenProvider {
@@ -241,6 +239,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
             id: _str(me, 'id'),
             username: _str(me, 'username'),
             displayName: _str(me, 'display_name', _str(me, 'username')),
+            email: me['email']?.toString(),
+            phoneNumber: me['phone_number']?.toString(),
+            branch: me['branch']?.toString(),
             roles: (me['roles'] is List ? me['roles'] as List : const [])
                 .map((r) => r.toString())
                 .toList(),
@@ -281,6 +282,86 @@ class HttpBankOpsRepository implements BankOpsRepository {
       id: _str(u, 'id'),
       username: _str(u, 'username', username),
       displayName: _str(u, 'display_name', username),
+      email: u['email']?.toString(),
+      phoneNumber: u['phone_number']?.toString(),
+      branch: u['branch']?.toString(),
+      roles: (u['roles'] is List ? u['roles'] as List : const [])
+          .map((r) => r.toString())
+          .toList(),
+    );
+  }
+
+  @override
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _post('/auth/change-password', {
+      'old_password': oldPassword,
+      'new_password': newPassword,
+    });
+  }
+
+  @override
+  Future<void> changePin({
+    required String currentPassword,
+    required String newPin,
+  }) async {
+    await _post('/auth/change-pin', {
+      'current_password': currentPassword,
+      'new_pin': newPin,
+    });
+  }
+
+  @override
+  Future<PasswordResetResult> requestPasswordReset(String username) async {
+    final res = await _post('/auth/forgot-password', {
+      'username': username.trim(),
+    });
+    return PasswordResetResult(
+      username: _str(res, 'username', username.trim()),
+      message: _str(res, 'message', 'Đã tạo mã xác thực OTP.'),
+      otpDemo: res['otp_demo']?.toString(),
+      expiresInSeconds: (res['expires_in_seconds'] is int)
+          ? res['expires_in_seconds'] as int
+          : 900,
+    );
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String username,
+    required String otp,
+    required String newPassword,
+  }) async {
+    await _post('/auth/reset-password', {
+      'username': username.trim(),
+      'otp': otp.trim(),
+      'new_password': newPassword,
+    });
+  }
+
+  @override
+  Future<AppUser> updateProfile({
+    required String displayName,
+    String? email,
+    String? phoneNumber,
+    String? branch,
+  }) async {
+    final res = await _put('/auth/me', {
+      'display_name': displayName.trim(),
+      if (email != null) 'email': email.trim(),
+      if (phoneNumber != null) 'phone_number': phoneNumber.trim(),
+      if (branch != null) 'branch': branch.trim(),
+    });
+    final u = (res['user'] is Map) ? res['user'] as Map : res;
+    return AppUser(
+      id: _str(u, 'id'),
+      username: _str(u, 'username'),
+      displayName: _str(u, 'display_name', displayName.trim()),
+      email: u['email']?.toString(),
+      phoneNumber: u['phone_number']?.toString(),
+      branch: u['branch']?.toString(),
       roles: (u['roles'] is List ? u['roles'] as List : const [])
           .map((r) => r.toString())
           .toList(),

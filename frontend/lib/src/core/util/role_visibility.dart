@@ -15,7 +15,7 @@ class RoleVisibility {
     'admin',
     'integration_admin',
   };
-  static const _approvers = {'approver', 'checker', 'admin', 'supervisor'};
+  static const _approvers = {'approver', 'checker'};
   static const _privileged = {
     'staff',
     'maker',
@@ -41,6 +41,9 @@ class RoleVisibility {
   /// Được duyệt phiếu (Hộp thư duyệt).
   static bool canApprove(Set<String> roles) =>
       roles.isEmpty || roles.intersection(_approvers).isNotEmpty;
+
+  static bool canManageCatalog(Set<String> roles) =>
+      roles.isEmpty || roles.contains('admin') || roles.contains('inventory_manager');
 
   /// Auditor thuần: có nhãn auditor nhưng không có bất kỳ quyền tạo/duyệt nào.
   /// Chỉ trường hợp rõ ràng này mới bị ẩn tab (fail-open với role lạ).

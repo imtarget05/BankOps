@@ -48,6 +48,8 @@ async def get_approval_inbox(
 
     approvals = []
     for r in inv_rows:
+        if str(r.maker_id) == str(current_user.id):
+            continue
         line_count = (
             await db.execute(
                 select(func.coalesce(func.sum(InventoryRequestLine.quantity), 0)).where(
@@ -71,6 +73,8 @@ async def get_approval_inbox(
         )
 
     for r in cash_rows:
+        if str(r.maker_id) == str(current_user.id):
+            continue
         maker_id = str(r.maker_id)
         approvals.append(
             {

@@ -29,6 +29,7 @@ def custom_openapi(app):
     # đòi Authorize cho login/health (test_openapi_security...).
     public_paths = {
         "/auth/login",
+        "/auth/register",
         "/auth/refresh",
         "/auth/logout",
         "/auth/google",

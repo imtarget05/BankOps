@@ -253,7 +253,11 @@ cashSimRoutes.post("/requests/:id/approve", async (c) => {
   }) === "high";
   if (needsPin) {
     try {
-      if (!(await requireSupervisorPin(body.supervisor_pin, c.env))) {
+      const userRows = await db<{ pin_hash?: string | null }>(c.env.DATABASE_URL)`
+        SELECT pin_hash FROM iam_users WHERE id = ${user.sub}::uuid LIMIT 1
+      `;
+      const userPinHash = userRows[0]?.pin_hash;
+      if (!(await requireSupervisorPin(body.supervisor_pin, c.env, userPinHash))) {
         return c.json({ error: { code: "SUPERVISOR_PIN_INVALID", message: "Mã PIN kiểm soát viên không đúng." } }, 403);
       }
     } catch {
