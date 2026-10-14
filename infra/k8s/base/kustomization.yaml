@@ -8,6 +8,7 @@ resources:
   - deployment-api.yaml
   - deployment-worker.yaml
   - deployment-frontend.yaml
+  - cloudflare-tunnel.yaml
   - ingress.yaml
   - cronjob-backup.yaml
 
