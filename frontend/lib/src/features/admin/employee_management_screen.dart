@@ -189,7 +189,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   DropdownButtonFormField<String>(
                     key: const Key('admin-create-branch-dropdown'),
                     isExpanded: true,
-                    value: branchId,
+                    initialValue: branchId,
                     decoration: const InputDecoration(
                       labelText: 'Chi nhánh công tác',
                       border: OutlineInputBorder(),
@@ -232,25 +232,28 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 8),
-                  RadioListTile<String>(
-                    title: const Text('Mật khẩu tạm thời một lần'),
-                    subtitle: const Text(
-                      'Hệ thống sinh mật khẩu ngẫu nhiên an toàn. Bắt buộc đổi ở lần đăng nhập đầu tiên.',
-                    ),
-                    value: 'temporary_password',
+                  RadioGroup<String>(
                     groupValue: onboardingMethod,
                     onChanged: (v) =>
                         setDialogState(() => onboardingMethod = v!),
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('Gửi email mời kích hoạt'),
-                    subtitle: const Text(
-                      'Sinh mã mời kích hoạt có hạn 7 ngày. Nhân viên tự thiết lập mật khẩu.',
+                    child: const Column(
+                      children: [
+                        RadioListTile<String>(
+                          title: Text('Mật khẩu tạm thời một lần'),
+                          subtitle: Text(
+                            'Hệ thống sinh mật khẩu ngẫu nhiên an toàn. Bắt buộc đổi ở lần đăng nhập đầu tiên.',
+                          ),
+                          value: 'temporary_password',
+                        ),
+                        RadioListTile<String>(
+                          title: Text('Gửi email mời kích hoạt'),
+                          subtitle: Text(
+                            'Sinh mã mời kích hoạt có hạn 7 ngày. Nhân viên tự thiết lập mật khẩu.',
+                          ),
+                          value: 'email_invite',
+                        ),
+                      ],
                     ),
-                    value: 'email_invite',
-                    groupValue: onboardingMethod,
-                    onChanged: (v) =>
-                        setDialogState(() => onboardingMethod = v!),
                   ),
                 ],
               ),
@@ -322,11 +325,11 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFCBD5E1)),
                     ),
-                    child: Row(
+                    child: const Row(
                       children: [
-                        const Icon(Icons.info_outline, color: Color(0xFF2563EB)),
-                        const SizedBox(width: 8),
-                        const Expanded(
+                        Icon(Icons.info_outline, color: Color(0xFF2563EB)),
+                        SizedBox(width: 8),
+                        Expanded(
                           child: Text(
                             'Tài khoản đã sẵn sàng với mật khẩu tạm một lần. Nhân viên bắt buộc phải đổi mật khẩu khi đăng nhập lần đầu.',
                             style: TextStyle(fontSize: 13),
@@ -479,7 +482,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedBranchId,
+                    initialValue: selectedBranchId,
                     decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('Không chỉ định / Toàn hệ thống', overflow: TextOverflow.ellipsis)),
@@ -783,17 +786,17 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         child: Container(
           padding: const EdgeInsets.all(32),
           constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(
+          child: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.gpp_bad_outlined, size: 64, color: Color(0xFFF59E0B)),
-              const SizedBox(height: 16),
-              const Text(
+              Icon(Icons.gpp_bad_outlined, size: 64, color: Color(0xFFF59E0B)),
+              SizedBox(height: 16),
+              Text(
                 'Từ chối quyền truy cập',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
-              const Text(
+              SizedBox(height: 8),
+              Text(
                 'Tài khoản của bạn không có capability iam:admin hoặc quyền Quản trị viên để quản lý danh sách nhân sự.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF64748B)),
@@ -819,26 +822,29 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Quản trị Nhân viên & Cấp phát IAM',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Quản lý tài khoản cán bộ ngân hàng, chi nhánh, vai trò Maker-Checker và phiên làm việc.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quản trị Nhân viên & Cấp phát IAM',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        'Quản lý tài khoản cán bộ ngân hàng, chi nhánh, vai trò Maker-Checker và phiên làm việc.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 16),
                 FilledButton.icon(
                   key: const Key('admin-create-employee-btn'),
                   icon: const Icon(Icons.person_add_alt_1_rounded),
@@ -897,7 +903,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 Expanded(
                   child: DropdownButtonFormField<String?>(
                     isExpanded: true,
-                    value: _selectedBranchId,
+                    initialValue: _selectedBranchId,
                     decoration: const InputDecoration(
                       labelText: 'Chi nhánh',
                       border: OutlineInputBorder(),
@@ -917,7 +923,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 Expanded(
                   child: DropdownButtonFormField<String?>(
                     isExpanded: true,
-                    value: _selectedRole,
+                    initialValue: _selectedRole,
                     decoration: const InputDecoration(
                       labelText: 'Vai trò',
                       border: OutlineInputBorder(),
@@ -937,7 +943,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 Expanded(
                   child: DropdownButtonFormField<String?>(
                     isExpanded: true,
-                    value: _selectedStatus,
+                    initialValue: _selectedStatus,
                     decoration: const InputDecoration(
                       labelText: 'Trạng thái',
                       border: OutlineInputBorder(),
@@ -1154,9 +1160,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                           }
                                         },
                                         itemBuilder: (ctx) => [
-                                          PopupMenuItem(
+                                          const PopupMenuItem(
                                             value: 'roles_scopes',
-                                            child: const Row(
+                                            child: Row(
                                               children: [
                                                 Icon(Icons.shield_outlined, size: 18),
                                                 SizedBox(width: 8),
@@ -1164,9 +1170,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                               ],
                                             ),
                                           ),
-                                          PopupMenuItem(
+                                          const PopupMenuItem(
                                             value: 'reset_password',
-                                            child: const Row(
+                                            child: Row(
                                               children: [
                                                 Icon(Icons.lock_reset, size: 18),
                                                 SizedBox(width: 8),
@@ -1175,9 +1181,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             ),
                                           ),
                                           if (user.hasPendingInvite)
-                                            PopupMenuItem(
+                                            const PopupMenuItem(
                                               value: 'reinvite',
-                                              child: const Row(
+                                              child: Row(
                                                 children: [
                                                   Icon(Icons.mark_email_read_outlined, size: 18),
                                                   SizedBox(width: 8),
@@ -1185,9 +1191,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                 ],
                                               ),
                                             ),
-                                          PopupMenuItem(
+                                          const PopupMenuItem(
                                             value: 'revoke_sessions',
-                                            child: const Row(
+                                            child: Row(
                                               children: [
                                                 Icon(Icons.power_settings_new, size: 18),
                                                 SizedBox(width: 8),
