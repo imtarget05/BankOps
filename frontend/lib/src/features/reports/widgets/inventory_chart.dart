@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/csv_export.dart';
+import '../../../core/util/formatting.dart';
 import '../../../core/util/report_excel.dart';
 import '../../../core/util/report_share.dart';
 import '../../../core/widgets/state_views.dart';
@@ -25,16 +26,26 @@ class InventoryChart extends StatelessWidget {
     }
     final statusColors = context.statusColors;
     final scheme = Theme.of(context).colorScheme;
+
     var maxY = 10.0;
+    double totalIn = 0;
+    double totalOut = 0;
+    int totalReceipts = 0;
+    int totalIssues = 0;
     for (final b in buckets) {
       if (b.inboundValue > maxY) maxY = b.inboundValue;
       if (b.outboundValue > maxY) maxY = b.outboundValue;
+      totalIn += b.inboundValue;
+      totalOut += b.outboundValue;
+      totalReceipts += b.receiptCount;
+      totalIssues += b.issueCount;
     }
     maxY *= 1.25;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Legend & nút xuất file
         Row(
           children: [
             Expanded(
@@ -43,11 +54,13 @@ class InventoryChart extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   _LegendDot(
-                      color: statusColors.success,
-                      label: 'Nhập kho (Inbound)'),
+                    color: statusColors.success,
+                    label: 'Nhập kho (Inbound): ${AppFormat.quantity(totalIn.toStringAsFixed(0))}',
+                  ),
                   _LegendDot(
-                      color: statusColors.warning,
-                      label: 'Xuất kho (Outbound)'),
+                    color: statusColors.warning,
+                    label: 'Xuất kho (Outbound): ${AppFormat.quantity(totalOut.toStringAsFixed(0))}',
+                  ),
                 ],
               ),
             ),
@@ -85,6 +98,8 @@ class InventoryChart extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
+
+        // Biểu đồ cột
         SizedBox(
           height: 260,
           child: BarChart(
@@ -148,14 +163,45 @@ class InventoryChart extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
+
+        // Bảng đối chiếu số liệu chi tiết
         Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'BẢNG ĐỐI CHIẾU NHẬP/XUẤT KHO CHI TIẾT',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                    ),
+                    Text(
+                      '${buckets.length} kỳ · $totalReceipts phiếu nhập · $totalIssues phiếu xuất',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
               for (final b in buckets)
                 ListTile(
                   dense: true,
                   leading: Icon(Icons.inventory_2_outlined, color: scheme.primary),
-                  title: Text(b.bucket),
+                  title: Text(b.bucket, style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(
                     'Phiếu nhập: ${b.receiptCount} · Phiếu xuất: ${b.issueCount}',
                   ),
