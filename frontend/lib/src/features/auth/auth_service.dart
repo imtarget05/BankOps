@@ -219,7 +219,8 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _lastError = 'Không kết nối được máy chủ ($_baseUrl): $e';
+      // Never echo `$_baseUrl` / `$e` here — it leaks the internal API URL.
+      _lastError = 'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
       notifyListeners();
       return false;
     }
@@ -268,7 +269,8 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _lastError = 'Không kết nối được máy chủ ($_baseUrl): $e';
+      // Never echo `$_baseUrl` / `$e` here — it leaks the internal API URL.
+      _lastError = 'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
       _isLoading = false;
       notifyListeners();
       return false;

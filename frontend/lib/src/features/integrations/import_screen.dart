@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/demo_banner.dart';
@@ -95,7 +96,7 @@ class _ImportScreenState extends State<ImportScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = friendlyError(e);
       });
     } finally {
       if (mounted) {
@@ -144,7 +145,7 @@ class _ImportScreenState extends State<ImportScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = friendlyError(e);
       });
     } finally {
       if (mounted) {
@@ -202,7 +203,7 @@ class _ImportScreenState extends State<ImportScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = friendlyError(e);
       });
       AppToast.error(context, 'Xác nhận thất bại: $e');
     } finally {

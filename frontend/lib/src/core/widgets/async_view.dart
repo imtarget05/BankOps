@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../data/repositories/bankops_repository.dart';
+import '../util/error_text.dart';
 import 'state_views.dart';
 
 /// Khung hiển thị dữ liệu bất kỳ kèm Loading / Empty / Error + retry + refresh.
@@ -48,7 +48,7 @@ class AsyncView<T> extends StatelessWidget {
         }
         if (snapshot.hasError) {
           return ErrorView(
-            message: _formatError(snapshot.error),
+            message: friendlyError(snapshot.error),
             onRetry: onRetry ?? () => {},
           );
         }
@@ -65,12 +65,5 @@ class AsyncView<T> extends StatelessWidget {
         return empty ?? const SizedBox.shrink();
       },
     );
-  }
-
-  static String _formatError(Object? error) {
-    if (error is ApiException) return error.message;
-    if (error is FormatException) return error.message;
-    if (error is Exception) return error.toString();
-    return '$error';
   }
 }
