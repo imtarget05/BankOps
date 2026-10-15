@@ -305,7 +305,7 @@ void main() {
       expect(find.text('Hồ Sơ Của Tôi'), findsOneWidget);
       expect(find.text('Tài khoản & Bảo mật'), findsOneWidget);
       expect(find.text('Hệ thống & Cổng kết nối API'), findsOneWidget);
-      expect(find.text('BankOps Core Banking v1.0.0'), findsOneWidget);
+      expect(find.text('Quản Lý Kho Trà Sữa v1.0.0'), findsOneWidget);
       expect(find.text('Đăng xuất'), findsOneWidget);
     });
   });

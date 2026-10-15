@@ -14,7 +14,7 @@ import '../../core/util/error_text.dart';
 ///   1. `GoogleSignIn.signIn()` trên thiết bị -> Google ID token.
 ///   2. `POST {baseUrl}/auth/google {"id_token": ...}`.
 ///   3. Backend verify + upsert user (lần đầu = signup, `is_new_user=true`)
-///      rồi trả access/refresh JWT của BankOps.
+///      rồi trả access/refresh JWT của ứng dụng.
 ///   4. Token lưu `flutter_secure_storage`; logout xóa local + sign-out Google.
 ///
 /// CHƯA VERIFY: viết tay, chưa chạy `flutter analyze`/`flutter test`
@@ -38,7 +38,8 @@ class AuthService extends ChangeNotifier {
 
   static const String _defaultGoogleClientId = String.fromEnvironment(
     'GOOGLE_CLIENT_ID',
-    defaultValue: '1070073470852-hc12cgovbt9h7micnu072vpkvigee28u.apps.googleusercontent.com',
+    defaultValue:
+        '1070073470852-hc12cgovbt9h7micnu072vpkvigee28u.apps.googleusercontent.com',
   );
 
   /// Chuẩn hóa mọi URL gốc về dạng `.../api/v1` (không có dấu `/` cuối).
@@ -66,17 +67,8 @@ class AuthService extends ChangeNotifier {
     if (env.isNotEmpty) return env;
     if (kIsWeb) {
       if (!kDebugMode) {
-        // Release web thiếu cấu hình: KHÔNG trỏ vào host chết, trả chuỗi rỗng
-        // và báo lỗi rõ ràng để biết phải build lại với --dart-define.
-        debugPrint(
-          'BankOps ERROR: API_BASE_URL is not set for release web build. '
-          'Rebuild with --dart-define=API_BASE_URL=https://<your-api-host>/api/v1',
-        );
-        return ''; // normalizeApiBaseUrl('') -> '/api/v1' (same-origin, sẽ 404 + log rõ)
+        return 'https://imtarget05--bankops-api-api.us-east.modal.run/api/v1';
       }
-      debugPrint(
-        'BankOps: API_BASE_URL chưa cấu hình, dùng http://localhost:8000/api/v1 (debug web).',
-      );
       return 'http://localhost:8000/api/v1';
     }
     switch (defaultTargetPlatform) {
@@ -129,7 +121,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<String?> _readStorage(String key) async {
-    if (_googleIdTokenProvider != null && _storage == const FlutterSecureStorage()) {
+    if (_googleIdTokenProvider != null &&
+        _storage == const FlutterSecureStorage()) {
       return null;
     }
     try {
@@ -142,7 +135,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _writeStorage(String key, String? value) async {
-    if (_googleIdTokenProvider != null && _storage == const FlutterSecureStorage()) {
+    if (_googleIdTokenProvider != null &&
+        _storage == const FlutterSecureStorage()) {
       return;
     }
     try {
@@ -221,7 +215,8 @@ class AuthService extends ChangeNotifier {
       return true;
     } catch (e) {
       // Never echo `$_baseUrl` / `$e` here — it leaks the internal API URL.
-      _lastError = 'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
+      _lastError =
+          'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
       notifyListeners();
       return false;
     }
@@ -271,7 +266,8 @@ class AuthService extends ChangeNotifier {
       return true;
     } catch (e) {
       // Never echo `$_baseUrl` / `$e` here — it leaks the internal API URL.
-      _lastError = 'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
+      _lastError =
+          'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
       _isLoading = false;
       notifyListeners();
       return false;
@@ -279,7 +275,7 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Đăng nhập/đăng ký bằng Google. Lần đầu backend tự tạo user (`is_new_user`).
-  /// Trả `true` khi có token BankOps.
+  /// Trả `true` khi có token phiên đăng nhập.
   Future<bool> signInWithGoogle({String? customToken}) async {
     _lastError = null;
     notifyListeners();
@@ -316,7 +312,8 @@ class AuthService extends ChangeNotifier {
           if ((idToken == null || idToken.isEmpty) &&
               (googleAccessToken == null || googleAccessToken.isEmpty)) {
             try {
-              final silent = await googleSignIn.signInSilently(reAuthenticate: true);
+              final silent =
+                  await googleSignIn.signInSilently(reAuthenticate: true);
               if (silent != null) {
                 final silentAuth = await silent.authentication;
                 idToken = silentAuth.idToken ?? idToken;
@@ -399,7 +396,8 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _clearLocal() async {
     _memoryToken = null;
-    if (_googleIdTokenProvider != null && _storage == const FlutterSecureStorage()) {
+    if (_googleIdTokenProvider != null &&
+        _storage == const FlutterSecureStorage()) {
       return;
     }
     try {
@@ -415,11 +413,17 @@ class AuthService extends ChangeNotifier {
       final decoded = json.decode(body);
       if (decoded is Map) {
         final err = decoded['error'];
-        if (err is Map && err['message'] is String) return err['message'] as String;
+        if (err is Map && err['message'] is String) {
+          return err['message'] as String;
+        }
         if (decoded['detail'] is String) return decoded['detail'] as String;
+        if (decoded['message'] is String) return decoded['message'] as String;
       }
     } catch (_) {}
-    return 'Máy chủ từ chối đăng nhập.';
+    if (body.contains('Method Not Allowed') || body.contains('405')) {
+      return 'Cổng API máy chủ từ chối yêu cầu (405). Vui lòng thử lại hoặc đăng nhập bằng tài khoản ca trực.';
+    }
+    return 'Máy chủ từ chối đăng nhập. Vui lòng kiểm tra lại thông tin hoặc đăng nhập bằng tài khoản ca trực.';
   }
 
   /// Cập nhật thông tin hồ sơ của người dùng đang đăng nhập.
@@ -528,7 +532,8 @@ class AuthService extends ChangeNotifier {
         username: json['username'] as String,
         displayName: (json['display_name'] ?? json['username']) as String,
         roles: List<String>.from(json['roles'] as List? ?? const []),
-        capabilities: List<String>.from(json['capabilities'] as List? ?? const []),
+        capabilities:
+            List<String>.from(json['capabilities'] as List? ?? const []),
         email: json['email'] as String?,
         phoneNumber: json['phone_number'] as String?,
         branch: json['branch'] as String?,

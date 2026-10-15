@@ -47,7 +47,7 @@ void main() {
       // Switch to Stagnation tab
       await tester.tap(find.byKey(const Key('tab-reports-stagnation')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('stagnation-item-DEMO-LAPTOP')), findsOneWidget);
+      expect(find.byKey(const Key('stagnation-item-TRA-LAI-500G')), findsOneWidget);
       expect(find.text('Nghiêm trọng (>=90 ngày)'), findsOneWidget);
     },
   );

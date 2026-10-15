@@ -45,7 +45,7 @@ void main() {
       // Gõ SKU vật tư -> kết quả nhóm Kho, bấm -> về tab Kho (1).
       await tester.enterText(
         find.byKey(const Key('global-search-input')),
-        'DEMO-PAPER',
+        'TRA-DEN-SO9',
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('global-search-hit-0')), findsOneWidget);

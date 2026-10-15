@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../auth_service.dart';
 
-/// Hộp thoại Đăng ký tài khoản mới cho BankOps.
+/// Hộp thoại Đăng ký tài khoản cho Quản Lý Kho Trà Sữa.
 class RegisterDialog extends StatefulWidget {
   const RegisterDialog({super.key});
 
@@ -95,7 +95,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
 
     if (ok) {
       Navigator.of(context).pop(true);
-      AppToast.success(context, 'Đăng ký tài khoản thành công! Đã đăng nhập vào hệ thống.');
+      AppToast.success(
+          context, 'Đăng ký tài khoản thành công! Đã đăng nhập vào hệ thống.');
     } else {
       setState(() {
         _busy = false;
@@ -130,7 +131,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
                       color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.person_add_outlined, color: Color(0xFF2563EB), size: 26),
+                    child: const Icon(Icons.person_add_outlined,
+                        color: Color(0xFF2563EB), size: 26),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -146,7 +148,7 @@ class _RegisterDialogState extends State<RegisterDialog> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Tạo tài khoản người dùng nội bộ hệ thống BankOps',
+                          'Tạo tài khoản người dùng nội bộ Quản Lý Kho Trà Sữa',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                             fontSize: 13,
@@ -170,16 +172,21 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: Colors.red.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 18),
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 18),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
@@ -199,7 +206,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   prefixIcon: const Icon(Icons.badge_outlined, size: 20),
                   filled: true,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 14),
@@ -214,7 +222,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   prefixIcon: const Icon(Icons.person_outline, size: 20),
                   filled: true,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 14),
@@ -230,7 +239,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   prefixIcon: const Icon(Icons.mail_outline, size: 20),
                   filled: true,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 14),
@@ -241,26 +251,32 @@ class _RegisterDialogState extends State<RegisterDialog> {
                 initialValue: _selectedRole,
                 decoration: InputDecoration(
                   labelText: 'Phân hệ / Vai trò *',
-                  prefixIcon: const Icon(Icons.admin_panel_settings_outlined, size: 20),
+                  prefixIcon:
+                      const Icon(Icons.admin_panel_settings_outlined, size: 20),
                   filled: true,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 items: const [
                   DropdownMenuItem(
                     value: 'staff',
-                    child: Text('Maker — Giao dịch viên (Lập lệnh kho & quỹ)'),
+                    child: Text('Nhân viên Pha Chế (Kiểm kê ca & Lập phiếu yêu cầu)'),
                   ),
                   DropdownMenuItem(
                     value: 'approver',
-                    child: Text('Checker — Kiểm soát viên (Phê duyệt kiểm soát kép)'),
+                    child: Text(
+                        'Cửa Hàng Trưởng / Quản Lý (Duyệt nhập xuất & Chốt ca)'),
                   ),
                   DropdownMenuItem(
                     value: 'auditor',
-                    child: Text('Auditor — Kiểm toán viên (Xem báo cáo & vết KT)'),
+                    child:
+                        Text('Kiểm Soát Viên / Kế Toán (Đối soát & Báo cáo)'),
                   ),
                 ],
-                onChanged: _busy ? null : (v) => setState(() => _selectedRole = v ?? 'staff'),
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _selectedRole = v ?? 'staff'),
               ),
               const SizedBox(height: 14),
 
@@ -279,7 +295,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   prefixIcon: const Icon(Icons.pin_outlined, size: 20),
                   filled: true,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 14),
@@ -297,12 +314,18 @@ class _RegisterDialogState extends State<RegisterDialog> {
                         labelText: 'Mật khẩu *',
                         prefixIcon: const Icon(Icons.lock_outline, size: 20),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
                         ),
                         filled: true,
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
@@ -315,14 +338,21 @@ class _RegisterDialogState extends State<RegisterDialog> {
                       obscureText: _obscureConfirm,
                       decoration: InputDecoration(
                         labelText: 'Xác nhận MK *',
-                        prefixIcon: const Icon(Icons.lock_reset_outlined, size: 20),
+                        prefixIcon:
+                            const Icon(Icons.lock_reset_outlined, size: 20),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
-                          onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                          icon: Icon(
+                              _obscureConfirm
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18),
+                          onPressed: () => setState(
+                              () => _obscureConfirm = !_obscureConfirm),
                         ),
                         filled: true,
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
@@ -335,10 +365,12 @@ class _RegisterDialogState extends State<RegisterDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                      onPressed:
+                          _busy ? null : () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       child: const Text('Hủy bỏ'),
                     ),
@@ -352,12 +384,14 @@ class _RegisterDialogState extends State<RegisterDialog> {
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         backgroundColor: const Color(0xFF17365D),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: _busy
                           ? const SizedBox.square(
                               dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
                             )
                           : const Icon(Icons.how_to_reg_rounded, size: 20),
                       label: Text(
