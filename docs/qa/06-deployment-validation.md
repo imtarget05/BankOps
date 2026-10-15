@@ -247,6 +247,17 @@ Chạy lại toàn chuỗi bằng `curl` + Playwright, không dựa vào ghi ch�
   `analyze` sạch, rebuild release, `wrangler pages deploy --branch=main` →
   deployment `df43cb6d`. Verify production: `/` 200, `main.dart.js` có Modal URL +
   0 legacy ref, API `/health/ready` 200.
+
+### Bổ sung 2026-10-15 ~00:37Z — token mới vẫn 7003, production giữ bằng đường local
+
+- Đã nạp `CLOUDFLARE_API_TOKEN` mới + re-run CI `38661083734`: secrets-check PASS,
+  build PASS, deploy vẫn 7003 `Could not route` dù `CLOUDFLARE_ACCOUNT_ID` đã reset
+  đúng account. Kết luận: token mới vẫn không thuộc account `Tanmainguyenbinh@gmail.com`
+  (sai account đăng nhập lúc tạo, hoặc thiếu scope Pages).
+- Production vẫn phục vụ bản `df43cb6d` đã verify (không ảnh hưởng).
+- Cách sửa duy nhất (dashboard, owner làm): đăng nhập đúng email trên, account switcher
+  chọn đúng account → API Tokens → token phải liệt kê Account Resources đúng account +
+  quyền Account/Cloudflare Pages/Edit → cập nhật GH secret → re-run workflow.
 - ⚠️ **Hành động bắt buộc**: revoke token đã dán qua chat (Settings → API Tokens →
   delete), tạo token mới đúng account + scope Pages:Edit, cập nhật GH secret
   `CLOUDFLARE_API_TOKEN`, re-run workflow để CI xanh lại.
