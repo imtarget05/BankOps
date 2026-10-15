@@ -1,6 +1,6 @@
 {
-    "name": "BankOps — Quản Lý Kho Ấn Chỉ & Quỹ Tiền Mặt (Core Banking)",
-    "short_name": "BankOps",
+    "name": "Quản Lý Nhập Xuất Tồn Quán Trà Sữa",
+    "short_name": "Nhập Xuất Tồn",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0A2540",
