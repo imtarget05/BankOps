@@ -95,12 +95,16 @@ abstract class BankOpsRepository {
     required String name,
     required String unit,
     bool trackedSerial = false,
+    String? category,
+    String? packaging,
   });
   Future<InventoryItem> updateItem({
     required String id,
     String? name,
     String? unit,
     bool? trackedSerial,
+    String? category,
+    String? packaging,
   });
   Future<void> deleteItem(String id);
 
@@ -115,7 +119,8 @@ abstract class BankOpsRepository {
   Future<void> deleteLocation(String id);
 
   // Stock Levels & Low Stock Alerts
-  Future<List<StockLevelItem>> getStockLevels({String? locationId, String? itemId});
+  Future<List<StockLevelItem>> getStockLevels(
+      {String? locationId, String? itemId});
   Future<StockLevelItem> putStockLevel({
     required String locationId,
     required String itemId,
@@ -127,8 +132,10 @@ abstract class BankOpsRepository {
   // Stocktakes (Kiểm kê định kỳ & đối soát)
   Future<List<StocktakeItem>> getStocktakes({String? locationId});
   Future<StocktakeItem> getStocktake(String id);
-  Future<StocktakeItem> createStocktake({required String locationId, String? note});
-  Future<StocktakeItem> updateStocktakeLines(String id, List<Map<String, dynamic>> lines);
+  Future<StocktakeItem> createStocktake(
+      {required String locationId, String? note});
+  Future<StocktakeItem> updateStocktakeLines(
+      String id, List<Map<String, dynamic>> lines);
   Future<StocktakeItem> submitStocktake(String id);
   Future<StocktakeItem> approveStocktake(String id);
 
@@ -182,7 +189,6 @@ abstract class BankOpsRepository {
   Future<AiRiskAssessment> assessApprovalItem(ApprovalItem item);
   Stream<String> get approvalNotifications;
   void dispose();
-
 
   // GET /activity, GET /events/stream
   Future<List<ActivityEvent>> getActivity({String? cursor});
@@ -267,7 +273,8 @@ abstract class BankOpsRepository {
     String status, {
     String? reason,
   });
-  Future<EmployeeUserDto> updateEmployeeRoles(String userId, List<String> roles);
+  Future<EmployeeUserDto> updateEmployeeRoles(
+      String userId, List<String> roles);
   Future<EmployeeUserDto> updateEmployeeScopes(
     String userId,
     List<Map<String, dynamic>> scopes,

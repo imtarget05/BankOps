@@ -27,25 +27,26 @@ class AppUser {
   final String? branch;
   final String? employeeCode;
 
-  String get effectiveEmail =>
-      (email != null && email!.trim().isNotEmpty) ? email!.trim() : '$username@bankops.vn';
+  String get effectiveEmail => (email != null && email!.trim().isNotEmpty)
+      ? email!.trim()
+      : '$username@bankops.vn';
 
   String get effectivePhone =>
       (phoneNumber != null && phoneNumber!.trim().isNotEmpty)
           ? phoneNumber!.trim()
           : '0901 234 567';
 
-  String get effectiveBranch =>
-      (branch != null && branch!.trim().isNotEmpty)
-          ? branch!.trim()
-          : 'Chi nhánh Bến Thành (Hội sở)';
+  String get effectiveBranch => (branch != null && branch!.trim().isNotEmpty)
+      ? branch!.trim()
+      : 'Chi nhánh Bến Thành (Hội sở)';
 
   String get effectiveEmployeeCode {
     if (employeeCode != null && employeeCode!.trim().isNotEmpty) {
       return employeeCode!.trim();
     }
     final clean = id.replaceAll('-', '');
-    final code = clean.length >= 4 ? clean.substring(0, 4).toUpperCase() : '8892';
+    final code =
+        clean.length >= 4 ? clean.substring(0, 4).toUpperCase() : '8892';
     return 'BO-$code';
   }
 
@@ -95,6 +96,8 @@ class InventoryItem {
     required this.name,
     required this.unit,
     required this.trackedSerial,
+    this.category,
+    this.packaging,
   });
 
   final String id;
@@ -102,6 +105,8 @@ class InventoryItem {
   final String name;
   final String unit;
   final bool trackedSerial;
+  final String? category;
+  final String? packaging;
 }
 
 /// Số tồn kho theo location + item.
@@ -564,10 +569,9 @@ class AiRiskAssessment {
       riskLevel: (json['risk_level'] as String? ?? 'low').toLowerCase(),
       riskScore: (json['risk_score'] as num?)?.toInt() ?? 20,
       summary: json['summary'] as String? ?? '',
-      flaggedRules: (json['flagged_rules'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      flaggedRules:
+          (json['flagged_rules'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
       recommendations: (json['recommendations'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -624,7 +628,9 @@ class RoleDto {
       code: json['code'] as String? ?? '',
       name: json['name'] as String? ?? '',
       description: json['description'] as String?,
-      capabilities: (json['capabilities'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      capabilities:
+          (json['capabilities'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
     );
   }
 }
@@ -662,8 +668,12 @@ class ScopeGrantDto {
       locationId: json['location_id'] as String?,
       locationName: json['location_name'] as String?,
       capability: json['capability'] as String?,
-      validFrom: json['valid_from'] != null ? DateTime.tryParse(json['valid_from'].toString()) : null,
-      validTo: json['valid_to'] != null ? DateTime.tryParse(json['valid_to'].toString()) : null,
+      validFrom: json['valid_from'] != null
+          ? DateTime.tryParse(json['valid_from'].toString())
+          : null,
+      validTo: json['valid_to'] != null
+          ? DateTime.tryParse(json['valid_to'].toString())
+          : null,
     );
   }
 }
@@ -717,11 +727,16 @@ class EmployeeUserDto {
       status: json['status'] as String? ?? 'active',
       branchId: json['branch_id'] as String?,
       branchName: json['branch_name'] as String?,
-      roles: (json['roles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      capabilities: (json['capabilities'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      roles: (json['roles'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      capabilities:
+          (json['capabilities'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
       mustChangePassword: json['must_change_password'] as bool? ?? false,
       hasPendingInvite: json['has_pending_invite'] as bool? ?? false,
-      inviteExpiresAt: json['invite_expires_at'] != null ? DateTime.tryParse(json['invite_expires_at'].toString()) : null,
+      inviteExpiresAt: json['invite_expires_at'] != null
+          ? DateTime.tryParse(json['invite_expires_at'].toString())
+          : null,
       authVersion: (json['auth_version'] as num?)?.toInt() ?? 1,
       scopes: (json['scopes'] as List?)
               ?.map((e) => ScopeGrantDto.fromJson(e as Map<String, dynamic>))
@@ -762,10 +777,15 @@ class EtlConnectionDto {
       type: json['type'] as String? ?? 'csv',
       status: json['status'] as String? ?? 'active',
       secretRef: json['secret_ref'] as String?,
-      allowlistSheets: (json['allowlist_sheets'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      allowlistSheets: (json['allowlist_sheets'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       configJson: (json['config_json'] as Map<String, dynamic>?) ?? const {},
       branchId: json['branch_id'] as String?,
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 }
@@ -810,7 +830,9 @@ class EtlPipelineDto {
       scheduleCron: json['schedule_cron'] as String?,
       status: json['status'] as String? ?? 'active',
       configJson: (json['config_json'] as Map<String, dynamic>?) ?? const {},
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 }
@@ -846,10 +868,15 @@ class EtlMappingVersionDto {
       version: (json['version'] as num?)?.toInt() ?? 1,
       status: json['status'] as String? ?? 'draft',
       mappingJson: (json['mapping_json'] as List?) ?? const [],
-      validationRulesJson: (json['validation_rules_json'] as Map<String, dynamic>?) ?? const {},
+      validationRulesJson:
+          (json['validation_rules_json'] as Map<String, dynamic>?) ?? const {},
       duplicatePolicy: json['duplicate_policy'] as String? ?? 'reject',
-      publishedAt: json['published_at'] != null ? DateTime.tryParse(json['published_at'].toString()) : null,
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      publishedAt: json['published_at'] != null
+          ? DateTime.tryParse(json['published_at'].toString())
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 }
@@ -923,12 +950,16 @@ class EtlRunDto {
       reviewerId: json['reviewer_id'] as String?,
       reviewDecision: json['review_decision'] as String?,
       reviewNote: json['review_note'] as String?,
-      postedAt: json['posted_at'] != null ? DateTime.tryParse(json['posted_at'].toString()) : null,
+      postedAt: json['posted_at'] != null
+          ? DateTime.tryParse(json['posted_at'].toString())
+          : null,
       generatedReferenceType: json['generated_reference_type'] as String?,
       generatedReferenceId: json['generated_reference_id'] as String?,
       errorCode: json['error_code'] as String?,
       errorMessage: json['error_message'] as String?,
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 }
@@ -966,8 +997,11 @@ class EtlRunRowDto {
       rawDataJson: (json['raw_data_json'] as Map<String, dynamic>?) ?? const {},
       canonicalDataJson: json['canonical_data_json'] as Map<String, dynamic>?,
       valid: json['valid'] as bool? ?? true,
-      errorsJson: (json['errors_json'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      actionPreview: (json['action_preview'] as Map<String, dynamic>?) ?? const {},
+      errorsJson:
+          (json['errors_json'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
+      actionPreview:
+          (json['action_preview'] as Map<String, dynamic>?) ?? const {},
     );
   }
 }

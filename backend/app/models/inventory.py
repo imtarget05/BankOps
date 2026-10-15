@@ -37,6 +37,11 @@ class Item(Base, TimestampMixin):
     sku: str = Column(String(128), unique=True, nullable=False, index=True)
     name: str = Column(String(256), nullable=False)
     unit: str = Column(String(32), nullable=False)
+    # Operational catalog data for food-and-beverage inventory.  These are
+    # intentionally item-level attributes: the stock minimum itself remains
+    # location-specific in ``inv_stock_levels``.
+    category: str | None = Column(String(128), nullable=True)
+    packaging: str | None = Column(String(256), nullable=True)
     tracked_serial: bool = Column(Boolean, default=False, nullable=False)
     active: bool = Column(Boolean, default=True, nullable=False)
 

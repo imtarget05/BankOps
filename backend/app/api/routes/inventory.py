@@ -139,6 +139,20 @@ def _format_qty(val) -> str | None:
     return s
 
 
+def _item_out(item: Item) -> dict:
+    """Return the ingredient catalog representation used by all item APIs."""
+    return {
+        "id": str(item.id),
+        "sku": item.sku,
+        "name": item.name,
+        "unit": item.unit,
+        "category": item.category,
+        "packaging": item.packaging,
+        "tracked_serial": item.tracked_serial,
+        "active": item.active,
+    }
+
+
 def _check_if_match(request: Request, version: int) -> None:
     raw = request.headers.get("if-match")
     if raw is None:
@@ -447,17 +461,7 @@ async def list_items(
 ):
     items = (await db.execute(select(Item).where(Item.active.is_(True)))).scalars().all()
     return {
-        "items": [
-            {
-                "id": str(i.id),
-                "sku": i.sku,
-                "name": i.name,
-                "unit": i.unit,
-                "tracked_serial": i.tracked_serial,
-                "active": i.active,
-            }
-            for i in items
-        ]
+        "items": [_item_out(i) for i in items]
     }
 
 
@@ -470,6 +474,8 @@ async def create_item(
     sku = str(payload.get("sku", "")).strip().upper()
     name = str(payload.get("name", "")).strip()
     unit = str(payload.get("unit", "")).strip() or "đơn vị"
+    category = str(payload.get("category", "")).strip() or None
+    packaging = str(payload.get("packaging", "")).strip() or None
     tracked_serial = bool(payload.get("tracked_serial", False))
     if not sku:
         raise AppError(422, "MISSING_SKU", "SKU không được để trống")
@@ -483,20 +489,15 @@ async def create_item(
         sku=sku,
         name=name,
         unit=unit,
+        category=category,
+        packaging=packaging,
         tracked_serial=tracked_serial,
         active=True,
     )
     db.add(item)
     await db.commit()
     await db.refresh(item)
-    return {
-        "id": str(item.id),
-        "sku": item.sku,
-        "name": item.name,
-        "unit": item.unit,
-        "tracked_serial": item.tracked_serial,
-        "active": item.active,
-    }
+    return _item_out(item)
 
 
 @router.put("/inventory/items/{item_id}")
@@ -514,20 +515,17 @@ async def update_item(
         item.name = str(payload["name"]).strip()
     if "unit" in payload and payload["unit"]:
         item.unit = str(payload["unit"]).strip()
+    if "category" in payload:
+        item.category = str(payload["category"] or "").strip() or None
+    if "packaging" in payload:
+        item.packaging = str(payload["packaging"] or "").strip() or None
     if "tracked_serial" in payload:
         item.tracked_serial = bool(payload["tracked_serial"])
     if "active" in payload:
         item.active = bool(payload["active"])
     await db.commit()
     await db.refresh(item)
-    return {
-        "id": str(item.id),
-        "sku": item.sku,
-        "name": item.name,
-        "unit": item.unit,
-        "tracked_serial": item.tracked_serial,
-        "active": item.active,
-    }
+    return _item_out(item)
 
 
 @router.delete("/inventory/items/{item_id}")

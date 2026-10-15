@@ -87,7 +87,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
           'VALIDATION_ERROR', 'Mật khẩu xác thực không được để trống');
     }
     if (!RegExp(r'^\d{6}$').hasMatch(newPin)) {
-      throw ApiException('VALIDATION_ERROR', 'Mã PIN mới phải gồm đúng 6 chữ số');
+      throw ApiException(
+          'VALIDATION_ERROR', 'Mã PIN mới phải gồm đúng 6 chữ số');
     }
     _supervisorPin = newPin;
     await _delay(null);
@@ -97,7 +98,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<PasswordResetResult> requestPasswordReset(String username) async {
     final clean = username.trim().toLowerCase();
     if (clean.isEmpty) {
-      throw ApiException('VALIDATION_ERROR', 'Tên đăng nhập không được để trống');
+      throw ApiException(
+          'VALIDATION_ERROR', 'Tên đăng nhập không được để trống');
     }
     final allUsers = _users.isEmpty ? _seedUsers() : _users;
     final exists = allUsers.any((u) => u.username.toLowerCase() == clean);
@@ -154,7 +156,6 @@ class FakeBankOpsRepository implements BankOpsRepository {
     }
     return _delay(updated);
   }
-
 
   // ---- inventory ----
   final _locations = <InventoryLocation>[];
@@ -217,6 +218,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     required String name,
     required String unit,
     bool trackedSerial = false,
+    String? category,
+    String? packaging,
   }) async {
     if (_items.isEmpty) _items.addAll(_seedItems());
     final itm = InventoryItem(
@@ -225,6 +228,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       name: name,
       unit: unit,
       trackedSerial: trackedSerial,
+      category: category,
+      packaging: packaging,
     );
     _items.add(itm);
     return _delay(itm);
@@ -236,6 +241,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? name,
     String? unit,
     bool? trackedSerial,
+    String? category,
+    String? packaging,
   }) async {
     final idx = _items.indexWhere((i) => i.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy vật tư');
@@ -246,6 +253,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       name: name ?? cur.name,
       unit: unit ?? cur.unit,
       trackedSerial: trackedSerial ?? cur.trackedSerial,
+      category: category ?? cur.category,
+      packaging: packaging ?? cur.packaging,
     );
     return _delay(_items[idx]);
   }
@@ -302,7 +311,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }) async {
     if (_assets.isEmpty) _assets.addAll(_seedAssets());
     if (_assetLogs.isEmpty) _assetLogs.addAll(_seedAssetLogs());
-    final idx = _assets.indexWhere((a) => a.id == assetId || a.serial == assetId);
+    final idx =
+        _assets.indexWhere((a) => a.id == assetId || a.serial == assetId);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy ấn chỉ');
     final cur = _assets[idx];
     final newStatus = status != null ? _assetStatus(status) : cur.status;
@@ -344,7 +354,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   final _stocktakes = <StocktakeItem>[];
 
   @override
-  Future<List<StockLevelItem>> getStockLevels({String? locationId, String? itemId}) async {
+  Future<List<StockLevelItem>> getStockLevels(
+      {String? locationId, String? itemId}) async {
     return _delay(_stockLevels.where((l) {
       if (locationId != null && l.locationId != locationId) return false;
       if (itemId != null && l.itemId != itemId) return false;
@@ -359,7 +370,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     required String minQty,
     String? maxQty,
   }) async {
-    final idx = _stockLevels.indexWhere((l) => l.locationId == locationId && l.itemId == itemId);
+    final idx = _stockLevels
+        .indexWhere((l) => l.locationId == locationId && l.itemId == itemId);
     final item = StockLevelItem(
       id: idx >= 0 ? _stockLevels[idx].id : 'sl-${_stockLevels.length + 1}',
       locationId: locationId,
@@ -376,7 +388,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<List<LowStockAlertItem>> getLowStockAlerts({String? locationId}) async {
+  Future<List<LowStockAlertItem>> getLowStockAlerts(
+      {String? locationId}) async {
     final alerts = <LowStockAlertItem>[];
     final balances = await getBalances(locationId: locationId);
     final items = await getItems();
@@ -386,13 +399,22 @@ class FakeBankOpsRepository implements BankOpsRepository {
       if (locationId != null && level.locationId != locationId) continue;
       final bal = balances.firstWhere(
         (b) => b.locationId == level.locationId && b.itemId == level.itemId,
-        orElse: () => StockBalance(locationId: level.locationId, itemId: level.itemId, quantity: '0'),
+        orElse: () => StockBalance(
+            locationId: level.locationId, itemId: level.itemId, quantity: '0'),
       );
       final cur = double.tryParse(bal.quantity) ?? 0.0;
       final min = double.tryParse(level.minQty) ?? 0.0;
       if (cur < min) {
-        final loc = locs.firstWhere((l) => l.id == level.locationId, orElse: () => InventoryLocation(id: level.locationId, code: 'LOC', name: 'Kho'));
-        final it = items.firstWhere((i) => i.id == level.itemId, orElse: () => InventoryItem(id: level.itemId, sku: 'ITEM', name: 'Mặt hàng', unit: 'cái', trackedSerial: false));
+        final loc = locs.firstWhere((l) => l.id == level.locationId,
+            orElse: () => InventoryLocation(
+                id: level.locationId, code: 'LOC', name: 'Kho'));
+        final it = items.firstWhere((i) => i.id == level.itemId,
+            orElse: () => InventoryItem(
+                id: level.itemId,
+                sku: 'ITEM',
+                name: 'Mặt hàng',
+                unit: 'cái',
+                trackedSerial: false));
         final deficit = (min - cur).toStringAsFixed(0);
         alerts.add(LowStockAlertItem(
           locationId: level.locationId,
@@ -407,7 +429,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
           maxQty: level.maxQty,
           status: cur <= 0 ? 'empty' : 'low',
           deficit: deficit,
-          suggestedAction: 'Bổ sung tối thiểu $deficit ${it.unit} cho kho ${loc.name}',
+          suggestedAction:
+              'Bổ sung tối thiểu $deficit ${it.unit} cho kho ${loc.name}',
         ));
       }
     }
@@ -416,17 +439,22 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<List<StocktakeItem>> getStocktakes({String? locationId}) async {
-    return _delay(_stocktakes.where((s) => locationId == null || s.locationId == locationId).toList());
+    return _delay(_stocktakes
+        .where((s) => locationId == null || s.locationId == locationId)
+        .toList());
   }
 
   @override
   Future<StocktakeItem> getStocktake(String id) async {
-    final st = _stocktakes.firstWhere((s) => s.id == id, orElse: () => throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê'));
+    final st = _stocktakes.firstWhere((s) => s.id == id,
+        orElse: () =>
+            throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê'));
     return _delay(st);
   }
 
   @override
-  Future<StocktakeItem> createStocktake({required String locationId, String? note}) async {
+  Future<StocktakeItem> createStocktake(
+      {required String locationId, String? note}) async {
     final st = StocktakeItem(
       id: 'st-${_stocktakes.length + 1}',
       locationId: locationId,
@@ -441,7 +469,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StocktakeItem> updateStocktakeLines(String id, List<Map<String, dynamic>> lines) async {
+  Future<StocktakeItem> updateStocktakeLines(
+      String id, List<Map<String, dynamic>> lines) async {
     final idx = _stocktakes.indexWhere((s) => s.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê');
     final st = _stocktakes[idx];
@@ -451,9 +480,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
     for (var i = 0; i < lines.length; i++) {
       final l = lines[i];
       final itemId = l['item_id']?.toString() ?? '';
-      final bal = balances.firstWhere((b) => b.itemId == itemId, orElse: () => StockBalance(locationId: st.locationId, itemId: itemId, quantity: '0'));
+      final bal = balances.firstWhere((b) => b.itemId == itemId,
+          orElse: () => StockBalance(
+              locationId: st.locationId, itemId: itemId, quantity: '0'));
       final book = double.tryParse(bal.quantity) ?? 0.0;
-      final counted = double.tryParse(l['counted_qty']?.toString() ?? '0') ?? 0.0;
+      final counted =
+          double.tryParse(l['counted_qty']?.toString() ?? '0') ?? 0.0;
       final diff = counted - book;
       lineItems.add(StocktakeLineItem(
         id: 'stl-$i',
@@ -506,7 +538,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     final idx = _stocktakes.indexWhere((s) => s.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê');
     final st = _stocktakes[idx];
-    final hasVariance = st.lines.any((l) => (double.tryParse(l.variance) ?? 0.0) != 0.0);
+    final hasVariance =
+        st.lines.any((l) => (double.tryParse(l.variance) ?? 0.0) != 0.0);
     String? adjReqId;
     if (hasVariance) {
       adjReqId = 'sr-adj-${DateTime.now().millisecondsSinceEpoch}';
@@ -590,10 +623,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
       _transitionStock(id, RequestStatus.rejected, reason: reason);
 
   @override
-  Future<StockRequest> returnStockRequest(String id, {required String reason}) =>
+  Future<StockRequest> returnStockRequest(String id,
+          {required String reason}) =>
       _transitionStock(id, RequestStatus.returned, reason: reason);
 
-  Future<StockRequest> _transitionStock(String id, RequestStatus to, {String? reason}) async {
+  Future<StockRequest> _transitionStock(String id, RequestStatus to,
+      {String? reason}) async {
     final idx = _stockRequests.indexWhere((r) => r.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
     final r = _stockRequests[idx];
@@ -609,7 +644,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     return _delay(_stockRequests[idx]);
   }
 
-  StockRequest _copyStock(StockRequest r, RequestStatus to, {String? reason}) => StockRequest(
+  StockRequest _copyStock(StockRequest r, RequestStatus to, {String? reason}) =>
+      StockRequest(
         id: r.id,
         kind: r.kind,
         status: to,
@@ -620,10 +656,18 @@ class FakeBankOpsRepository implements BankOpsRepository {
         items: r.items,
         reason: r.reason,
         createdAt: r.createdAt,
-        approvedBy: to == RequestStatus.posted ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2' : r.approvedBy,
-        approvedByName: to == RequestStatus.posted ? 'Trần Tuấn Bình (KSV)' : r.approvedByName,
-        rejectReason: to == RequestStatus.rejected ? (reason ?? r.rejectReason) : r.rejectReason,
-        returnReason: to == RequestStatus.returned ? (reason ?? r.returnReason) : r.returnReason,
+        approvedBy: to == RequestStatus.posted
+            ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+            : r.approvedBy,
+        approvedByName: to == RequestStatus.posted
+            ? 'Trần Tuấn Bình (KSV)'
+            : r.approvedByName,
+        rejectReason: to == RequestStatus.rejected
+            ? (reason ?? r.rejectReason)
+            : r.rejectReason,
+        returnReason: to == RequestStatus.returned
+            ? (reason ?? r.returnReason)
+            : r.returnReason,
         destinationLocationId: r.destinationLocationId,
       );
 
@@ -748,7 +792,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<CashRequest> returnCashRequest(String id, {required String reason}) =>
       _transitionCash(id, RequestStatus.returned, reason: reason);
 
-  Future<CashRequest> _transitionCash(String id, RequestStatus to, {String? reason}) async {
+  Future<CashRequest> _transitionCash(String id, RequestStatus to,
+      {String? reason}) async {
     final idx = _cashRequests.indexWhere((r) => r.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy phiếu');
     final r = _cashRequests[idx];
@@ -767,10 +812,18 @@ class FakeBankOpsRepository implements BankOpsRepository {
       createdBy: r.createdBy,
       createdByName: r.createdByName,
       createdAt: r.createdAt,
-      approvedBy: to == RequestStatus.posted ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2' : r.approvedBy,
-      approvedByName: to == RequestStatus.posted ? 'Trần Tuấn Bình (KSV)' : r.approvedByName,
-      rejectReason: to == RequestStatus.rejected ? (reason ?? r.rejectReason) : r.rejectReason,
-      returnReason: to == RequestStatus.returned ? (reason ?? r.returnReason) : r.returnReason,
+      approvedBy: to == RequestStatus.posted
+          ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+          : r.approvedBy,
+      approvedByName: to == RequestStatus.posted
+          ? 'Trần Tuấn Bình (KSV)'
+          : r.approvedByName,
+      rejectReason: to == RequestStatus.rejected
+          ? (reason ?? r.rejectReason)
+          : r.rejectReason,
+      returnReason: to == RequestStatus.returned
+          ? (reason ?? r.returnReason)
+          : r.returnReason,
     );
     if (to == RequestStatus.pending) {
       _approvalStreamCtrl.add('new_request:$id:quỹ');
@@ -792,11 +845,15 @@ class FakeBankOpsRepository implements BankOpsRepository {
           id: r.id,
           kind: 'inventory',
           maker: r.createdByName,
-          impact: 'Kho (${r.kind.name}) · ${r.items.fold<num>(0, (total, line) => total + (num.tryParse(line.quantity) ?? 0))} đơn vị',
+          impact:
+              'Kho (${r.kind.name}) · ${r.items.fold<num>(0, (total, line) => total + (num.tryParse(line.quantity) ?? 0))} đơn vị',
           detail: r.reason.isEmpty ? r.id : r.reason,
           approvalDetail: {
             'kind': r.kind.name,
-            'total_quantity': r.items.fold<num>(0, (total, line) => total + (num.tryParse(line.quantity) ?? 0)).toString(),
+            'total_quantity': r.items
+                .fold<num>(0,
+                    (total, line) => total + (num.tryParse(line.quantity) ?? 0))
+                .toString(),
           },
         ),
       for (final r
@@ -835,15 +892,21 @@ class FakeBankOpsRepository implements BankOpsRepository {
       if (val >= 500000000) {
         riskLevel = 'high';
         riskScore = 88;
-        flagged.add('Giá trị giao dịch vượt ngưỡng kiểm soát kép đặc biệt (≥ 500.000.000 VND).');
-        flagged.add('Bắt buộc xác thực mã PIN Kiểm soát viên (Supervisor PIN) và đóng dấu Audit Stamp SHA-256.');
-        recs.add('Kiểm đếm tiền mặt thực tế tại két và đối chiếu phiếu rút/nộp tiền gốc.');
-        recs.add('Yêu cầu 2 chữ ký Maker và Checker trên biên bản bàn giao tiền mặt.');
+        flagged.add(
+            'Giá trị giao dịch vượt ngưỡng kiểm soát kép đặc biệt (≥ 500.000.000 VND).');
+        flagged.add(
+            'Bắt buộc xác thực mã PIN Kiểm soát viên (Supervisor PIN) và đóng dấu Audit Stamp SHA-256.');
+        recs.add(
+            'Kiểm đếm tiền mặt thực tế tại két và đối chiếu phiếu rút/nộp tiền gốc.');
+        recs.add(
+            'Yêu cầu 2 chữ ký Maker và Checker trên biên bản bàn giao tiền mặt.');
       } else if (val >= 200000000) {
         riskLevel = 'medium';
         riskScore = 58;
-        flagged.add('Giao dịch giá trị trung bình lớn (200.000.000 - 500.000.000 VND).');
-        recs.add('Đối chiếu chứng từ ký nhận của khách hàng/GDV trước khi duyệt.');
+        flagged.add(
+            'Giao dịch giá trị trung bình lớn (200.000.000 - 500.000.000 VND).');
+        recs.add(
+            'Đối chiếu chứng từ ký nhận của khách hàng/GDV trước khi duyệt.');
       } else {
         riskLevel = 'low';
         riskScore = 20;
@@ -853,14 +916,18 @@ class FakeBankOpsRepository implements BankOpsRepository {
       if (val >= 50) {
         riskLevel = 'high';
         riskScore = 85;
-        flagged.add('Số lượng xuất/nhập ấn chỉ/phôi thẻ vượt hạn mức (≥ 50 đơn vị).');
-        flagged.add('Nguy cơ thất thoát phôi bảo mật (thẻ chip EMV, sổ séc trắng).');
-        recs.add('Kiểm đếm dải số serial và niêm phong hộp phôi trước khi ký nhận.');
+        flagged.add(
+            'Số lượng xuất/nhập ấn chỉ/phôi thẻ vượt hạn mức (≥ 50 đơn vị).');
+        flagged.add(
+            'Nguy cơ thất thoát phôi bảo mật (thẻ chip EMV, sổ séc trắng).');
+        recs.add(
+            'Kiểm đếm dải số serial và niêm phong hộp phôi trước khi ký nhận.');
       } else if (val >= 20) {
         riskLevel = 'medium';
         riskScore = 52;
         flagged.add('Số lượng phôi xuất kho trung bình (20 - 50 đơn vị).');
-        recs.add('Kiểm tra kế hoạch cấp phát ấn chỉ định kỳ của phòng giao dịch.');
+        recs.add(
+            'Kiểm tra kế hoạch cấp phát ấn chỉ định kỳ của phòng giao dịch.');
       } else {
         riskLevel = 'low';
         riskScore = 18;
@@ -869,7 +936,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     }
 
     if (item.detail.trim().length < 5) {
-      flagged.add('Lý do giao dịch quá ngắn hoặc không nêu rõ mục đích (< 5 ký tự).');
+      flagged.add(
+          'Lý do giao dịch quá ngắn hoặc không nêu rõ mục đích (< 5 ký tự).');
       riskScore = min(98, riskScore + 15);
       if (riskLevel == 'low') riskLevel = 'medium';
       recs.add('Yêu cầu Maker bổ sung diễn giải chi tiết mục đích nghiệp vụ.');
@@ -883,7 +951,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
         .padRight(64, '0')
         .substring(0, 64);
 
-    final summary = 'Đánh giá rủi ro: Mức độ ${riskLevel.toUpperCase()} ($riskScore/100) cho phiếu ${item.id}. '
+    final summary =
+        'Đánh giá rủi ro: Mức độ ${riskLevel.toUpperCase()} ($riskScore/100) cho phiếu ${item.id}. '
         '${riskLevel == 'high' ? 'Cần kiểm soát kép và nhập PIN KSV.' : 'Đủ điều kiện xem xét phê duyệt.'}';
 
     return _delay(AiRiskAssessment(
@@ -921,7 +990,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     Map<String, dynamic>? config,
   }) async {
     if (_connections.isEmpty) _connections.addAll(_seedConnections());
-        final conn = IntegrationConnection(
+    final conn = IntegrationConnection(
       id: 'conn-000${_connections.length + 1}',
       name: name,
       endpoint: endpoint ?? type,
@@ -942,7 +1011,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }) async {
     final idx = _connections.indexWhere((c) => c.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy kết nối');
-        final cur = _connections[idx];
+    final cur = _connections[idx];
     _connections[idx] = IntegrationConnection(
       id: cur.id,
       name: name ?? cur.name,
@@ -1089,7 +1158,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
       rows: staged,
     );
     _stagingPreviews[runId] = preview;
-        _runs.insert(
+    _runs.insert(
       0,
       IntegrationRun(
         id: runId,
@@ -1228,16 +1297,47 @@ class FakeBankOpsRepository implements BankOpsRepository {
   // =========================================================================
 
   final List<BranchDto> _branches = [
-    const BranchDto(id: 'br_ho', code: 'HO', name: 'Hội sở chính', address: 'Quận 1, TP.HCM', active: true),
-    const BranchDto(id: 'br_bt', code: 'CN_BEN_THANH', name: 'Chi nhánh Bến Thành', address: 'Quận 1, TP.HCM', active: true),
-    const BranchDto(id: 'br_hk', code: 'CN_HOAN_KIEM', name: 'Chi nhánh Hoàn Kiếm', address: 'Hoàn Kiếm, Hà Nội', active: true),
+    const BranchDto(
+        id: 'br_ho',
+        code: 'HO',
+        name: 'Hội sở chính',
+        address: 'Quận 1, TP.HCM',
+        active: true),
+    const BranchDto(
+        id: 'br_bt',
+        code: 'CN_BEN_THANH',
+        name: 'Chi nhánh Bến Thành',
+        address: 'Quận 1, TP.HCM',
+        active: true),
+    const BranchDto(
+        id: 'br_hk',
+        code: 'CN_HOAN_KIEM',
+        name: 'Chi nhánh Hoàn Kiếm',
+        address: 'Hoàn Kiếm, Hà Nội',
+        active: true),
   ];
 
   final List<RoleDto> _roles = [
-    const RoleDto(code: 'admin', name: 'Quản trị viên hệ thống', capabilities: ['iam:admin', 'etl:admin', 'etl:design', 'etl:run', 'etl:review', 'etl:post_balance']),
-    const RoleDto(code: 'staff', name: 'Nhân viên giao dịch (Maker)', capabilities: ['inventory:create_request', 'etl:run']),
-    const RoleDto(code: 'approver', name: 'Kiểm soát viên (Checker)', capabilities: ['inventory:approve_request', 'etl:review']),
-    const RoleDto(code: 'auditor', name: 'Kiểm toán nội bộ', capabilities: ['audit:view']),
+    const RoleDto(code: 'admin', name: 'Quản trị viên hệ thống', capabilities: [
+      'iam:admin',
+      'etl:admin',
+      'etl:design',
+      'etl:run',
+      'etl:review',
+      'etl:post_balance'
+    ]),
+    const RoleDto(
+        code: 'staff',
+        name: 'Nhân viên giao dịch (Maker)',
+        capabilities: ['inventory:create_request', 'etl:run']),
+    const RoleDto(
+        code: 'approver',
+        name: 'Kiểm soát viên (Checker)',
+        capabilities: ['inventory:approve_request', 'etl:review']),
+    const RoleDto(
+        code: 'auditor',
+        name: 'Kiểm toán nội bộ',
+        capabilities: ['audit:view']),
   ];
 
   final List<EmployeeUserDto> _employees = [
@@ -1248,7 +1348,14 @@ class FakeBankOpsRepository implements BankOpsRepository {
       email: 'admin@bankops.vn',
       status: 'active',
       roles: ['admin'],
-      capabilities: ['iam:admin', 'etl:admin', 'etl:design', 'etl:run', 'etl:review', 'etl:post_balance'],
+      capabilities: [
+        'iam:admin',
+        'etl:admin',
+        'etl:design',
+        'etl:run',
+        'etl:review',
+        'etl:post_balance'
+      ],
     ),
     const EmployeeUserDto(
       id: 'emp_2',
@@ -1285,7 +1392,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }) {
     var list = _employees;
     if (search != null && search.isNotEmpty) {
-      list = list.where((e) => e.username.contains(search) || e.displayName.contains(search)).toList();
+      list = list
+          .where((e) =>
+              e.username.contains(search) || e.displayName.contains(search))
+          .toList();
     }
     if (status != null && status.isNotEmpty) {
       list = list.where((e) => e.status == status).toList();
@@ -1353,7 +1463,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<EmployeeUserDto> updateEmployeeRoles(String userId, List<String> roles) {
+  Future<EmployeeUserDto> updateEmployeeRoles(
+      String userId, List<String> roles) {
     final idx = _employees.indexWhere((e) => e.id == userId);
     if (idx >= 0) {
       final old = _employees[idx];
@@ -1396,10 +1507,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<void> revokeEmployeeSessions(String userId) => _delay(null);
 
   @override
-  Future<String> resetEmployeePassword(String userId) => _delay('BankOps#TEMP123!');
+  Future<String> resetEmployeePassword(String userId) =>
+      _delay('BankOps#TEMP123!');
 
   @override
-  Future<String> reinviteEmployee(String userId) => _delay('inv_mock_token_123');
+  Future<String> reinviteEmployee(String userId) =>
+      _delay('inv_mock_token_123');
 
   // =========================================================================
   // ETL Pipeline (Phase 2)
@@ -1431,9 +1544,24 @@ class FakeBankOpsRepository implements BankOpsRepository {
       version: 1,
       status: 'published',
       mappingJson: [
-        {'source_field': 'sku', 'target_field': 'sku', 'required': true, 'transform': 'trim_upper'},
-        {'source_field': 'target_quantity', 'target_field': 'target_quantity', 'required': false, 'transform': 'to_float'},
-        {'source_field': 'reason', 'target_field': 'reason', 'required': false, 'transform': 'trim'},
+        {
+          'source_field': 'sku',
+          'target_field': 'sku',
+          'required': true,
+          'transform': 'trim_upper'
+        },
+        {
+          'source_field': 'target_quantity',
+          'target_field': 'target_quantity',
+          'required': false,
+          'transform': 'to_float'
+        },
+        {
+          'source_field': 'reason',
+          'target_field': 'reason',
+          'required': false,
+          'transform': 'trim'
+        },
       ],
       duplicatePolicy: 'reject',
     ),
@@ -1455,7 +1583,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   ];
 
   @override
-  Future<List<EtlConnectionDto>> getEtlConnections({String? branchId}) => _delay(_etlConnections);
+  Future<List<EtlConnectionDto>> getEtlConnections({String? branchId}) =>
+      _delay(_etlConnections);
 
   @override
   Future<EtlConnectionDto> createEtlConnection({
@@ -1516,7 +1645,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(String pipelineId) => _delay(_etlMappingVersions);
+  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(String pipelineId) =>
+      _delay(_etlMappingVersions);
 
   @override
   Future<EtlMappingVersionDto> createEtlMappingVersion(
@@ -1587,11 +1717,13 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<List<EtlRunDto>> getEtlRuns({
     String? pipelineId,
     String? status,
-  }) => _delay(_etlRuns);
+  }) =>
+      _delay(_etlRuns);
 
   @override
   Future<EtlRunDto> getEtlRun(String runId) {
-    final run = _etlRuns.firstWhere((r) => r.id == runId, orElse: () => _etlRuns.first);
+    final run =
+        _etlRuns.firstWhere((r) => r.id == runId, orElse: () => _etlRuns.first);
     return _delay(run);
   }
 
@@ -1661,11 +1793,17 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<Map<String, dynamic>> postEtlRun(String runId) {
-    return _delay({'status': 'posted', 'run_id': runId, 'movements_count': 5, 'single_admin_override': true});
+    return _delay({
+      'status': 'posted',
+      'run_id': runId,
+      'movements_count': 5,
+      'single_admin_override': true
+    });
   }
 
   @override
   Future<String> getEtlErrorReport(String runId) {
-    return _delay('Dòng,Mã SKU,Chi tiết lỗi\n2,ERR_SKU_999,SKU không tồn tại trong danh mục\n');
+    return _delay(
+        'Dòng,Mã SKU,Chi tiết lỗi\n2,ERR_SKU_999,SKU không tồn tại trong danh mục\n');
   }
 }

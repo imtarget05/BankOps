@@ -84,7 +84,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   String get baseUrl => _baseUrl;
-  Future<String?> get accessToken => _tokenProvider?.call() ?? Future.value(null);
+  Future<String?> get accessToken =>
+      _tokenProvider?.call() ?? Future.value(null);
 
   @override
   void dispose() {
@@ -97,9 +98,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
   @override
   Stream<String> get approvalNotifications => _approvalStreamCtrl.stream;
 
-
-  Uri _uri(String path, [Map<String, String>? query]) => Uri.parse('$_baseUrl$path')
-      .replace(queryParameters: query == null || query.isEmpty ? null : query);
+  Uri _uri(String path, [Map<String, String>? query]) =>
+      Uri.parse('$_baseUrl$path').replace(
+          queryParameters: query == null || query.isEmpty ? null : query);
 
   Future<Map<String, String>> _headers() async {
     final headers = <String, String>{'Content-Type': 'application/json'};
@@ -145,13 +146,12 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return json.decode(resp.body);
   }
 
-  Future<Map<String, dynamic>> _post(
-      String path, Map<String, dynamic> body,
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body,
       {Map<String, String>? extraHeaders}) async {
     final headers = await _headers();
     if (extraHeaders != null) headers.addAll(extraHeaders);
-    final resp =
-        await _client.post(_uri(path), headers: headers, body: json.encode(body));
+    final resp = await _client.post(_uri(path),
+        headers: headers, body: json.encode(body));
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       _throwEnvelope(resp);
     }
@@ -160,13 +160,12 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return {'data': decoded};
   }
 
-  Future<Map<String, dynamic>> _put(
-      String path, Map<String, dynamic> body,
+  Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> body,
       {Map<String, String>? extraHeaders}) async {
     final headers = await _headers();
     if (extraHeaders != null) headers.addAll(extraHeaders);
-    final resp =
-        await _client.put(_uri(path), headers: headers, body: json.encode(body));
+    final resp = await _client.put(_uri(path),
+        headers: headers, body: json.encode(body));
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       _throwEnvelope(resp);
     }
@@ -176,8 +175,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   Future<dynamic> _delete(String path) async {
-    final resp =
-        await _client.delete(_uri(path), headers: await _headers());
+    final resp = await _client.delete(_uri(path), headers: await _headers());
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       _throwEnvelope(resp);
     }
@@ -194,6 +192,13 @@ class HttpBankOpsRepository implements BankOpsRepository {
     final v = m[key];
     if (v == null) return fallback;
     return v.toString();
+  }
+
+  static String? _nullableStr(Map m, String key) {
+    final v = m[key];
+    if (v == null) return null;
+    final value = v.toString().trim();
+    return value.isEmpty ? null : value;
   }
 
   static DateTime _date(Map m, String key) {
@@ -398,6 +403,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
               name: _str(m, 'name'),
               unit: _str(m, 'unit'),
               trackedSerial: m['tracked_serial'] == true,
+              category: _nullableStr(m, 'category'),
+              packaging: _nullableStr(m, 'packaging'),
             ))
         .toList();
   }
@@ -408,12 +415,16 @@ class HttpBankOpsRepository implements BankOpsRepository {
     required String name,
     required String unit,
     bool trackedSerial = false,
+    String? category,
+    String? packaging,
   }) async {
     final body = await _post('/inventory/items', {
       'sku': sku,
       'name': name,
       'unit': unit,
       'tracked_serial': trackedSerial,
+      if (category != null) 'category': category,
+      if (packaging != null) 'packaging': packaging,
     });
     return InventoryItem(
       id: _str(body, 'id'),
@@ -421,6 +432,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
       name: _str(body, 'name', name),
       unit: _str(body, 'unit', unit),
       trackedSerial: body['tracked_serial'] == true,
+      category: _nullableStr(body, 'category'),
+      packaging: _nullableStr(body, 'packaging'),
     );
   }
 
@@ -430,11 +443,15 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? name,
     String? unit,
     bool? trackedSerial,
+    String? category,
+    String? packaging,
   }) async {
     final body = await _put('/inventory/items/$id', {
       if (name != null) 'name': name,
       if (unit != null) 'unit': unit,
       if (trackedSerial != null) 'tracked_serial': trackedSerial,
+      if (category != null) 'category': category,
+      if (packaging != null) 'packaging': packaging,
     });
     return InventoryItem(
       id: _str(body, 'id', id),
@@ -442,6 +459,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
       name: _str(body, 'name'),
       unit: _str(body, 'unit'),
       trackedSerial: body['tracked_serial'] == true,
+      category: _nullableStr(body, 'category'),
+      packaging: _nullableStr(body, 'packaging'),
     );
   }
 
@@ -565,9 +584,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   @override
   Future<List<StockMovement>> getMovements({String? itemId}) async {
     final body = await _get('/inventory/movements');
-    final all = _asList(body, 'movements')
-        .whereType<Map>()
-        .map((m) => StockMovement(
+    final all =
+        _asList(body, 'movements').whereType<Map>().map((m) => StockMovement(
               id: _str(m, 'id'),
               itemId: _str(m, 'item_id'),
               locationId: _str(m, 'location_id'),
@@ -582,7 +600,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   // ---- stock levels & low stock alerts ----
 
   @override
-  Future<List<StockLevelItem>> getStockLevels({String? locationId, String? itemId}) async {
+  Future<List<StockLevelItem>> getStockLevels(
+      {String? locationId, String? itemId}) async {
     final query = <String, String>{};
     if (locationId != null) query['location_id'] = locationId;
     if (itemId != null) query['item_id'] = itemId;
@@ -629,7 +648,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<List<LowStockAlertItem>> getLowStockAlerts({String? locationId}) async {
+  Future<List<LowStockAlertItem>> getLowStockAlerts(
+      {String? locationId}) async {
     final path = locationId == null
         ? '/inventory/low-stock'
         : '/inventory/low-stock?location_id=$locationId';
@@ -701,7 +721,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StocktakeItem> createStocktake({required String locationId, String? note}) async {
+  Future<StocktakeItem> createStocktake(
+      {required String locationId, String? note}) async {
     final res = await _post(
       '/inventory/stocktakes',
       {
@@ -714,7 +735,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StocktakeItem> updateStocktakeLines(String id, List<Map<String, dynamic>> lines) async {
+  Future<StocktakeItem> updateStocktakeLines(
+      String id, List<Map<String, dynamic>> lines) async {
     final res = await _put(
       '/inventory/stocktakes/$id/lines',
       {'lines': lines},
@@ -841,7 +863,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StockRequest> approveStockRequest(String id, {String? supervisorPin}) async {
+  Future<StockRequest> approveStockRequest(String id,
+      {String? supervisorPin}) async {
     final res = _parseStockRequest(await _post(
       '/inventory/requests/$id/approve',
       {if (supervisorPin != null) 'supervisor_pin': supervisorPin},
@@ -863,7 +886,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StockRequest> returnStockRequest(String id, {required String reason}) async {
+  Future<StockRequest> returnStockRequest(String id,
+      {required String reason}) async {
     final res = _parseStockRequest(await _post(
       '/inventory/requests/$id/return',
       {'reason': reason},
@@ -1030,7 +1054,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) async {
+  Future<CashRequest> approveCashRequest(String id,
+      {String? supervisorPin}) async {
     final res = _parseCashRequest(await _post(
       '/cash-sim/requests/$id/approve',
       {if (supervisorPin != null) 'supervisor_pin': supervisorPin},
@@ -1052,7 +1077,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<CashRequest> returnCashRequest(String id, {required String reason}) async {
+  Future<CashRequest> returnCashRequest(String id,
+      {required String reason}) async {
     final res = _parseCashRequest(await _post(
       '/cash-sim/requests/$id/return',
       {'reason': reason},
@@ -1084,7 +1110,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
         );
       }).toList();
     } on ApiException catch (e) {
-      if (e.code == 'HTTP_403' || e.code == 'FORBIDDEN' || e.message.contains('quyền')) {
+      if (e.code == 'HTTP_403' ||
+          e.code == 'FORBIDDEN' ||
+          e.message.contains('quyền')) {
         return const <ApprovalItem>[];
       }
       rethrow;
@@ -1131,8 +1159,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
       final isCash = item.kind.toLowerCase() == 'cash' ||
           item.kind.toLowerCase().contains('quỹ');
       var rawImpact = item.impact;
-      final decimalMatch = RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
-      if (decimalMatch != null) rawImpact = rawImpact.substring(0, decimalMatch.start);
+      final decimalMatch =
+          RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
+      if (decimalMatch != null)
+        rawImpact = rawImpact.substring(0, decimalMatch.start);
       final digits = rawImpact.replaceAll(RegExp(r'[^\d]'), '');
       final val = int.tryParse(digits) ?? 0;
       final isHigh = (isCash && val >= 500000000) || (!isCash && val >= 50);
@@ -1141,7 +1171,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
         riskLevel: isHigh ? 'high' : 'low',
         riskScore: isHigh ? 88 : 20,
         summary: 'Thẩm định ngoại tuyến cho phiếu ${item.id}',
-        flaggedRules: isHigh ? ['Giao dịch vượt hạn mức kiểm soát kép (≥ 500 triệu VND)'] : [],
+        flaggedRules: isHigh
+            ? ['Giao dịch vượt hạn mức kiểm soát kép (≥ 500 triệu VND)']
+            : [],
         recommendations: ['Kiểm tra đối chiếu chứng từ gốc và nhập PIN KSV'],
         auditStamp: 'offline-audit-stamp-${item.id}',
         assessmentSource: 'offline_fallback',
@@ -1155,12 +1187,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
   Future<HealthStatus> getHealth() async {
     final sw = Stopwatch()..start();
     try {
-      final resp = await _client
-          .get(
-            _uri('/health/live'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 10));
+      final resp = await _client.get(
+        _uri('/health/live'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
       sw.stop();
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         return HealthStatus(
@@ -1171,9 +1201,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
         );
       }
       final decoded = json.decode(resp.body);
-      final version = decoded is Map
-          ? (decoded['version']?.toString() ?? '?')
-          : '?';
+      final version =
+          decoded is Map ? (decoded['version']?.toString() ?? '?') : '?';
       return HealthStatus(
         alive: true,
         version: version,
@@ -1194,8 +1223,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<List<ActivityEvent>> getActivity({String? cursor}) async {
-    final body = await _get(
-        '/activity', {if (cursor != null) 'cursor': cursor});
+    final body =
+        await _get('/activity', {if (cursor != null) 'cursor': cursor});
     return _asList(body, 'events')
         .whereType<Map>()
         .map((m) => ActivityEvent(
@@ -1243,7 +1272,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
     );
   }
 
-    @override
+  @override
   Future<List<IntegrationConnection>> getConnections() async {
     final body = await _get('/integrations/connections');
     return _asList(body, 'connections')
@@ -1319,7 +1348,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-    Future<List<IntegrationRun>> getIntegrationRuns() async {
+  Future<List<IntegrationRun>> getIntegrationRuns() async {
     final body = await _get('/integrations/runs');
     return _asList(body, 'runs')
         .whereType<Map>()
@@ -1331,7 +1360,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
               startedAt: _date(m, 'created_at'),
               processed:
                   m['valid_count'] is int ? m['valid_count'] as int : null,
-              errorCount: m['invalid_count'] is int ? m['invalid_count'] as int : null,
+              errorCount:
+                  m['invalid_count'] is int ? m['invalid_count'] as int : null,
               total: (m['valid_count'] is int && m['invalid_count'] is int)
                   ? (m['valid_count'] as int) + (m['invalid_count'] as int)
                   : null,
@@ -1391,9 +1421,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
       {},
       extraHeaders: {'Idempotency-Key': _idemKey()},
     );
-    final drafts = _asList(body, 'draft_requests')
-        .map((e) => e.toString())
-        .toList();
+    final drafts =
+        _asList(body, 'draft_requests').map((e) => e.toString()).toList();
     return ConfirmRunResult(
       runId: _str(body, 'run_id', runId),
       status: _str(body, 'status', 'confirmed'),
@@ -1618,7 +1647,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<EmployeeUserDto> updateEmployeeRoles(String userId, List<String> roles) async {
+  Future<EmployeeUserDto> updateEmployeeRoles(
+      String userId, List<String> roles) async {
     final body = await _put(
       '/admin/users/$userId/roles',
       {'roles': roles},
@@ -1644,18 +1674,21 @@ class HttpBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<void> revokeEmployeeSessions(String userId) async {
-    await _post('/admin/users/$userId/sessions/revoke', {}, extraHeaders: _idem());
+    await _post('/admin/users/$userId/sessions/revoke', {},
+        extraHeaders: _idem());
   }
 
   @override
   Future<String> resetEmployeePassword(String userId) async {
-    final body = await _post('/admin/users/$userId/reset-password', {}, extraHeaders: _idem());
+    final body = await _post('/admin/users/$userId/reset-password', {},
+        extraHeaders: _idem());
     return body['temporary_password'] as String? ?? '';
   }
 
   @override
   Future<String> reinviteEmployee(String userId) async {
-    final body = await _post('/admin/users/$userId/invite', {}, extraHeaders: _idem());
+    final body =
+        await _post('/admin/users/$userId/invite', {}, extraHeaders: _idem());
     return body['invite_token'] as String? ?? '';
   }
 
@@ -1729,7 +1762,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(String pipelineId) async {
+  Future<List<EtlMappingVersionDto>> getEtlMappingVersions(
+      String pipelineId) async {
     final body = await _get('/etl/pipelines/$pipelineId/mapping-versions');
     return _asList(body, 'mapping_versions')
         .whereType<Map<String, dynamic>>()
@@ -1771,7 +1805,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? externalEventId,
   }) async {
     if (fileBytes != null && fileBytes.isNotEmpty) {
-      final request = http.MultipartRequest('POST', _uri('/etl/pipelines/$pipelineId/runs'));
+      final request = http.MultipartRequest(
+          'POST', _uri('/etl/pipelines/$pipelineId/runs'));
       final token = await _tokenProvider?.call();
       if (token != null && token.isNotEmpty) {
         request.headers['Authorization'] = 'Bearer $token';
@@ -1802,7 +1837,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? status,
   }) async {
     final query = <String, String>{};
-    if (pipelineId != null && pipelineId.isNotEmpty) query['pipeline_id'] = pipelineId;
+    if (pipelineId != null && pipelineId.isNotEmpty)
+      query['pipeline_id'] = pipelineId;
     if (status != null && status.isNotEmpty) query['status'] = status;
     final body = await _get('/etl/runs', query.isEmpty ? null : query);
     return _asList(body, 'runs')
@@ -1831,7 +1867,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
     };
     if (valid != null) query['valid'] = '$valid';
     if (search != null && search.isNotEmpty) query['search'] = search;
-    final body = await _get('/etl/runs/$runId/rows', query) as Map<String, dynamic>;
+    final body =
+        await _get('/etl/runs/$runId/rows', query) as Map<String, dynamic>;
     final rowsList = (body['rows'] as List?)
             ?.whereType<Map<String, dynamic>>()
             .map(EtlRunRowDto.fromJson)
@@ -1866,7 +1903,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
   @override
   Future<String> getEtlErrorReport(String runId) async {
     final headers = await _headers();
-    final resp = await _client.get(_uri('/etl/runs/$runId/error-report', {'format': 'csv'}), headers: headers);
+    final resp = await _client.get(
+        _uri('/etl/runs/$runId/error-report', {'format': 'csv'}),
+        headers: headers);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       _throwEnvelope(resp);
     }
