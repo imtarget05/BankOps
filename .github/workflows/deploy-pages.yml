@@ -82,6 +82,10 @@ jobs:
         run: |
           echo "len(CLOUDFLARE_API_TOKEN)=${#CLOUDFLARE_API_TOKEN}"
           echo "len(CLOUDFLARE_ACCOUNT_ID)=${#CLOUDFLARE_ACCOUNT_ID}"
+          printf '%s' "$CLOUDFLARE_API_TOKEN" | wc -c
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | wc -c
+          printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | sha256sum | cut -d' ' -f1
           if [ ${#CLOUDFLARE_ACCOUNT_ID} -ne 32 ]; then
             echo "::error::CLOUDFLARE_ACCOUNT_ID must be 32 hex chars"
             exit 1
