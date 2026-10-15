@@ -57,7 +57,7 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    model: str = "bankops-qwen2.5:1.5b"
+    model: str = "khotrasua-qwen2.5:1.5b"
     messages: list[ChatMessage]
     temperature: float = 0.2
     stream: bool = False

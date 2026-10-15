@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "bankops-backend"
+name = "kho-tra-sua-backend"
 version = "0.1.0"
-description = "BankOps backend - FastAPI modular monolith for inventory and cash simulation"
-authors = ["BankOps Team"]
+description = "Kho Trà Sữa backend - FastAPI modular monolith for inventory and cash simulation"
+authors = ["Kho Tra Sua Team"]
 readme = "README.md"
 packages = [{ include = "app" }]
 

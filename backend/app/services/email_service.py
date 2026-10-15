@@ -1,4 +1,4 @@
-"""Email notification service for BankOps Core Banking."""
+"""Email notification service for Quản Lý Kho Trà Sữa."""
 import asyncio
 import logging
 import smtplib
@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 
 from app.config import settings
 
-logger = logging.getLogger("bankops.email")
+logger = logging.getLogger("khotrasua.email")
 
 
 def _build_otp_html(username: str, otp: str) -> str:
@@ -16,7 +16,7 @@ def _build_otp_html(username: str, otp: str) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mã xác thực khôi phục mật khẩu - BankOps</title>
+  <title>Mã xác thực khôi phục mật khẩu - Quản Lý Kho Trà Sữa</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f6f8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
   <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f6f8; padding: 40px 20px;">
@@ -29,8 +29,8 @@ def _build_otp_html(username: str, otp: str) -> str:
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td>
-                    <span style="color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">BankOps</span>
-                    <span style="color: #93c5fd; font-size: 13px; font-weight: 600; margin-left: 8px; padding: 3px 8px; background: rgba(255,255,255,0.12); border-radius: 4px;">CORE BANKING</span>
+                    <span style="color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">Quản Lý Kho Trà Sữa</span>
+                    <span style="color: #FDE68A; font-size: 13px; font-weight: 600; margin-left: 8px; padding: 3px 8px; background: rgba(255,255,255,0.12); border-radius: 4px;">NHẬP · XUẤT · TỒN</span>
                   </td>
                 </tr>
               </table>
@@ -45,7 +45,7 @@ def _build_otp_html(username: str, otp: str) -> str:
                 Xin chào <strong>{username}</strong>,
               </p>
               <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #475569;">
-                Hệ thống BankOps vừa nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Vui lòng sử dụng mã xác thực OTP dùng một lần (One-Time Password) dưới đây để hoàn tất:
+                Hệ thống Quản Lý Kho Trà Sữa vừa nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Vui lòng sử dụng mã xác thực OTP dùng một lần dưới đây để hoàn tất:
               </p>
 
               <!-- OTP Code Display -->
@@ -58,13 +58,13 @@ def _build_otp_html(username: str, otp: str) -> str:
               <!-- Security Notice -->
               <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 4px; margin-bottom: 24px;">
                 <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #92400e;">
-                  <strong>Lưu ý bảo mật:</strong> Không chia sẻ mã OTP này cho bất kỳ ai, kể cả nhân viên quản trị hệ thống ngân hàng. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email và thông báo ngay cho bộ phận An toàn thông tin.
+                  <strong>Lưu ý bảo mật:</strong> Không chia sẻ mã OTP này cho bất kỳ ai. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email và thông báo ngay cho quản lý cửa hàng.
                 </p>
               </div>
 
               <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #64748b;">
                 Trân trọng,<br>
-                <strong>Ban Vận Hành Hệ Thống BankOps</strong>
+                <strong>Ban Vận Hành Quản Lý Kho Trà Sữa</strong>
               </p>
             </td>
           </tr>
@@ -73,7 +73,7 @@ def _build_otp_html(username: str, otp: str) -> str:
           <tr>
             <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 32px; text-align: center;">
               <p style="margin: 0; font-size: 11.5px; color: #94a3b8; line-height: 1.4;">
-                Đây là email tự động từ hệ thống lõi BankOps Core Banking. Vui lòng không trả lời trực tiếp email này.
+                Đây là email tự động từ hệ thống Quản Lý Kho Trà Sữa. Vui lòng không trả lời trực tiếp email này.
               </p>
             </td>
           </tr>
@@ -93,7 +93,7 @@ def _send_smtp_sync(
     to_email: str,
     subject: str,
     html_content: str,
-    from_name: str = "BankOps Core Banking",
+    from_name: str = "Quản Lý Kho Trà Sữa",
 ) -> bool:
     """Synchronous SMTP email sender designed to run inside asyncio.to_thread."""
     try:

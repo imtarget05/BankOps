@@ -1,5 +1,5 @@
-name: bankops
-description: "BankOps — ứng dụng demo kho vật tư/tài sản và quỹ mô phỏng. Mọi dữ liệu là giả lập."
+name: kho_tra_sua
+description: "Kho Trà Sữa — ứng dụng demo kho vật tư/tài sản và quỹ mô phỏng. Mọi dữ liệu là giả lập."
 publish_to: "none"
 version: 0.1.0+1
 
@@ -19,6 +19,8 @@ dependencies:
   excel: ^4.0.6
   printing: ^5.14.3
   pdf: ^3.12.0
+  # Offline outbox cho nghiệp vụ chốt ca tại quầy (SRS §4.2).
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:

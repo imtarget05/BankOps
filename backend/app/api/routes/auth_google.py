@@ -167,7 +167,7 @@ async def login_with_google(
     raw_token = (body.id_token or body.access_token or "").strip()
     if raw_token.startswith("mock-"):
         parts = raw_token.split(":")
-        email = parts[1] if len(parts) > 1 else "demo_google@bankops.internal"
+        email = parts[1] if len(parts) > 1 else "demo_google@khotrasua.internal"
         name = parts[2] if len(parts) > 2 else "Google Demo User"
         info = {
             "iss": "https://accounts.google.com",

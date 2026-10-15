@@ -117,7 +117,7 @@ async def reset_demo_database():
                     type="core_banking",
                     name="Cổng Tích Hợp Core Banking T24 (ISO 8583)",
                     status="connected",
-                    config_json={"endpoint": "https://core.bankops.internal/api/v2/transactions"},
+                    config_json={"endpoint": "https://core.khotrasua.internal/api/v2/transactions"},
                 ),
                 IntegrationConnection(
                     id=uuid.uuid4(),
