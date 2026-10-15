@@ -12,11 +12,11 @@ import 'stocktake_outbox.dart';
 
 /// Trạng thái của OfflineHub.
 class _OfflineState {
-  _OfflineState({this.offline = false, this.pending = 0, this.failed = 0});
+  _OfflineState();
 
-  bool offline;
-  int pending;
-  int failed;
+  bool offline = false;
+  int pending = 0;
+  int failed = 0;
 }
 
 /// Hub duy nhất (singleton) điều khiển trạng thái mạng + outbox UI.
