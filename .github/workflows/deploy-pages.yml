@@ -1,4 +1,4 @@
-name: Build & Deploy Flutter Web to Cloudflare Pages
+name: Build & Deploy Quản Lý Kho Trà Sữa
 
 on:
   push:
@@ -15,8 +15,8 @@ concurrency:
 env:
   # Canonical API = FastAPI (ADR-0001), host trên Modal (scale-to-zero, free tier).
   # Đây là URL công khai, KHÔNG phải secret. Đổi giá trị này nếu app Modal được
-  # đổi tên (modal app `bankops-api`, function `api`).
-  API_BASE_URL: "https://imtarget05--bankops-api-api.us-east.modal.run"
+  # đổi tên (modal app `quan-ly-kho-tra-sua`, function `api`).
+  API_BASE_URL: "https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
 
 jobs:
   build-and-deploy:
@@ -75,15 +75,17 @@ jobs:
             --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
             --dart-define=APP_ENV=production
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Cloudflare Workers Assets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # --branch=main: ép deployment PRODUCTION (thiếu cờ này wrangler tạo
-          # bản preview theo branch checkout, bankops-web.pages.dev vẫn bản cũ).
-          # Dùng wrangler@4 trực tiếp thay wrangler-action (action kẹt 3.90.0).
-          npx --yes wrangler@4 pages deploy frontend/build/web --project-name=bankops-web --branch=main --commit-dirty=true
+          # Worker Assets sử dụng SPA fallback từ wrangler.tea-inventory.toml.
+          # Không copy _redirects: Workers Assets không hỗ trợ redirect legacy.
+          rm -rf frontend/build/worker-assets
+          rsync -a --exclude='_redirects' frontend/build/web/ frontend/build/worker-assets/
+          cp infra/cloudflare-pages/_headers frontend/build/worker-assets/_headers
+          npx --yes wrangler@4 deploy --config infra/cloudflare-worker/wrangler.tea-inventory.toml
 
       - name: Smoke test (API health from deployed bundle)
         run: |
@@ -92,5 +94,5 @@ jobs:
 
       - name: Print deployment URL
         run: |
-          echo "✅ Flutter Web deployed to Cloudflare Pages"
-          echo "🌐 URL: https://bankops-web.pages.dev"
+          echo "✅ Flutter Web deployed to Cloudflare Workers Assets"
+          echo "🌐 URL: https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"

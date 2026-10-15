@@ -76,6 +76,8 @@ class InventoryRequest(Base, TimestampMixin):
     dest_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id"), nullable=True)
     reason: str = Column(String(512), nullable=True)
     return_reason: str = Column(String(1024), nullable=True)
+    supplier: str | None = Column(String(256), nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=True)
     version: int = Column(Integer, default=1, nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_by: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=False)
@@ -106,6 +108,9 @@ class InventoryRequestLine(Base):
     # shortage adjustments to reduce a balance.
     direction: str = Column(String(16), nullable=False, default="increase")
     serial: str = Column(String(128), nullable=True)
+    unit_price = Column(Numeric(20, 2), nullable=True)
+    lot_no: str | None = Column(String(64), nullable=True)
+    expiry_date = Column(Date, nullable=True)
 
     def __repr__(self):
         return f"<InventoryRequestLine {self.request_id} qty={self.quantity}>"

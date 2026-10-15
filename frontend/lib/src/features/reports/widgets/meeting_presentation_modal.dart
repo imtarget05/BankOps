@@ -72,7 +72,8 @@ class MeetingPresentationModal extends StatefulWidget {
   }
 
   @override
-  State<MeetingPresentationModal> createState() => _MeetingPresentationModalState();
+  State<MeetingPresentationModal> createState() =>
+      _MeetingPresentationModalState();
 }
 
 class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
@@ -116,7 +117,7 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
   void _printPdf() {
     ReportShare.printPdf(
       context,
-      filename: 'bao-cao-giao-ban-bankops.pdf',
+      filename: 'bao-cao-van-hanh-kho-tra-sua.pdf',
       build: () => MeetingReportPdf.encode(
         inventoryBuckets: widget.inventoryBuckets,
         cashflowBuckets: widget.cashflowBuckets,
@@ -138,7 +139,8 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+        backgroundColor:
+            theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
         title: Row(
           children: [
             Container(
@@ -149,14 +151,18 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
               ),
               child: const Text(
                 'SLIDE DECK',
-                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Báo Cáo Điều Hành Cuộc Họp Giao Ban · Slide ${_currentSlide + 1}/$_totalSlides',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -193,7 +199,8 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
+          border:
+              Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -211,16 +218,26 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                   width: isSelected ? 24 : 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: isSelected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 );
               }),
             ),
             FilledButton.icon(
-              onPressed: _currentSlide < _totalSlides - 1 ? _nextSlide : () => Navigator.of(context).pop(),
-              icon: Icon(_currentSlide < _totalSlides - 1 ? Icons.arrow_forward : Icons.check, size: 16),
-              label: Text(_currentSlide < _totalSlides - 1 ? 'Tiếp theo' : 'Hoàn thành'),
+              onPressed: _currentSlide < _totalSlides - 1
+                  ? _nextSlide
+                  : () => Navigator.of(context).pop(),
+              icon: Icon(
+                  _currentSlide < _totalSlides - 1
+                      ? Icons.arrow_forward
+                      : Icons.check,
+                  size: 16),
+              label: Text(_currentSlide < _totalSlides - 1
+                  ? 'Tiếp theo'
+                  : 'Hoàn thành'),
             ),
           ],
         ),
@@ -249,10 +266,14 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
     }
     final netInv = totalInbound - totalOutbound;
 
-    final criticalCount = widget.stagnationItems.where((i) => i.severity == 'critical').length;
+    final criticalCount =
+        widget.stagnationItems.where((i) => i.severity == 'critical').length;
     final totalRuns = widget.reconciliations.length;
-    final cleanRuns = widget.reconciliations.where((r) => r.exceptions.isEmpty).length;
-    final matchRate = totalRuns > 0 ? (cleanRuns / totalRuns * 100).toStringAsFixed(0) : '100';
+    final cleanRuns =
+        widget.reconciliations.where((r) => r.exceptions.isEmpty).length;
+    final matchRate = totalRuns > 0
+        ? (cleanRuns / totalRuns * 100).toStringAsFixed(0)
+        : '100';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
@@ -268,8 +289,9 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Tóm tắt số liệu cốt lõi về luân chuyển tiền mặt, kho ấn chỉ và chỉ số kiểm soát phục vụ thảo luận ban giám đốc.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            'Tóm tắt số liệu tồn kho, nhập xuất nguyên liệu và các chỉ số vận hành cửa hàng.',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 24),
           Row(
@@ -279,8 +301,10 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                   context,
                   title: 'DÒNG TIỀN RÒNG (NET)',
                   value: '${netCash >= 0 ? '+' : ''}${_compactMoney(netCash)}',
-                  subtitle: 'Thu ${_compactMoney(totalIn)} · Chi ${_compactMoney(totalOut)}',
-                  color: netCash >= 0 ? statusColors.success : statusColors.danger,
+                  subtitle:
+                      'Thu ${_compactMoney(totalIn)} · Chi ${_compactMoney(totalOut)}',
+                  color:
+                      netCash >= 0 ? statusColors.success : statusColors.danger,
                   icon: Icons.account_balance_wallet_outlined,
                 ),
               ),
@@ -288,9 +312,11 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
               Expanded(
                 child: _bigMetricCard(
                   context,
-                  title: 'LUÂN CHUYỂN ẤN CHỈ',
-                  value: '${netInv >= 0 ? '+' : ''}${AppFormat.quantity(netInv.toStringAsFixed(0))}',
-                  subtitle: 'Nhập ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} · Xuất ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))}',
+                  title: 'LUÂN CHUYỂN NGUYÊN LIỆU',
+                  value:
+                      '${netInv >= 0 ? '+' : ''}${AppFormat.quantity(netInv.toStringAsFixed(0))}',
+                  subtitle:
+                      'Nhập ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} · Xuất ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))}',
                   color: theme.colorScheme.primary,
                   icon: Icons.inventory_2_outlined,
                 ),
@@ -317,7 +343,9 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                   title: 'ĐIỂM NÓNG TỒN ĐỌNG',
                   value: '$criticalCount mặt hàng',
                   subtitle: 'Mặt hàng có thời gian chưa xuất >=90 ngày',
-                  color: criticalCount > 0 ? statusColors.danger : statusColors.success,
+                  color: criticalCount > 0
+                      ? statusColors.danger
+                      : statusColors.success,
                   icon: Icons.warning_amber_rounded,
                 ),
               ),
@@ -331,8 +359,10 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
   // Slide 2: Điểm nóng tồn đọng
   Widget _buildSlide2Stagnation(BuildContext context) {
     final theme = Theme.of(context);
-    final critical = widget.stagnationItems.where((i) => i.severity == 'critical').toList();
-    final stagnant = widget.stagnationItems.where((i) => i.severity == 'stagnant').toList();
+    final critical =
+        widget.stagnationItems.where((i) => i.severity == 'critical').toList();
+    final stagnant =
+        widget.stagnationItems.where((i) => i.severity == 'stagnant').toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
@@ -348,14 +378,16 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Rà soát các loại phôi thẻ, sổ tiết kiệm và ấn chỉ quan trọng không phát sinh giao dịch xuất kho để tránh lãng phí vốn.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            'Rà soát nguyên liệu không phát sinh sử dụng để tránh hết hạn và lãng phí.',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
           if (critical.isEmpty && stagnant.isEmpty)
             Card(
               color: Colors.green.shade50,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
               child: const Padding(
                 padding: EdgeInsets.all(24),
                 child: Row(
@@ -364,8 +396,11 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                     SizedBox(width: 16),
                     Expanded(
                       child: Text(
-                        'Kho ấn chỉ đang luân chuyển rất tích cực! Không có mặt hàng nào ứ đọng trên 60 ngày.',
-                        style: TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.w600),
+                        'Kho nguyên liệu đang vận hành tốt! Không có mặt hàng nào tồn đọng trên 60 ngày.',
+                        style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -375,7 +410,8 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
           else ...[
             Text(
               'Danh sách vật tư tồn đọng mức độ Nghiêm trọng (>=90 ngày) & Tồn đọng (>=60 ngày):',
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Card(
@@ -394,14 +430,16 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                   final isCritical = item.severity == 'critical';
                   return ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: (isCritical ? Colors.red : Colors.orange).withValues(alpha: 0.15),
+                      backgroundColor: (isCritical ? Colors.red : Colors.orange)
+                          .withValues(alpha: 0.15),
                       child: Icon(
                         isCritical ? Icons.error_outline : Icons.warning_amber,
                         color: isCritical ? Colors.red : Colors.orange,
                         size: 20,
                       ),
                     ),
-                    title: Text('${item.name} (${item.sku})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    title: Text('${item.name} (${item.sku})',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
                       item.daysSinceLastIssue != null
                           ? '${item.daysSinceLastIssue} ngày từ lần xuất gần nhất'
@@ -412,7 +450,9 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: isCritical ? Colors.red.shade800 : Colors.orange.shade800,
+                        color: isCritical
+                            ? Colors.red.shade800
+                            : Colors.orange.shade800,
                       ),
                     ),
                   );
@@ -436,7 +476,7 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '3. CHI TIẾT DÒNG TIỀN & CÂN ĐỐI QUỸ TIỀN MẶT',
+            '3. CHI TIẾT NHẬP – XUẤT & CÂN ĐỐI TỒN KHO',
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
               color: theme.colorScheme.primary,
@@ -445,7 +485,8 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
           const SizedBox(height: 6),
           Text(
             'Biến động thu chi tiền mặt theo từng chu kỳ kiểm toán. Bút toán được kiểm soát 4 mắt nghiêm ngặt.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
           if (widget.cashflowBuckets.isEmpty)
@@ -461,17 +502,29 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   columns: const [
-                    DataColumn(label: Text('Chu kỳ', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Thu quỹ (VND)', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Chi quỹ (VND)', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Dòng tiền ròng (Net)', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Số bút toán', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Chu kỳ',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Thu quỹ (VND)',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Chi quỹ (VND)',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Dòng tiền ròng (Net)',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(
+                        label: Text('Số bút toán',
+                            style: TextStyle(fontWeight: FontWeight.bold))),
                   ],
                   rows: widget.cashflowBuckets.map((b) {
                     final net = b.netValue;
                     return DataRow(
                       cells: [
-                        DataCell(Text(b.bucket, style: const TextStyle(fontWeight: FontWeight.w600))),
+                        DataCell(Text(b.bucket,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600))),
                         DataCell(Text(AppFormat.money(b.totalIn))),
                         DataCell(Text(AppFormat.money(b.totalOut))),
                         DataCell(
@@ -479,7 +532,9 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
                             '${net >= 0 ? '+' : ''}${AppFormat.money(b.net)}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: net >= 0 ? statusColors.success : statusColors.danger,
+                              color: net >= 0
+                                  ? statusColors.success
+                                  : statusColors.danger,
                             ),
                           ),
                         ),
@@ -498,7 +553,8 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
   // Slide 4: Kiến nghị & Quyết nghị
   Widget _buildSlide4Actions(BuildContext context) {
     final theme = Theme.of(context);
-    final critical = widget.stagnationItems.where((i) => i.severity == 'critical').toList();
+    final critical =
+        widget.stagnationItems.where((i) => i.severity == 'critical').toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
@@ -515,13 +571,14 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
           const SizedBox(height: 6),
           Text(
             'Đề xuất các giải pháp xử lý cụ thể để Ban Giám đốc và các Trưởng bộ phận biểu quyết thông qua.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 24),
           _actionCard(
             context,
             index: '1',
-            title: 'Kế hoạch xử lý ấn chỉ & hàng tồn kho',
+            title: 'Kế hoạch xử lý nguyên liệu & hàng tồn kho',
             detail: critical.isNotEmpty
                 ? 'Thành lập Hội đồng thanh lý nội bộ xử lý ${critical.length} mặt hàng ứ đọng >=90 ngày để giải phóng không gian lưu kho và giảm chi phí bảo quản.'
                 : 'Tiếp tục rà soát định kỳ hàng tuần, duy trì định mức tồn kho tối thiểu cho các chi nhánh theo kế hoạch kinh doanh.',
@@ -531,16 +588,19 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
             context,
             index: '2',
             title: 'Điều phối thanh khoản & Cân đối quỹ',
-            detail: 'Thực hiện đối soát cuối ngày giữa Sổ cái quỹ tiền mặt và Hòm quỹ vật lý, hạn chế tình trạng lưu giữ tiền mặt vượt định mức bảo hiểm.',
+            detail:
+                'Thực hiện đối soát cuối ngày giữa số liệu phần mềm và kiểm kê thực tế; ưu tiên xử lý chênh lệch và nguyên liệu cận date.',
           ),
           const SizedBox(height: 14),
           _actionCard(
             context,
             index: '3',
             title: 'Siết chặt quy trình kiểm soát 4 mắt (Dual-control)',
-            detail: 'Bắt buộc xác thực Mã PIN Kiểm Soát Viên khi duyệt lệnh giá trị lớn, kiểm tra kỹ chứng từ đối soát trước khi chốt phiên làm việc.',
+            detail:
+                'Bắt buộc xác thực Mã PIN Kiểm Soát Viên khi duyệt lệnh giá trị lớn, kiểm tra kỹ chứng từ đối soát trước khi chốt phiên làm việc.',
           ),
-          if (widget.staffNotes != null && widget.staffNotes!.trim().isNotEmpty) ...[
+          if (widget.staffNotes != null &&
+              widget.staffNotes!.trim().isNotEmpty) ...[
             const SizedBox(height: 14),
             _actionCard(
               context,
@@ -632,16 +692,25 @@ class _MeetingPresentationModalState extends State<MeetingPresentationModal> {
             CircleAvatar(
               radius: 14,
               backgroundColor: theme.colorScheme.primary,
-              child: Text(index, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+              child: Text(index,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold)),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(detail, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, height: 1.4)),
+                  Text(detail,
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.4)),
                 ],
               ),
             ),

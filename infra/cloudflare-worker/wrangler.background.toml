@@ -1,0 +1,25 @@
+# Separate queue consumer. It has no public route and therefore cannot slow
+# down Flutter page loads or be mistaken for the canonical FastAPI API.
+name = "quan-ly-kho-tra-sua-background"
+main = "src/background.ts"
+compatibility_date = "2026-10-15"
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.1
+
+# Create these two Queues in Cloudflare before deploying this consumer:
+#   quan-ly-kho-tra-sua-events
+#   quan-ly-kho-tra-sua-events-dlq
+# A single consumer preserves each queue's ordered, at-least-once semantics.
+[[queues.consumers]]
+queue = "quan-ly-kho-tra-sua-events"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 5
+retry_delay = 60
+dead_letter_queue = "quan-ly-kho-tra-sua-events-dlq"

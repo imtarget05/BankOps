@@ -104,13 +104,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
       );
       if (!proceed) {
         if (mounted) {
-          AppToast.info(context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
+          AppToast.info(
+              context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
         }
         return;
       }
     } else {
       if (mounted) {
-        AppToast.success(context, 'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
+        AppToast.success(context,
+            'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
       }
     }
 
@@ -133,9 +135,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
     );
     final item = ApprovalItem(
       id: r.id,
-      kind: 'Kho ấn chỉ (${r.kind.name})',
+      kind: 'Kho nguyên liệu (${r.kind.name})',
       maker: r.createdByName,
-      impact: '${totalQty.toInt()} ấn chỉ',
+      impact: '${totalQty.toInt()} đơn vị nguyên liệu',
       detail: r.reason,
       status: r.status.name,
     );
@@ -149,13 +151,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
       );
       if (!proceed) {
         if (mounted) {
-          AppToast.info(context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
+          AppToast.info(
+              context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
         }
         return;
       }
     } else {
       if (mounted) {
-        AppToast.success(context, 'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
+        AppToast.success(context,
+            'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
       }
     }
 
@@ -266,7 +270,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
   ];
 
   static const List<String> _cashReasonSuggestions = [
-    'Thu nộp quỹ tiền mặt đầu ca',
+    'Ghi nhận nguyên liệu đầu ca',
     'Chi chi phí vận hành',
     'Chi trả nhà cung cấp',
     'Thanh toán công việc',
@@ -376,7 +380,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     isExpanded: true,
                     initialValue: itemId,
                     decoration: const InputDecoration(
-                      labelText: 'Chủng loại ấn chỉ',
+                      labelText: 'Chủng loại nguyên liệu',
                       border: OutlineInputBorder(),
                     ),
                     items: [
@@ -416,7 +420,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         key: const Key('stock-reason-input'),
                         controller: ctrl,
                         focusNode: focus,
-                                                                                            decoration: const InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Diễn giải / Lý do lập phiếu',
                           hintText: 'Gõ hoặc chọn gợi ý...',
                           border: OutlineInputBorder(),
@@ -500,7 +504,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         builder: (ctx, setDialogState) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Tạo Phiếu Quỹ Tiền Mặt'),
+          title: const Text('Tạo Phiếu Nhập Nguyên Liệu'),
           content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
@@ -621,7 +625,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         key: const Key('cash-reason-input'),
                         controller: ctrl,
                         focusNode: focus,
-                                                                                            decoration: const InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Diễn giải lý do nộp/rút quỹ',
                           hintText: 'Gõ hoặc chọn gợi ý...',
                           border: OutlineInputBorder(),
@@ -727,7 +731,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Khởi tạo phiếu kho ấn chỉ và phiếu quỹ tiền mặt, đệ trình lên hòm thư kiểm soát kép',
+                          'Khởi tạo phiếu nhập, xuất và điều chỉnh nguyên liệu để quản lý phê duyệt',
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
                             fontSize: 13,
@@ -777,39 +781,50 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   children: [
                     FilterChip(
                       selected: _statusFilter == null,
-                      label: Text('Tất cả (${data.stockRequests.length + data.cashRequests.length})'),
+                      label: Text(
+                          'Tất cả (${data.stockRequests.length + data.cashRequests.length})'),
                       onSelected: (_) => setState(() => _statusFilter = null),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
                       selected: _statusFilter == RequestStatus.returned,
-                      avatar: const Icon(Icons.assignment_return_outlined, size: 16, color: Color(0xFFD97706)),
+                      avatar: const Icon(Icons.assignment_return_outlined,
+                          size: 16, color: Color(0xFFD97706)),
                       label: Text(
                         'Cần chỉnh sửa (${data.stockRequests.where((r) => r.status == RequestStatus.returned).length + data.cashRequests.where((r) => r.status == RequestStatus.returned).length})',
                         style: TextStyle(
-                          color: _statusFilter == RequestStatus.returned ? null : const Color(0xFFD97706),
+                          color: _statusFilter == RequestStatus.returned
+                              ? null
+                              : const Color(0xFFD97706),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      onSelected: (_) => setState(() => _statusFilter = RequestStatus.returned),
+                      onSelected: (_) => setState(
+                          () => _statusFilter = RequestStatus.returned),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
                       selected: _statusFilter == RequestStatus.pending,
-                      label: Text('Chờ duyệt (${data.stockRequests.where((r) => r.status == RequestStatus.pending).length + data.cashRequests.where((r) => r.status == RequestStatus.pending).length})'),
-                      onSelected: (_) => setState(() => _statusFilter = RequestStatus.pending),
+                      label: Text(
+                          'Chờ duyệt (${data.stockRequests.where((r) => r.status == RequestStatus.pending).length + data.cashRequests.where((r) => r.status == RequestStatus.pending).length})'),
+                      onSelected: (_) =>
+                          setState(() => _statusFilter = RequestStatus.pending),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
                       selected: _statusFilter == RequestStatus.draft,
-                      label: Text('Bản nháp (${data.stockRequests.where((r) => r.status == RequestStatus.draft).length + data.cashRequests.where((r) => r.status == RequestStatus.draft).length})'),
-                      onSelected: (_) => setState(() => _statusFilter = RequestStatus.draft),
+                      label: Text(
+                          'Bản nháp (${data.stockRequests.where((r) => r.status == RequestStatus.draft).length + data.cashRequests.where((r) => r.status == RequestStatus.draft).length})'),
+                      onSelected: (_) =>
+                          setState(() => _statusFilter = RequestStatus.draft),
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
                       selected: _statusFilter == RequestStatus.posted,
-                      label: Text('Đã ghi sổ (${data.stockRequests.where((r) => r.status == RequestStatus.posted).length + data.cashRequests.where((r) => r.status == RequestStatus.posted).length})'),
-                      onSelected: (_) => setState(() => _statusFilter = RequestStatus.posted),
+                      label: Text(
+                          'Đã ghi sổ (${data.stockRequests.where((r) => r.status == RequestStatus.posted).length + data.cashRequests.where((r) => r.status == RequestStatus.posted).length})'),
+                      onSelected: (_) =>
+                          setState(() => _statusFilter = RequestStatus.posted),
                     ),
                   ],
                 ),
@@ -821,7 +836,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Phiếu Kho Ấn Chỉ (${_statusFilter == null ? data.stockRequests.length : data.stockRequests.where((r) => r.status == _statusFilter).length})',
+                    'Phiếu Kho Nguyên Liệu (${_statusFilter == null ? data.stockRequests.length : data.stockRequests.where((r) => r.status == _statusFilter).length})',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -837,7 +852,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
               const SizedBox(height: 12),
               for (final r in (_statusFilter == null
                   ? data.stockRequests
-                  : data.stockRequests.where((r) => r.status == _statusFilter).toList()))
+                  : data.stockRequests
+                      .where((r) => r.status == _statusFilter)
+                      .toList()))
                 Container(
                   key: Key('stock-request-card-${r.id}'),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -896,25 +913,31 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                               Text(
+                              Text(
                                 'Loại: ${r.kind.label} • Người lập: ${r.createdByName} • Lý do: ${r.reason.isEmpty ? "Xuất nhập kho định kỳ" : r.reason}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              if (r.status == RequestStatus.returned && (r.returnReason?.isNotEmpty ?? false)) ...[
+                              if (r.status == RequestStatus.returned &&
+                                  (r.returnReason?.isNotEmpty ?? false)) ...[
                                 const SizedBox(height: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFFFBEB),
-                                    border: Border.all(color: const Color(0xFFFDE68A)),
+                                    border: Border.all(
+                                        color: const Color(0xFFFDE68A)),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.assignment_return_outlined, size: 16, color: Color(0xFFD97706)),
+                                      const Icon(
+                                          Icons.assignment_return_outlined,
+                                          size: 16,
+                                          color: Color(0xFFD97706)),
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
@@ -963,8 +986,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         else if (r.status == RequestStatus.returned)
                           FilledButton.icon(
                             key: Key('btn-resubmit-stock-${r.id}'),
-                            onPressed:
-                                _busy ? null : () => _submitStock(r.id),
+                            onPressed: _busy ? null : () => _submitStock(r.id),
                             icon: const Icon(Icons.refresh_rounded, size: 16),
                             label: const Text('Gửi duyệt lại'),
                             style: FilledButton.styleFrom(
@@ -986,7 +1008,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Phiếu Quỹ Tiền Mặt (${_statusFilter == null ? data.cashRequests.length : data.cashRequests.where((r) => r.status == _statusFilter).length})',
+                    'Phiếu Điều Chỉnh Kho (${_statusFilter == null ? data.cashRequests.length : data.cashRequests.where((r) => r.status == _statusFilter).length})',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -1002,7 +1024,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
               const SizedBox(height: 12),
               for (final r in (_statusFilter == null
                   ? data.cashRequests
-                  : data.cashRequests.where((r) => r.status == _statusFilter).toList()))
+                  : data.cashRequests
+                      .where((r) => r.status == _statusFilter)
+                      .toList()))
                 Container(
                   key: Key('cash-request-card-${r.id}'),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -1068,18 +1092,24 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              if (r.status == RequestStatus.returned && (r.returnReason?.isNotEmpty ?? false)) ...[
+                              if (r.status == RequestStatus.returned &&
+                                  (r.returnReason?.isNotEmpty ?? false)) ...[
                                 const SizedBox(height: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFFFBEB),
-                                    border: Border.all(color: const Color(0xFFFDE68A)),
+                                    border: Border.all(
+                                        color: const Color(0xFFFDE68A)),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.assignment_return_outlined, size: 16, color: Color(0xFFD97706)),
+                                      const Icon(
+                                          Icons.assignment_return_outlined,
+                                          size: 16,
+                                          color: Color(0xFFD97706)),
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
@@ -1128,8 +1158,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         else if (r.status == RequestStatus.returned)
                           FilledButton.icon(
                             key: Key('btn-resubmit-cash-${r.id}'),
-                            onPressed:
-                                _busy ? null : () => _submitCash(r.id),
+                            onPressed: _busy ? null : () => _submitCash(r.id),
                             icon: const Icon(Icons.refresh_rounded, size: 16),
                             label: const Text('Gửi duyệt lại'),
                             style: FilledButton.styleFrom(

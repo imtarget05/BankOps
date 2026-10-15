@@ -22,7 +22,8 @@ class MeetingReportPdf {
     String? staffNotes,
   }) async {
     final doc = pw.Document();
-    final font = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
+    final font =
+        pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
 
     // Tính tổng dòng tiền
     double totalIn = 0;
@@ -49,21 +50,29 @@ class MeetingReportPdf {
     final netInventory = totalInbound - totalOutbound;
 
     // Phân tầng tồn đọng
-    final critical = stagnationItems.where((i) => i.severity == 'critical').toList();
-    final stagnant = stagnationItems.where((i) => i.severity == 'stagnant').toList();
+    final critical =
+        stagnationItems.where((i) => i.severity == 'critical').toList();
+    final stagnant =
+        stagnationItems.where((i) => i.severity == 'stagnant').toList();
     final watch = stagnationItems.where((i) => i.severity == 'watch').toList();
 
     // Đối soát
     final totalRuns = reconciliations.length;
     final cleanRuns = reconciliations.where((r) => r.exceptions.isEmpty).length;
-    final matchRate = totalRuns > 0 ? (cleanRuns / totalRuns * 100).toStringAsFixed(1) : '100.0';
+    final matchRate = totalRuns > 0
+        ? (cleanRuns / totalRuns * 100).toStringAsFixed(1)
+        : '100.0';
 
     final periodStr = dateRange != null
         ? '${AppFormat.date(dateRange.start)} → ${AppFormat.date(dateRange.end)}'
-        : (granularity == ReportGranularity.daily ? 'Tổng hợp theo ngày' : 'Tổng hợp theo tháng');
+        : (granularity == ReportGranularity.daily
+            ? 'Tổng hợp theo ngày'
+            : 'Tổng hợp theo tháng');
 
     final assessmentStr = staffAssessment ??
-        (critical.isNotEmpty ? 'Cảnh báo rủi ro (Tồn đọng >= 90 ngày)' : 'Vận hành đạt chuẩn');
+        (critical.isNotEmpty
+            ? 'Cảnh báo rủi ro (Tồn đọng >= 90 ngày)'
+            : 'Vận hành đạt chuẩn');
 
     doc.addPage(
       pw.Page(
@@ -73,7 +82,7 @@ class MeetingReportPdf {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            // Header ngân hàng
+            // Header báo cáo kho trà sữa
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -82,7 +91,7 @@ class MeetingReportPdf {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      'NGÂN HÀNG THƯƠNG MẠI MÔ PHỎNG BANKOPS',
+                      'QUẢN LÝ KHO TRÀ SỮA',
                       style: pw.TextStyle(
                         fontSize: 10,
                         fontWeight: pw.FontWeight.bold,
@@ -90,8 +99,9 @@ class MeetingReportPdf {
                       ),
                     ),
                     pw.Text(
-                      'Khối Vận Hành Kho Quỹ & Kiểm Soát Rủi Ro',
-                      style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700),
+                      'Vận hành nhập · xuất · tồn nguyên liệu',
+                      style: const pw.TextStyle(
+                          fontSize: 8.5, color: PdfColors.grey700),
                     ),
                   ],
                 ),
@@ -108,7 +118,8 @@ class MeetingReportPdf {
                     ),
                     pw.Text(
                       'ISO 27001 · DUAL CONTROL',
-                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey600),
                     ),
                   ],
                 ),
@@ -123,7 +134,7 @@ class MeetingReportPdf {
               child: pw.Column(
                 children: [
                   pw.Text(
-                    'BÁO CÁO GIAO BAN VẬN HÀNH & ĐIỀU HÀNH KHO QUỸ',
+                    'BÁO CÁO VẬN HÀNH KHO NGUYÊN LIỆU',
                     style: pw.TextStyle(
                       fontSize: 14,
                       fontWeight: pw.FontWeight.bold,
@@ -133,7 +144,8 @@ class MeetingReportPdf {
                   pw.SizedBox(height: 4),
                   pw.Text(
                     'Kỳ báo cáo: $periodStr · Ngày in: ${AppFormat.dateTime(DateTime.now())}',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    style: const pw.TextStyle(
+                        fontSize: 9, color: PdfColors.grey700),
                   ),
                   pw.SizedBox(height: 2),
                   pw.Text(
@@ -141,7 +153,9 @@ class MeetingReportPdf {
                     style: pw.TextStyle(
                       fontSize: 9.5,
                       fontWeight: pw.FontWeight.bold,
-                      color: critical.isNotEmpty ? PdfColors.red800 : PdfColors.green800,
+                      color: critical.isNotEmpty
+                          ? PdfColors.red800
+                          : PdfColors.green800,
                     ),
                   ),
                 ],
@@ -152,7 +166,10 @@ class MeetingReportPdf {
             // Mục 1: Chỉ số tổng hợp dòng tiền & kho
             pw.Text(
               'I. TỔNG HỢP CHỈ SỐ THANH KHOẢN & VẬN HÀNH KHO',
-              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+              style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue900),
             ),
             pw.SizedBox(height: 6),
             pw.Table(
@@ -177,7 +194,7 @@ class MeetingReportPdf {
                   children: [
                     _cellText('Tổng chi quỹ mô phỏng'),
                     _cellText(AppFormat.money(totalOut.toStringAsFixed(0))),
-                    _cellText('Luân chuyển quỹ tiền mặt'),
+                    _cellText('Điều chỉnh tồn kho'),
                   ],
                 ),
                 pw.TableRow(
@@ -186,36 +203,44 @@ class MeetingReportPdf {
                     _cellText(
                       AppFormat.money(netCash.toStringAsFixed(0)),
                       bold: true,
-                      color: netCash >= 0 ? PdfColors.green900 : PdfColors.red900,
+                      color:
+                          netCash >= 0 ? PdfColors.green900 : PdfColors.red900,
                     ),
-                    _cellText(netCash >= 0 ? 'Thặng dư thanh khoản' : 'Thâm hụt dòng tiền'),
+                    _cellText(netCash >= 0
+                        ? 'Thặng dư thanh khoản'
+                        : 'Thâm hụt dòng tiền'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Nhập kho ấn chỉ & vật tư'),
-                    _cellText('${AppFormat.quantity(totalInbound.toStringAsFixed(0))} đơn vị'),
+                    _cellText('Nhập kho nguyên liệu'),
+                    _cellText(
+                        '${AppFormat.quantity(totalInbound.toStringAsFixed(0))} đơn vị'),
                     _cellText('$totalReceipts phiếu nhập hoàn tất'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Xuất kho ấn chỉ & vật tư'),
-                    _cellText('${AppFormat.quantity(totalOutbound.toStringAsFixed(0))} đơn vị'),
+                    _cellText('Xuất kho / sử dụng nguyên liệu'),
+                    _cellText(
+                        '${AppFormat.quantity(totalOutbound.toStringAsFixed(0))} đơn vị'),
                     _cellText('$totalIssues phiếu xuất hoàn tất'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
                     _cellText('Biến động tồn kho ròng'),
-                    _cellText('${AppFormat.quantity(netInventory.toStringAsFixed(0))} đơn vị', bold: true),
+                    _cellText(
+                        '${AppFormat.quantity(netInventory.toStringAsFixed(0))} đơn vị',
+                        bold: true),
                     _cellText('Chênh lệch nhập - xuất'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
                     _cellText('Tỷ lệ đối soát hoàn hảo'),
-                    _cellText('$matchRate%', bold: true, color: PdfColors.blue900),
+                    _cellText('$matchRate%',
+                        bold: true, color: PdfColors.blue900),
                     _cellText('$cleanRuns/$totalRuns phiên sạch ngoại lệ'),
                   ],
                 ),
@@ -226,12 +251,16 @@ class MeetingReportPdf {
             // Mục 2: Điểm nóng tồn đọng
             pw.Text(
               'II. PHÂN TÍCH RỦI RO & ĐIỂM NÓNG TỒN ĐỌNG VẬT TƯ',
-              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+              style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue900),
             ),
             pw.SizedBox(height: 4),
             pw.Text(
               'Phân tầng: Nghiêm trọng (>=90 ngày): ${critical.length} mặt hàng | Tồn đọng (>=60 ngày): ${stagnant.length} | Cần theo dõi (>=30 ngày): ${watch.length}',
-              style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800),
+              style:
+                  const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800),
             ),
             pw.SizedBox(height: 6),
             if (critical.isEmpty)
@@ -240,22 +269,25 @@ class MeetingReportPdf {
                 decoration: pw.BoxDecoration(
                   color: PdfColors.green50,
                   border: pw.Border.all(color: PdfColors.green200),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(4)),
                 ),
                 child: pw.Text(
-                  'Không có mặt hàng nào ứ đọng trên 90 ngày. Tốc độ luân chuyển ấn chỉ trong ngưỡng an toàn.',
-                  style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.green900),
+                  'Không có nguyên liệu nào tồn đọng trên 90 ngày. Tốc độ sử dụng đang trong ngưỡng an toàn.',
+                  style: const pw.TextStyle(
+                      fontSize: 8.5, color: PdfColors.green900),
                 ),
               )
             else
               pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                border:
+                    pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
                 children: [
                   pw.TableRow(
                     decoration: const pw.BoxDecoration(color: PdfColors.red50),
                     children: [
                       _cellHeader('Mã SKU'),
-                      _cellHeader('Tên ấn chỉ / vật tư'),
+                      _cellHeader('Tên nguyên liệu'),
                       _cellHeader('Số lượng tồn'),
                       _cellHeader('Thời gian chưa xuất'),
                     ],
@@ -281,7 +313,10 @@ class MeetingReportPdf {
             // Mục 3: Trọng tâm thảo luận & Kiến nghị
             pw.Text(
               'III. TRỌNG TÂM THẢO LUẬN & KIẾN NGHỊ CUỘC HỌP GIAO BAN',
-              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+              style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue900),
             ),
             pw.SizedBox(height: 4),
             pw.Bullet(
@@ -297,14 +332,18 @@ class MeetingReportPdf {
               style: const pw.TextStyle(fontSize: 8.5),
             ),
             pw.Bullet(
-              text: 'Tuân thủ nghiêm ngặt quy trình kiểm soát 4 mắt (Maker-Checker) và bảo mật mã PIN kiểm soát.',
+              text:
+                  'Tuân thủ nghiêm ngặt quy trình kiểm soát 4 mắt (Maker-Checker) và bảo mật mã PIN kiểm soát.',
               style: const pw.TextStyle(fontSize: 8.5),
             ),
             if (staffNotes != null && staffNotes.trim().isNotEmpty) ...[
               pw.SizedBox(height: 4),
               pw.Text(
                 'Ý kiến đề xuất bổ sung: ${staffNotes.trim()}',
-                style: pw.TextStyle(fontSize: 8.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey800),
+                style: pw.TextStyle(
+                    fontSize: 8.5,
+                    fontStyle: pw.FontStyle.italic,
+                    color: PdfColors.grey800),
               ),
             ],
 
@@ -314,16 +353,20 @@ class MeetingReportPdf {
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                _signatureBlock('NGƯỜI LẬP BÁO CÁO\n(Maker / Nhân viên)', 'Ký và ghi rõ họ tên'),
-                _signatureBlock('KIỂM SOÁT VIÊN\n(Checker / Phê duyệt)', 'Ký và ghi rõ họ tên'),
-                _signatureBlock('CHỦ TỌA CUỘC HỌP\n(Giám đốc / Trưởng phòng)', 'Ký và đóng dấu xác nhận'),
+                _signatureBlock('NGƯỜI LẬP BÁO CÁO\n(Maker / Nhân viên)',
+                    'Ký và ghi rõ họ tên'),
+                _signatureBlock('KIỂM SOÁT VIÊN\n(Checker / Phê duyệt)',
+                    'Ký và ghi rõ họ tên'),
+                _signatureBlock('CHỦ TỌA CUỘC HỌP\n(Giám đốc / Trưởng phòng)',
+                    'Ký và đóng dấu xác nhận'),
               ],
             ),
             pw.SizedBox(height: 8),
             pw.Center(
               child: pw.Text(
-                'BankOps Enterprise Core System · Báo cáo tự động hóa nghiệp vụ nội bộ',
-                style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey500),
+                'Quản Lý Kho Trà Sữa · Báo cáo vận hành nội bộ',
+                style:
+                    const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey500),
               ),
             ),
           ],
@@ -339,17 +382,24 @@ class MeetingReportPdf {
       padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+        style: pw.TextStyle(
+            fontSize: 8.5,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.blue900),
       ),
     );
   }
 
-  static pw.Widget _cellText(String text, {bool bold = false, PdfColor color = PdfColors.black}) {
+  static pw.Widget _cellText(String text,
+      {bool bold = false, PdfColor color = PdfColors.black}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontSize: 8, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color),
+        style: pw.TextStyle(
+            fontSize: 8,
+            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            color: color),
       ),
     );
   }
@@ -361,7 +411,10 @@ class MeetingReportPdf {
         pw.Text(
           title,
           textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+          style: pw.TextStyle(
+              fontSize: 8.5,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.black),
         ),
         pw.SizedBox(height: 38),
         pw.Text(

@@ -1,8 +1,8 @@
-import 'package:bankops/src/app/app_shell.dart';
-import 'package:bankops/src/core/theme/app_theme.dart';
-import 'package:bankops/src/data/models/dtos.dart';
-import 'package:bankops/src/data/repositories/fake_repository.dart';
-import 'package:bankops/src/features/inventory/inventory_screen.dart';
+import 'package:kho_tra_sua/src/app/app_shell.dart';
+import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
+import 'package:kho_tra_sua/src/data/models/dtos.dart';
+import 'package:kho_tra_sua/src/data/repositories/fake_repository.dart';
+import 'package:kho_tra_sua/src/features/inventory/inventory_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -54,20 +54,27 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Verify Low Stock Alert Banner
-      expect(find.textContaining('Cảnh Báo Thiếu Tồn Kho Định Mức'), findsOneWidget);
+      expect(find.textContaining('Cảnh Báo Thiếu Tồn Kho Định Mức'),
+          findsOneWidget);
       expect(find.text('Bổ Sung Ngay'), findsWidgets);
 
       // 2. Scroll and Verify Stocktake Section
-      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      final stocktakeTitle =
+          find.text('Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch');
+      await tester.scrollUntilVisible(stocktakeTitle, 500,
+          scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
 
-      final stocktakeTitle = find.text('Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch');
       expect(stocktakeTitle, findsOneWidget);
       expect(find.text('Mở Đợt Kiểm Kê Mới'), findsOneWidget);
-      expect(find.text('Nhập Số Đếm'), findsOneWidget);
+      expect(find.text('Quầy kiểm kê theo ca'), findsOneWidget);
+      final countButton = find.text('Nhập Số Đếm').first;
+      await tester.scrollUntilVisible(countButton, 300,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
 
       // 3. Open Stocktake Detail Dialog
-      await tester.tap(find.text('Nhập Số Đếm').first);
+      await tester.tap(countButton);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Kiểm Kê Kho:'), findsOneWidget);
@@ -78,11 +85,13 @@ void main() {
       await tester.tap(find.text('Gửi Duyệt Đối Soát'));
       await tester.pumpAndSettle();
 
-      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      final submittedText = find.textContaining('Chờ Checker duyệt');
+      await tester.scrollUntilVisible(submittedText, 500,
+          scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
 
       // Verify status changed to submitted
-      expect(find.textContaining('Chờ Checker duyệt'), findsOneWidget);
+      expect(submittedText, findsOneWidget);
     },
   );
 }

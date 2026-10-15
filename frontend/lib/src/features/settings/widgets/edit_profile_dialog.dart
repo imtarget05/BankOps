@@ -73,7 +73,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
     final cleanPhone = phone.replaceAll(RegExp(r'[\s\-\.]'), '');
     if (cleanPhone.isNotEmpty &&
         (!RegExp(r'^\+?\d{9,12}$').hasMatch(cleanPhone))) {
-      setState(() => _errorMessage = 'Số điện thoại không hợp lệ (9–11 chữ số).');
+      setState(
+          () => _errorMessage = 'Số điện thoại không hợp lệ (9–11 chữ số).');
       return;
     }
 
@@ -218,7 +219,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                  color:
+                      isDark ? Colors.grey.shade300 : const Color(0xFF334155),
                 ),
               ),
               const SizedBox(height: 6),
@@ -230,8 +232,9 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   prefixIcon: const Icon(Icons.person_outline, size: 20),
                   hintText: 'Nhập họ và tên đầy đủ',
                   filled: true,
-                  fillColor:
-                      isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  fillColor: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
@@ -248,7 +251,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                  color:
+                      isDark ? Colors.grey.shade300 : const Color(0xFF334155),
                 ),
               ),
               const SizedBox(height: 6),
@@ -258,10 +262,11 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.email_outlined, size: 20),
-                  hintText: 'user@bankops.vn',
+                  hintText: 'user@khotrasua.local',
                   filled: true,
-                  fillColor:
-                      isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  fillColor: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
@@ -278,7 +283,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                  color:
+                      isDark ? Colors.grey.shade300 : const Color(0xFF334155),
                 ),
               ),
               const SizedBox(height: 6),
@@ -290,8 +296,9 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   prefixIcon: const Icon(Icons.phone_outlined, size: 20),
                   hintText: '0901 234 567',
                   filled: true,
-                  fillColor:
-                      isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  fillColor: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
@@ -308,7 +315,8 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.grey.shade300 : const Color(0xFF334155),
+                  color:
+                      isDark ? Colors.grey.shade300 : const Color(0xFF334155),
                 ),
               ),
               const SizedBox(height: 6),
@@ -319,8 +327,9 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                   prefixIcon: const Icon(Icons.business_outlined, size: 20),
                   hintText: 'Chi nhánh Bến Thành (Hội sở)',
                   filled: true,
-                  fillColor:
-                      isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  fillColor: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(

@@ -8,8 +8,8 @@
 
 ## Trạng thái triển khai (2026-10-15 — live đã verify)
 
-- Production live: Pages `https://bankops-web.pages.dev` → FastAPI Modal
-  `https://imtarget05--bankops-api-api.us-east.modal.run/api/v1` → Neon Postgres 16
+- Production live: Web `https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev` → FastAPI Modal
+  `https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run/api/v1` → Neon Postgres 16
   (`BankOps`, `ap-southeast-1`). Re-verify 15/10: live/ready 200, login JWT 948,
   6 endpoint nghiệp vụ 200, OpenAPI 101 paths, CORS đúng origin + credentials,
   bundle `main.dart.js` đúng Modal host, 0 ref legacy. Chi tiết: `docs/qa/06-deployment-validation.md`.

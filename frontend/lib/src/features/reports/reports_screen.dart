@@ -56,7 +56,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await RepositoryScope.of(context).runReconciliation(scope: scope);
       _reload();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không thể chạy đối soát: ${friendlyError(error)}')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Không thể chạy đối soát: ${friendlyError(error)}')));
     } finally {
       if (mounted) setState(() => _reconciling = false);
     }
@@ -74,12 +76,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final roles = RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user);
     final canViewReconciliation = roles.isEmpty ||
-        roles.any((role) => const {'approver', 'checker', 'auditor', 'cash_sim_operator'}.contains(role));
+        roles.any((role) => const {
+              'approver',
+              'checker',
+              'auditor',
+              'cash_sim_operator'
+            }.contains(role));
     final results = await Future.wait([
       invFuture,
       cashFuture,
       repo.getStagnation(),
-      canViewReconciliation ? _loadReconciliations(repo) : Future.value(<ReconciliationRun>[]),
+      canViewReconciliation
+          ? _loadReconciliations(repo)
+          : Future.value(<ReconciliationRun>[]),
     ]);
     return _ReportsData(
       inventoryBuckets: results[0] as List<InventoryBucket>,
@@ -89,7 +98,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Future<List<ReconciliationRun>> _loadReconciliations(BankOpsRepository repo) async {
+  Future<List<ReconciliationRun>> _loadReconciliations(
+      BankOpsRepository repo) async {
     try {
       return await repo.getReconciliations();
     } on ApiException catch (error) {
@@ -117,9 +127,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
             );
           }
           final data = snapshot.data!;
-          final roles = RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user);
+          final roles =
+              RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user);
           final canRunReconciliation = roles.isEmpty ||
-              roles.any((role) => const {'approver', 'checker', 'cash_sim_operator'}.contains(role));
+              roles.any((role) => const {
+                    'approver',
+                    'checker',
+                    'cash_sim_operator'
+                  }.contains(role));
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -141,15 +156,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           children: [
                             Text(
                               'Báo cáo & Biểu đồ',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(
                                     fontWeight: FontWeight.bold,
                                   ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               'Trung tâm Báo cáo Điều hành & Đánh giá Giao ban Cuộc họp',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                   ),
                             ),
                           ],
@@ -169,13 +192,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 granularity: _granularity,
                                 dateRange: _dateRange,
                               ),
-                              icon: const Icon(Icons.co_present_outlined, size: 18),
+                              icon: const Icon(Icons.co_present_outlined,
+                                  size: 18),
                               label: const Text('Chế độ Cuộc họp'),
                             ),
                             OutlinedButton.icon(
                               key: const Key('btn-copy-meeting-header'),
                               onPressed: () {
-                                final md = MeetingSummaryFormatter.generateMarkdown(
+                                final md =
+                                    MeetingSummaryFormatter.generateMarkdown(
                                   inventoryBuckets: data.inventoryBuckets,
                                   cashflowBuckets: data.cashflowBuckets,
                                   stagnationItems: data.stagnationItems,
@@ -184,9 +209,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   dateRange: _dateRange,
                                 );
                                 Clipboard.setData(ClipboardData(text: md));
-                                AppToast.success(context, 'Đã sao chép tóm tắt cuộc họp vào Clipboard.');
+                                AppToast.success(context,
+                                    'Đã sao chép tóm tắt cuộc họp vào Clipboard.');
                               },
-                              icon: const Icon(Icons.content_copy_outlined, size: 18),
+                              icon: const Icon(Icons.content_copy_outlined,
+                                  size: 18),
                               label: const Text('Sao chép Tóm tắt'),
                             ),
                             OutlinedButton.icon(
@@ -194,7 +221,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               onPressed: () {
                                 ReportShare.printPdf(
                                   context,
-                                  filename: 'bao-cao-giao-ban-bankops.pdf',
+                                  filename: 'bao-cao-van-hanh-kho-tra-sua.pdf',
                                   build: () => MeetingReportPdf.encode(
                                     inventoryBuckets: data.inventoryBuckets,
                                     cashflowBuckets: data.cashflowBuckets,
@@ -205,7 +232,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                              icon: const Icon(Icons.picture_as_pdf_outlined,
+                                  size: 18),
                               label: const Text('In PDF A4'),
                             ),
                           ],
@@ -242,10 +270,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 isScrollable: true,
                 tabs: [
                   Tab(key: Key('tab-reports-inventory'), text: 'Nhập/Xuất kho'),
-                  Tab(key: Key('tab-reports-cashflow'), text: 'Dòng tiền mô phỏng'),
+                  Tab(
+                      key: Key('tab-reports-cashflow'),
+                      text: 'Dòng tiền mô phỏng'),
                   Tab(key: Key('tab-reports-stagnation'), text: 'Tồn đọng'),
                   Tab(key: Key('tab-reports-reconciliation'), text: 'Đối soát'),
-                  Tab(key: Key('tab-reports-meeting-notes'), text: 'Biên bản Giao ban & Đánh giá'),
+                  Tab(
+                      key: Key('tab-reports-meeting-notes'),
+                      text: 'Biên bản Giao ban & Đánh giá'),
                 ],
               ),
               Expanded(
@@ -298,7 +330,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 }
 
 class _ReconciliationTab extends StatelessWidget {
-  const _ReconciliationTab({required this.runs, required this.canRun, required this.busy, required this.onRun});
+  const _ReconciliationTab(
+      {required this.runs,
+      required this.canRun,
+      required this.busy,
+      required this.onRun});
 
   final List<ReconciliationRun> runs;
   final bool canRun;
@@ -310,18 +346,27 @@ class _ReconciliationTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (canRun) Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Wrap(spacing: 8, children: [
-            OutlinedButton.icon(onPressed: busy ? null : () => onRun('cash'), icon: const Icon(Icons.savings_outlined), label: const Text('Đối soát quỹ')),
-            OutlinedButton.icon(onPressed: busy ? null : () => onRun('inventory'), icon: const Icon(Icons.inventory_2_outlined), label: const Text('Đối soát kho')),
-          ]),
-        ),
-        if (runs.isEmpty) const EmptyView(
-          title: 'Chưa có lượt đối soát',
-          subtitle: 'Chạy đối soát để kiểm tra chênh lệch giữa giao dịch và số dư.',
-          icon: Icons.balance_outlined,
-        ),
+        if (canRun)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Wrap(spacing: 8, children: [
+              OutlinedButton.icon(
+                  onPressed: busy ? null : () => onRun('cash'),
+                  icon: const Icon(Icons.savings_outlined),
+                  label: const Text('Đối soát quỹ')),
+              OutlinedButton.icon(
+                  onPressed: busy ? null : () => onRun('inventory'),
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: const Text('Đối soát kho')),
+            ]),
+          ),
+        if (runs.isEmpty)
+          const EmptyView(
+            title: 'Chưa có lượt đối soát',
+            subtitle:
+                'Chạy đối soát để kiểm tra chênh lệch giữa giao dịch và số dư.',
+            icon: Icons.balance_outlined,
+          ),
         for (final r in runs)
           Card(
             child: ListTile(

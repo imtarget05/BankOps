@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -41,6 +43,32 @@ class AuthService extends ChangeNotifier {
     defaultValue:
         '1070073470852-hc12cgovbt9h7micnu072vpkvigee28u.apps.googleusercontent.com',
   );
+  static const String _offlineSessionKey = 'offline_session_user';
+  static const String _offlineCreatedAtKey = 'offline_created_at';
+
+  /// TTL của phiên offline cục bộ: quá 24h thì discard, không restore.
+  static const Duration kOfflineSessionTtl = Duration(hours: 24);
+
+  /// Cờ test giả lập môi trường prod (release) trong unit test.
+  /// Mặc định bám `kDebugMode`: chỉ bản debug mới chấp nhận token `mock-`
+  /// và map quyền demo local. Prod (release) từ chối mock token.
+  static bool? _mockTokenAllowedOverride;
+
+  /// Test-only override. Setter chỉ có tác dụng khi `kDebugMode`; ở prod
+  /// (release) là no-op (+ assert trong debug) — không cho bật mock ở release.
+  @visibleForTesting
+  static bool? get mockTokenAllowedOverride => _mockTokenAllowedOverride;
+  @visibleForTesting
+  static set mockTokenAllowedOverride(bool? value) {
+    if (!kDebugMode) {
+      assert(false,
+          'mockTokenAllowedOverride is debug-only; ignored in release.');
+      return;
+    }
+    _mockTokenAllowedOverride = value;
+  }
+
+  static bool get allowMockTokens => _mockTokenAllowedOverride ?? kDebugMode;
 
   /// Chuẩn hóa mọi URL gốc về dạng `.../api/v1` (không có dấu `/` cuối).
   static String normalizeApiBaseUrl(String raw) {
@@ -67,7 +95,7 @@ class AuthService extends ChangeNotifier {
     if (env.isNotEmpty) return env;
     if (kIsWeb) {
       if (!kDebugMode) {
-        return 'https://imtarget05--bankops-api-api.us-east.modal.run/api/v1';
+        return 'https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run/api/v1';
       }
       return 'http://localhost:8000/api/v1';
     }
@@ -102,16 +130,29 @@ class AuthService extends ChangeNotifier {
 
   AppUser? _user;
   String? _memoryToken;
+  bool _isOfflineSession = false;
   bool _isLoading = true;
   String? _lastError;
+
+  /// `true` khi offline session vừa bị discard vì backend đã sống lại:
+  /// tài khoản offline chưa tồn tại trên server, UI cần hiện banner/cảnh
+  /// báo yêu cầu đăng nhập lại. Xem [offlineReloginMessage].
+  bool _needsOfflineRelogin = false;
+  String? _offlineReloginMessage;
 
   String get apiBaseUrl => _baseUrl;
   String get googleClientId => _googleClientId;
   bool get isGoogleSignInConfigured =>
       !kIsWeb || _googleClientId.isNotEmpty || _hasCustomGoogleProvider;
   AppUser? get user => _user;
+
+  /// Session cục bộ chỉ dùng dữ liệu mẫu khi API production không phản hồi.
+  /// Nó không có JWT và không được phép chạm dữ liệu máy chủ.
+  bool get isOfflineSession => _isOfflineSession;
   bool get isLoading => _isLoading;
   String? get lastError => _lastError;
+  bool get needsOfflineRelogin => _needsOfflineRelogin;
+  String? get offlineReloginMessage => _offlineReloginMessage;
 
   Future<String?> getAccessToken() async {
     if (_memoryToken != null && _memoryToken!.isNotEmpty) {
@@ -154,11 +195,100 @@ class AuthService extends ChangeNotifier {
     };
   }
 
+  /// Trả `true` khi offline session đã được xử lý dứt điểm (restore thành
+  /// công, hoặc discard kèm cờ đăng nhập lại). Trả `false` khi không còn
+  /// session hợp lệ — caller đi tiếp luồng token online bình thường.
+  /// Không bao giờ ném lỗi ra ngoài.
+  Future<bool> _tryRestoreOfflineSession(String raw) async {
+    try {
+      Map<String, dynamic>? decoded;
+      try {
+        final d = json.decode(raw);
+        if (d is Map<String, dynamic>) decoded = d;
+      } catch (_) {}
+      if (decoded == null) {
+        await _writeStorage(_offlineSessionKey, null);
+        return false;
+      }
+      final createdAt = decoded[_offlineCreatedAtKey];
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (createdAt is int) {
+        if (nowMs - createdAt > kOfflineSessionTtl.inMilliseconds) {
+          // Quá TTL 24h → discard session hết hạn.
+          await _writeStorage(_offlineSessionKey, null);
+          _user = null;
+          _memoryToken = null;
+          _isOfflineSession = false;
+          return false;
+        }
+      } else {
+        // Session cũ chưa có mốc thời gian: đóng dấu hiện tại, coi như mới.
+        decoded[_offlineCreatedAtKey] = nowMs;
+        await _writeStorage(_offlineSessionKey, json.encode(decoded));
+      }
+      if (await _isBackendReachable()) {
+        // Backend đã sống lại nhưng tài khoản offline chưa tồn tại trên
+        // server → discard + báo UI cần đăng nhập lại (KHÔNG sync-engine).
+        await _writeStorage(_offlineSessionKey, null);
+        _user = null;
+        _memoryToken = null;
+        _isOfflineSession = false;
+        _needsOfflineRelogin = true;
+        _offlineReloginMessage =
+            'Máy chủ đã hoạt động trở lại. Tài khoản offline chưa tồn tại trên server — vui lòng đăng nhập lại.';
+        return true;
+      }
+      _user = _userFromJson(decoded);
+      _memoryToken = null;
+      _isOfflineSession = true;
+      _needsOfflineRelogin = false;
+      _offlineReloginMessage = null;
+      return true;
+    } catch (_) {
+      await _writeStorage(_offlineSessionKey, null);
+      return false;
+    }
+  }
+
+  /// Ping/health-check nhẹ: CHỈ 200/401 chứng tỏ backend sống (đúng auth
+  /// endpoint, không phải captive-portal/404/500). Retry tối đa 2 lần
+  /// (delay ngắn) trước khi kết luận dead. Timeout ngắn, tuyệt đối không ném.
+  Future<bool> _isBackendReachable() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final resp = await _http
+            .get(
+              Uri.parse('$_baseUrl/auth/me'),
+              headers: const {'Content-Type': 'application/json'},
+            )
+            .timeout(const Duration(milliseconds: 1500));
+        if (resp.statusCode == 200 || resp.statusCode == 401) return true;
+        if (attempt == 1) return false;
+      } catch (_) {
+        if (attempt == 1) return false;
+      }
+      try {
+        await Future.delayed(const Duration(milliseconds: 200));
+      } catch (_) {}
+    }
+    return false;
+  }
+
   /// Tự đăng nhập khi mở app nếu còn token hợp lệ (qua `GET /api/v1/auth/me`).
+  ///
+  /// Xử lý offline session (`offline-*`, chưa tồn tại trên server):
+  /// - Quá TTL 24h ([kOfflineSessionTtl]) thì discard, đi tiếp luồng token.
+  /// - Còn hạn nhưng backend đã sống lại (ping nhẹ thành công) thì discard
+  ///   + bật cờ [needsOfflineRelogin] để UI hiện banner yêu cầu đăng nhập lại.
+  /// - Backend vẫn chết thì restore offline session như cũ.
   Future<void> tryAutoLogin() async {
     _isLoading = true;
     notifyListeners();
     try {
+      final savedOffline = await _readStorage(_offlineSessionKey);
+      if (savedOffline != null && savedOffline.isNotEmpty) {
+        if (await _tryRestoreOfflineSession(savedOffline)) return;
+      }
       final token = await getAccessToken();
       if (token == null || token.isEmpty) {
         _user = null;
@@ -167,9 +297,11 @@ class AuthService extends ChangeNotifier {
       final resp = await _http.get(
         Uri.parse('$_baseUrl/auth/me'),
         headers: {'Authorization': 'Bearer $token'},
-      );
+      ).timeout(const Duration(seconds: 12));
       if (resp.statusCode == 200) {
         _user = _userFromJson(json.decode(resp.body) as Map<String, dynamic>);
+        _isOfflineSession = false;
+        await _writeStorage(_offlineSessionKey, null);
       } else {
         await _clearLocal();
         _user = null;
@@ -197,8 +329,11 @@ class AuthService extends ChangeNotifier {
           'username': username.trim(),
           'password': password,
         },
-      );
+      ).timeout(const Duration(seconds: 12));
       if (resp.statusCode != 200) {
+        if (_isServiceUnavailable(resp.statusCode)) {
+          return await _activateKnownOfflinePassword(username, password);
+        }
         _lastError = _serverMessage(resp.body);
         notifyListeners();
         return false;
@@ -207,6 +342,10 @@ class AuthService extends ChangeNotifier {
       final accessToken = body['access_token'] as String;
       final refreshToken = body['refresh_token'] as String?;
       _memoryToken = accessToken;
+      _isOfflineSession = false;
+      _needsOfflineRelogin = false;
+      _offlineReloginMessage = null;
+      await _writeStorage(_offlineSessionKey, null);
       await _writeStorage('access_token', accessToken);
       await _writeStorage('refresh_token', refreshToken);
       final u = body['user'] as Map<String, dynamic>;
@@ -214,9 +353,12 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      // Never echo `$_baseUrl` / `$e` here — it leaks the internal API URL.
-      _lastError =
-          'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
+      // CHỈ lỗi mạng/timeout mới được fallback local-mode; lỗi khác
+      // (lập trình, parse, ...) giữ nguyên lỗi, không bao giờ fallback.
+      if (_isNetworkError(e)) {
+        return _activateKnownOfflinePassword(username, password);
+      }
+      _lastError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -235,19 +377,44 @@ class AuthService extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final resp = await _http.post(
-        Uri.parse('$_baseUrl/auth/register'),
-        headers: const {'Content-Type': 'application/json'},
-        body: json.encode({
-          'username': username.trim(),
-          'password': password,
-          'display_name': displayName.trim(),
-          if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
-          if (role != null && role.trim().isNotEmpty) 'role': role.trim(),
-          if (pin != null && pin.trim().isNotEmpty) 'pin': pin.trim(),
-        }),
-      );
+      final resp = await _http
+          .post(
+            Uri.parse('$_baseUrl/auth/register'),
+            headers: const {'Content-Type': 'application/json'},
+            body: json.encode({
+              'username': username.trim(),
+              'password': password,
+              'display_name': displayName.trim(),
+              if (email != null && email.trim().isNotEmpty)
+                'email': email.trim(),
+              if (role != null && role.trim().isNotEmpty) 'role': role.trim(),
+              if (pin != null && pin.trim().isNotEmpty) 'pin': pin.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
       if (resp.statusCode != 200 && resp.statusCode != 201) {
+        if (_isServiceUnavailable(resp.statusCode)) {
+          // Staff-only/demo-ca-trực: CHỈ username trong allowlist
+          // [_offlineDemoUser] mới được fallback offline; username lạ giữ
+          // nguyên lỗi server, KHÔNG tạo phiên offline.
+          if (_offlineDemoUser(username, password) == null) {
+            _lastError =
+                'Không kết nối được máy chủ. Chỉ tài khoản ca trực demo mới có thể mở phiên cục bộ.';
+            _isLoading = false;
+            notifyListeners();
+            return false;
+          }
+          final demoOffline = _offlineDemoUser(username, password)!;
+          return await _activateOfflineSession(
+            AppUser(
+              id: 'offline-${username.trim().toLowerCase()}',
+              username: username.trim(),
+              displayName: displayName.trim(),
+              roles: demoOffline.roles,
+              email: email?.trim(),
+            ),
+          );
+        }
         _lastError = _serverMessage(resp.body);
         _isLoading = false;
         notifyListeners();
@@ -257,6 +424,10 @@ class AuthService extends ChangeNotifier {
       final accessToken = body['access_token'] as String;
       final refreshToken = body['refresh_token'] as String?;
       _memoryToken = accessToken;
+      _isOfflineSession = false;
+      _needsOfflineRelogin = false;
+      _offlineReloginMessage = null;
+      await _writeStorage(_offlineSessionKey, null);
       await _writeStorage('access_token', accessToken);
       await _writeStorage('refresh_token', refreshToken);
       final u = body['user'] as Map<String, dynamic>;
@@ -265,9 +436,29 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      // Never echo `$_baseUrl` / `$e` here — it leaks the internal API URL.
-      _lastError =
-          'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
+      // CHỈ lỗi mạng/timeout mới được tạo phiên offline, và CHỈ cho
+      // username trong allowlist [_offlineDemoUser]; username lạ giữ nguyên
+      // lỗi, không bao giờ fallback.
+      if (_isNetworkError(e)) {
+        final demoUser = _offlineDemoUser(username, password);
+        if (demoUser == null) {
+          _lastError =
+              'Không kết nối được máy chủ. Chỉ tài khoản ca trực demo mới có thể mở phiên cục bộ.';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+        return await _activateOfflineSession(
+          AppUser(
+            id: 'offline-${username.trim().toLowerCase()}',
+            username: username.trim(),
+            displayName: displayName.trim(),
+            roles: demoUser.roles,
+            email: email?.trim(),
+          ),
+        );
+      }
+      _lastError = friendlyError(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -281,6 +472,8 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
     String? idToken = customToken;
     String? googleAccessToken;
+    String? googleEmail;
+    String? googleDisplayName;
     if (idToken == null) {
       if (!isGoogleSignInConfigured) {
         _lastError =
@@ -304,6 +497,8 @@ class AuthService extends ChangeNotifier {
             notifyListeners();
             return false; // user bấm cancel, không phải lỗi
           }
+          googleEmail = account.email;
+          googleDisplayName = account.displayName;
           final auth = await account.authentication;
           idToken = auth.idToken;
           googleAccessToken = auth.accessToken;
@@ -348,12 +543,24 @@ class AuthService extends ChangeNotifier {
         payload['access_token'] = googleAccessToken;
       }
 
-      final resp = await _http.post(
-        Uri.parse('$_baseUrl/auth/google'),
-        headers: const {'Content-Type': 'application/json'},
-        body: json.encode(payload),
-      );
+      final resp = await _http
+          .post(
+            Uri.parse('$_baseUrl/auth/google'),
+            headers: const {'Content-Type': 'application/json'},
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 12));
       if (resp.statusCode != 200) {
+        if (_isServiceUnavailable(resp.statusCode)) {
+          final offlineUser = _offlineGoogleUser(
+            idToken,
+            email: googleEmail,
+            displayName: googleDisplayName,
+          );
+          if (offlineUser != null) {
+            return await _activateOfflineSession(offlineUser);
+          }
+        }
         _lastError = _serverMessage(resp.body);
         notifyListeners();
         return false;
@@ -362,6 +569,10 @@ class AuthService extends ChangeNotifier {
       final accessToken = body['access_token'] as String;
       final refreshToken = body['refresh_token'] as String?;
       _memoryToken = accessToken;
+      _isOfflineSession = false;
+      _needsOfflineRelogin = false;
+      _offlineReloginMessage = null;
+      await _writeStorage(_offlineSessionKey, null);
       await _writeStorage('access_token', accessToken);
       await _writeStorage('refresh_token', refreshToken);
       final u = body['user'] as Map<String, dynamic>;
@@ -372,7 +583,23 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _lastError = 'Đăng nhập thất bại: ${friendlyError(e)}';
+      // CHỈ lỗi mạng/timeout mới được fallback offline Google;
+      // lỗi khác giữ nguyên lỗi, không bao giờ fallback.
+      if (_isNetworkError(e)) {
+        final offlineUser = _offlineGoogleUser(
+          idToken,
+          email: googleEmail,
+          displayName: googleDisplayName,
+        );
+        if (offlineUser != null) {
+          return await _activateOfflineSession(offlineUser);
+        }
+        _lastError =
+            'Không kết nối được máy chủ để hoàn tất phiên Google. Vui lòng thử lại khi có mạng.';
+        notifyListeners();
+        return false;
+      }
+      _lastError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -396,6 +623,9 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _clearLocal() async {
     _memoryToken = null;
+    _isOfflineSession = false;
+    _needsOfflineRelogin = false;
+    _offlineReloginMessage = null;
     if (_googleIdTokenProvider != null &&
         _storage == const FlutterSecureStorage()) {
       return;
@@ -404,9 +634,146 @@ class AuthService extends ChangeNotifier {
       await Future.wait([
         _storage.delete(key: 'access_token'),
         _storage.delete(key: 'refresh_token'),
+        _storage.delete(key: _offlineSessionKey),
       ]).timeout(const Duration(milliseconds: 250));
     } catch (_) {}
   }
+
+  /// CHỈ HTTP 5xx mới được coi là "API chết" để fallback local-mode.
+  /// 401/403/404/429 KHÔNG bao giờ fallback — giữ nguyên message/lỗi server.
+  static bool _isServiceUnavailable(int statusCode) => statusCode >= 500;
+
+  /// `true` khi lỗi thuộc nhóm mạng/timeout (được phép fallback offline).
+  /// CHỈ kiểm tra kiểu: TimeoutException, SocketException,
+  /// http.ClientException. Không match chuỗi message (tránh false-positive).
+  /// Mọi lỗi khác (kể cả FormatException) đều không được fallback.
+  static bool _isNetworkError(Object error) {
+    if (error is TimeoutException) return true;
+    if (error is SocketException) return true;
+    if (error is http.ClientException) return true;
+    return false;
+  }
+
+  /// UI gọi khi user bấm "Đăng nhập lại" trên banner offline-relogin:
+  /// xóa cờ để quay lại form đăng nhập bình thường.
+  void clearOfflineReloginFlag() {
+    if (!_needsOfflineRelogin && _offlineReloginMessage == null) return;
+    _needsOfflineRelogin = false;
+    _offlineReloginMessage = null;
+    notifyListeners();
+  }
+
+  Future<bool> _activateKnownOfflinePassword(
+    String username,
+    String password,
+  ) async {
+    final offlineUser = _offlineDemoUser(username, password);
+    if (offlineUser != null) return _activateOfflineSession(offlineUser);
+    _lastError =
+        'Không kết nối được máy chủ. Chỉ tài khoản ca trực demo mới có thể mở phiên cục bộ.';
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> _activateOfflineSession(AppUser offlineUser) async {
+    _memoryToken = null;
+    _isOfflineSession = true;
+    _user = offlineUser;
+    _lastError = null;
+    _isLoading = false;
+    _needsOfflineRelogin = false;
+    _offlineReloginMessage = null;
+    await _writeStorage(
+        _offlineSessionKey, json.encode(_userToJson(offlineUser)));
+    notifyListeners();
+    return true;
+  }
+
+  AppUser? _offlineGoogleUser(
+    String? token, {
+    String? email,
+    String? displayName,
+  }) {
+    if (token != null && token.startsWith('mock-')) {
+      // Token mock- chỉ có ở bản debug (test nội bộ). Prod (release) từ chối.
+      if (!allowMockTokens) return null;
+      final payload = token.substring('mock-'.length);
+      final mockEmail = payload.split(':').first.toLowerCase();
+      if (mockEmail.contains('manager') || mockEmail.contains('checker')) {
+        return _offlineDemoUser('manager_demo', 'DemoPass123!');
+      }
+      if (mockEmail.contains('afternoon')) {
+        return _offlineDemoUser('staff_afternoon', 'DemoPass123!');
+      }
+      if (mockEmail.contains('split')) {
+        return _offlineDemoUser('staff_split', 'DemoPass123!');
+      }
+      return _offlineDemoUser('staff_morning', 'DemoPass123!');
+    }
+    if (email == null || email.trim().isEmpty) return null;
+    final safeUsername =
+        email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    return AppUser(
+      id: 'offline-google-$safeUsername',
+      username: safeUsername,
+      displayName: displayName?.trim().isNotEmpty == true
+          ? displayName!.trim()
+          : email.trim(),
+      roles: const ['staff'],
+      email: email.trim(),
+    );
+  }
+
+  AppUser? _offlineDemoUser(String username, String password) {
+    if (password != 'DemoPass123!') return null;
+    switch (username.trim().toLowerCase()) {
+      case 'staff_morning':
+      case 'demo_maker':
+        return const AppUser(
+          id: 'offline-staff-morning',
+          username: 'staff_morning',
+          displayName: 'Nguyễn Thị Mai (Pha Chế Ca Sáng)',
+          roles: ['staff'],
+        );
+      case 'staff_afternoon':
+        return const AppUser(
+          id: 'offline-staff-afternoon',
+          username: 'staff_afternoon',
+          displayName: 'Lê Hoàng Nam (Pha Chế Ca Chiều)',
+          roles: ['staff'],
+        );
+      case 'staff_split':
+        return const AppUser(
+          id: 'offline-staff-split',
+          username: 'staff_split',
+          displayName: 'Phạm Minh Tuấn (Pha Chế Ca Lỡ)',
+          roles: ['staff'],
+        );
+      case 'manager_demo':
+      case 'demo_checker':
+        return const AppUser(
+          id: 'offline-manager',
+          username: 'manager_demo',
+          displayName: 'Trần Văn Quản Lý (Chủ Quán)',
+          roles: ['admin', 'inventory_manager', 'approver'],
+        );
+      default:
+        return null;
+    }
+  }
+
+  Map<String, dynamic> _userToJson(AppUser user) => {
+        'id': user.id,
+        'username': user.username,
+        'display_name': user.displayName,
+        'roles': user.roles,
+        'capabilities': user.capabilities,
+        _offlineCreatedAtKey: DateTime.now().millisecondsSinceEpoch,
+        if (user.email != null) 'email': user.email,
+        if (user.phoneNumber != null) 'phone_number': user.phoneNumber,
+        if (user.branch != null) 'branch': user.branch,
+        if (user.employeeCode != null) 'employee_code': user.employeeCode,
+      };
 
   String _serverMessage(String body) {
     try {

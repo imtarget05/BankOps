@@ -29,7 +29,7 @@ class AppUser {
 
   String get effectiveEmail => (email != null && email!.trim().isNotEmpty)
       ? email!.trim()
-      : '$username@bankops.vn';
+      : '$username@khotrasua.local';
 
   String get effectivePhone =>
       (phoneNumber != null && phoneNumber!.trim().isNotEmpty)
@@ -259,7 +259,7 @@ class AssetRecord {
   final String? assignee;
 }
 
-/// Nhật ký vòng đời và bàn giao ấn chỉ.
+/// Nhật ký vòng đời và bàn giao nguyên liệu.
 class AssetLogItem {
   const AssetLogItem({
     required this.id,
@@ -594,7 +594,7 @@ class AiRiskAssessment {
   }
 }
 
-/// Tổ chức chi nhánh ngân hàng.
+/// Cửa hàng / điểm vận hành.
 class BranchDto {
   const BranchDto({
     required this.id,
@@ -690,7 +690,7 @@ class ScopeGrantDto {
   }
 }
 
-/// Nhân viên ngân hàng được quản trị bởi Admin IAM.
+/// Nhân viên cửa hàng được quản trị bởi Quản lý.
 class EmployeeUserDto {
   const EmployeeUserDto({
     required this.id,

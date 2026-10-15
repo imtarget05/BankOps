@@ -1,7 +1,7 @@
-import 'package:bankops/src/app/app_shell.dart';
-import 'package:bankops/src/core/theme/app_theme.dart';
-import 'package:bankops/src/core/widgets/global_search.dart';
-import 'package:bankops/src/data/repositories/fake_repository.dart';
+import 'package:kho_tra_sua/src/app/app_shell.dart';
+import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
+import 'package:kho_tra_sua/src/core/widgets/global_search.dart';
+import 'package:kho_tra_sua/src/data/repositories/fake_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -184,7 +184,7 @@ flutter RadioGroup, `90a6327` snapshot). Không động production.
 
 | Check | Result |
 |-------|--------|
-| `modal deploy infra/modal/tea_inventory_api.py` (hoặc `bankops_api.py`) | ✅ Không đổi mã — URL giữ nguyên `https://imtarget05--bankops-api-api.us-east.modal.run` |
+| `modal deploy infra/modal/tea_inventory_api.py` (hoặc `bankops_api.py`) | ✅ App `quan-ly-kho-tra-sua` — URL `https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run` |
 | `GET /health/live` (Modal, cold start) | ✅ 200 `{"status":"alive"}` |
 | `GET /health/ready` | ✅ 200 `database: ready` (Neon đã migrate) |
 | `GET /api/v1/openapi.json` | ✅ 200 |

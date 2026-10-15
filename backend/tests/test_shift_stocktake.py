@@ -1,5 +1,6 @@
 """Shift stock-count workflow from the tea-shop SRS."""
 import uuid
+from datetime import date, timedelta
 
 DEMO_PASSWORD = "DemoPass123!"
 
@@ -24,8 +25,9 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
     locations = client.get("/inventory/locations", headers=headers).json()["locations"]
     items = client.get("/inventory/items", headers=headers).json()["items"]
 
-    # Use unique business date so repeated test runs don't conflict on unique shift/date
-    unique_date = f"2026-11-{(int(uuid.uuid4().hex[:4], 16) % 28) + 1:02d}"
+    # Unique far-future business date: guard blocks a second OPEN shift per
+    # (location, date, shift), so today/near dates collide across runs.
+    unique_date = (date(2027, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
     opened = client.post(
         "/inventory/stocktakes",
         headers=_idempotent(headers),
@@ -38,15 +40,20 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
     assert opened.status_code == 201, opened.text
     assert opened.json()["shift_code"] == "morning"
 
+    st_id = opened.json()["id"]
+    # SRS §3.3: staff only enters used/count; opening is seeded by the system.
+    seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=headers).json()["lines"]
+    opening = float(
+        next(l for l in seeded if l["item_id"] == items[0]["id"])["opening_qty"]
+    )
+
     updated = client.put(
-        f"/inventory/stocktakes/{opened.json()['id']}/lines",
+        f"/inventory/stocktakes/{st_id}/lines",
         headers=_idempotent(headers),
         json={
             "lines": [
                 {
                     "item_id": items[0]["id"],
-                    "opening_qty": "50",
-                    "received_qty": "20",
                     "used_qty": "25",
                     "counted_qty": "43",
                 }
@@ -55,5 +62,6 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
     )
     assert updated.status_code == 200, updated.text
     line = next(line for line in updated.json()["lines"] if line["item_id"] == items[0]["id"])
-    assert line["theoretical_qty"] == "45"
-    assert line["variance"] == "-2"
+    theoretical = opening - 25
+    assert float(line["theoretical_qty"]) == theoretical
+    assert float(line["variance"]) == 43 - theoretical

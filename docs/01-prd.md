@@ -1,45 +1,48 @@
 # 01 — PRD và phạm vi
 
+> **Domain hiện tại (pilot 10/2026):** Ứng dụng quản lý Nhập–Xuất–Tồn cho quán trà sữa
+> theo [SRS_QUAN_LY_KHO_TRA_SUA.md](SRS_QUAN_LY_KHO_TRA_SUA.md). Module Quỹ/Tích hợp/Đối soát
+> (di sản core-banking) được **ẩn khỏi UI** nhưng giữ nguyên backend để rollback.
+
 ## Mục tiêu
 
-Nhân viên theo dõi kho vật tư/tài sản và quỹ mô phỏng trên điện thoại, web, desktop; tạo yêu cầu, duyệt hai người, xem tiến trình đồng bộ và lịch sử hoạt động. Demo phải dễ thao tác khi di chuyển nhưng không cho phép giao dịch tiền thật.
+Nhân viên pha chế/trưởng ca và quản lý theo dõi nguyên liệu theo từng ca làm việc trên mobile/tablet và web; mở ca, ghi nhận nhập hàng, nhập tiêu hao, chốt tồn cuối ca, nhận cảnh báo tồn thấp/cận date; quản lý duyệt Phiếu nhập và Phiếu điều chỉnh kiểm kê. Không có giao dịch tiền thật.
 
 ## Vai trò và nhu cầu
 
 | Vai trò | Nhu cầu |
 |---|---|
-| Staff (maker) | xem tồn, tạo đề nghị nhập/xuất/chuyển vật tư; tạo phiếu thu/chi quỹ mô phỏng; xem trạng thái |
-| Approver (checker) | xem hàng chờ, kiểm tra chi tiết, duyệt/từ chối với lý do; không duyệt phiếu mình tạo |
-| Inventory manager | quản lý danh mục vật tư/tài sản và kiểm kê/đối soát kho |
-| Cash simulation operator | đối soát ledger quỹ mô phỏng, xem sai lệch, tạo đề nghị điều chỉnh |
-| Integration admin | thiết lập connector sandbox, mapping, lịch, chạy thử và xem lỗi |
-| Auditor | xem audit, báo cáo, export dữ liệu demo ở chế độ chỉ đọc |
-| System admin | quản lý người dùng demo và cấu hình; không vượt maker/checker invariant |
+| Nhân viên/Trưởng ca (staff) | đăng nhập quầy, mở ca theo kho/ngày, ghi nhận hàng nhập trong ca, nhập `Sử dụng` + `Kiểm kê thực tế`, chốt ca, báo cáo hư hỏng, tạo Phiếu điều chỉnh kiểm kê |
+| Quản lý (admin/manager) | danh mục nguyên liệu 5 nhóm + Min/Max, duyệt Phiếu nhập/điều chỉnh, cảnh báo tồn thấp & cận date, báo cáo xuất–nhập–tồn, Top tiêu hao, lịch sử chốt ca theo nhân viên |
+| Auditor | xem audit, báo cáo chỉ đọc |
 
 ## Luồng chính
 
-1. Đăng nhập demo → dashboard theo quyền → activity center.
-2. Tạo phiếu kho → lưu draft → submit → người khác duyệt → post stock movement → tồn cập nhật.
-3. Tạo phiếu thu/chi quỹ mô phỏng → submit → người khác duyệt → post balanced journal → báo cáo quỹ cập nhật.
-4. Kết nối Sheets sandbox → test kết nối → preview import → xác nhận mapping → chạy job → theo dõi progress → kết quả staging; chỉ tạo draft sau xác nhận thủ công.
-5. Đối soát: snapshot dự kiến từ ledger/movements so với read model; sai lệch tạo exception để xử lý, không tự sửa.
+1. Trưởng ca sáng mở Ca Sáng (07:30–15:00) → tồn đầu tự lấy từ tồn cuối ngày trước.
+2. Trong ca: ghi nhận hàng nhập (lô + HSD + đơn giá) → cộng vào cột Nhập hàng.
+3. Kết thúc ca: nhập `Sử dụng` → hệ thống tính `Còn lại = (Tồn đầu + Nhập) − Sử dụng` → nhập `Kiểm thực tế` → hệ thống tính `Độ lệch`.
+4. Chốt ca → ca bị khóa; bàn giao Ca Chiều (15:00–23:00) tự mang tồn đầu từ thực tế ca sáng; Ca Lỡ (07:30–18:00) ghi nhận độc lập.
+5. Tồn cuối ≤ Min → đỏ + cảnh báo; HSD ≤ 7 ngày → vàng/đỏ; lệch ≠ 0 → báo động ngay trên màn hình.
+6. Sửa số liệu đã chốt chỉ qua Phiếu điều chỉnh kiểm kê do Quản lý duyệt.
 
 ## Yêu cầu chức năng MVP
 
-- Danh mục location, vật tư SKU, tài sản serial; tạo phiếu kho, phê duyệt, sổ movement, tồn theo location.
-- Quỹ mô phỏng: cashbox, phiếu thu/chi, approval, journal kép, số dư và đối soát.
-- Dashboard, search/filter, activity feed, job progress, thông báo lỗi có thể thử lại.
-- RBAC, audit append-only, export CSV demo, idempotency cho POST/approve.
-- Integration hub: Google Sheets import/export dữ liệu demo, Apps Script/webhook sandbox, Excel/CSV upload qua staging.
+- Danh mục 5 nhóm nguyên liệu (Trà, Bột & Sữa, Topping, Syrup & Mứt, Bao bì); SKU, đơn vị, quy cách; Min/Max theo từng kho.
+- Phiếu nhập: NCC, thời điểm nhận, đơn giá + thành tiền, số lô, HSD (validate HSD ≥ ngày nhận).
+- Kiểm kê 3 ca: 1 ca/kho/ngày; chống mở trùng (409 `SHIFT_ALREADY_OPEN`); khóa sau chốt (409 `STOCKTAKE_LOCKED`).
+- Cảnh báo: tồn thấp `qty <= Min`, cận date theo lô, chênh lệch ca; sự kiện outbox + SSE cho màn quản lý.
+- Báo cáo: xuất–nhập–tồn ngày/tuần/tháng, Top tiêu hao, lịch sử chốt ca theo nhân viên.
+- RBAC 2 nhóm vai trò, audit append-only, idempotency cho approve, maker ≠ checker.
+- Offline: nhập liệu/chốt ca lưu cục bộ + outbox đồng bộ (kế hoạch Phase 6).
 
 ## Chất lượng và giới hạn
 
-- Responsive tại 360, 768, 1280 px; thao tác chính bằng bàn phím trên desktop/web.
-- API p95 mục tiêu <500 ms cho đọc thông thường trên dữ liệu demo; job dài chạy nền.
-- Mỗi thay đổi có trace ID; job có trạng thái và phần trăm chỉ khi biết tổng công việc.
-- Không đưa secret ra client/log, không cache dữ liệu nhạy cảm tùy tiện, không nhúng token connector vào app.
-- Mốc tải thử nghiệm: 100 người dùng đồng thời, 100k movement, 100k journal; đo và điều chỉnh trước triển khai rộng.
+- Responsive 360 / 768 / 1280 px; nút chạm ≥ 48dp tại quầy.
+- API p95 < 500 ms cho đọc thông thường trên dữ liệu demo.
+- Mọi thay đổi có trace ID; mọi write có audit + outbox cùng transaction.
+- Không secret ra client/log; dữ liệu demo là mô phỏng.
 
 ## Chỉ số chấp nhận
 
-100% nghiệp vụ thay đổi tồn/số dư được duyệt khác người và tạo đúng một movement/journal; retry không nhân đôi; đối soát xác định được mọi sai lệch cố ý trong test; các luồng chính chạy trên Android, iOS simulator, web và một desktop target.
+100% thay đổi tồn được duyệt khác người và ghi đúng một movement; ca chốt không sửa được ngoài phiếu điều chỉnh; mở trùng ca bị chặn; retry không nhân đôi; tồn thấp/cận date hiển thị đúng ngưỡng; luồng chính chạy trên iOS simulator và web.
+

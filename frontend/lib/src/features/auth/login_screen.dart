@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -22,6 +23,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _usernameFocus = FocusNode();
   bool _busy = false;
   bool _obscurePassword = true;
 
@@ -29,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
+    _usernameFocus.dispose();
     super.dispose();
   }
 
@@ -71,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loginWithGoogleMock([String? roleName, String? email]) async {
+    if (!kDebugMode) return; // Prod (release) không cho phép mock token.
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -142,11 +146,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ],
             ),
-            action: SnackBarAction(
-              label: 'Thử Google Demo',
-              textColor: const Color(0xFFFDE047),
-              onPressed: () => _loginWithGoogleMock(),
-            ),
+            action: kDebugMode
+                ? SnackBarAction(
+                    label: 'Thử Google Demo',
+                    textColor: const Color(0xFFFDE047),
+                    onPressed: () => _loginWithGoogleMock(),
+                  )
+                : null,
           ),
         );
       }
@@ -172,11 +178,13 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-          action: SnackBarAction(
-            label: 'Thử Google Demo',
-            textColor: const Color(0xFFFDE047),
-            onPressed: () => _loginWithGoogleMock(),
-          ),
+          action: kDebugMode
+              ? SnackBarAction(
+                  label: 'Thử Google Demo',
+                  textColor: const Color(0xFFFDE047),
+                  onPressed: () => _loginWithGoogleMock(),
+                )
+              : null,
         ),
       );
     } finally {
@@ -557,9 +565,72 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         const SizedBox(height: 20),
+        // Banner cảnh báo khi offline session bị discard vì backend sống lại:
+        // tài khoản offline chưa tồn tại trên server, cần đăng nhập lại.
+        if (auth.needsOfflineRelogin)
+          Container(
+            key: const Key('login-relogin-banner'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: Color(0xFFB45309), size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        auth.offlineReloginMessage ??
+                            'Máy chủ đã hoạt động trở lại. Vui lòng đăng nhập lại.',
+                        style: const TextStyle(
+                          color: Color(0xFF92400E),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextButton(
+                        key: const Key('login-relogin-btn'),
+                        onPressed: () {
+                          auth.clearOfflineReloginFlag();
+                          _usernameFocus.requestFocus();
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor: const Color(0xFF0F4C3A),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Đăng nhập lại',
+                          style: TextStyle(
+                              fontSize: 12.5, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (auth.needsOfflineRelogin) const SizedBox(height: 12),
         TextField(
           key: const Key('login-username-field'),
           controller: _usernameCtrl,
+          focusNode: _usernameFocus,
           enabled: !_busy,
           decoration: InputDecoration(
             labelText: 'Tài khoản nhân viên / Quản lý',
@@ -638,62 +709,72 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Quick shift accounts
-        Row(
-          children: [
-            Expanded(child: Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6))),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text(
-                'TÀI KHOẢN CA TRỰC (DEMO)',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  fontSize: 10,
-                  color: theme.colorScheme.onSurfaceVariant,
+        // Quick shift accounts — CHỈ bản debug. Prod (release) ẩn toàn bộ
+        // để không lộ tài khoản/mật khẩu demo hardcode (DemoPass123!).
+        if (kDebugMode)
+          Row(
+            children: [
+              Expanded(
+                  child: Divider(
+                      color: theme.colorScheme.outlineVariant
+                          .withValues(alpha: 0.6))),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  'TÀI KHOẢN CA TRỰC (DEMO)',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-            Expanded(child: Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6))),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.center,
-          children: [
-            _buildShiftChip(
-              key: const Key('login-shift-morning-chip'),
-              icon: Icons.wb_sunny_outlined,
-              label: 'Ca Sáng (07:30 - 15:00)',
-              color: const Color(0xFF059669),
-              onTap: () => _loginWithPassword('staff_morning', 'DemoPass123!'),
-            ),
-            _buildShiftChip(
-              key: const Key('login-shift-afternoon-chip'),
-              icon: Icons.nights_stay_outlined,
-              label: 'Ca Chiều (15:00 - 23:00)',
-              color: const Color(0xFFD97706),
-              onTap: () => _loginWithPassword('staff_afternoon', 'DemoPass123!'),
-            ),
-            _buildShiftChip(
-              key: const Key('login-shift-split-chip'),
-              icon: Icons.access_time_outlined,
-              label: 'Ca Lỡ (07:30 - 18:00)',
-              color: const Color(0xFF0284C7),
-              onTap: () => _loginWithPassword('staff_split', 'DemoPass123!'),
-            ),
-            _buildShiftChip(
-              key: const Key('login-shift-manager-chip'),
-              icon: Icons.admin_panel_settings_outlined,
-              label: 'Chủ Quán / Quản Lý',
-              color: const Color(0xFF7C3AED),
-              onTap: () => _loginWithPassword('manager_demo', 'DemoPass123!'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
+              Expanded(
+                  child: Divider(
+                      color: theme.colorScheme.outlineVariant
+                          .withValues(alpha: 0.6))),
+            ],
+          ),
+        if (kDebugMode) const SizedBox(height: 10),
+        if (kDebugMode)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              _buildShiftChip(
+                key: const Key('login-shift-morning-chip'),
+                icon: Icons.wb_sunny_outlined,
+                label: 'Ca Sáng (07:30 - 15:00)',
+                color: const Color(0xFF059669),
+                onTap: () => _loginWithPassword('staff_morning', 'DemoPass123!'),
+              ),
+              _buildShiftChip(
+                key: const Key('login-shift-afternoon-chip'),
+                icon: Icons.nights_stay_outlined,
+                label: 'Ca Chiều (15:00 - 23:00)',
+                color: const Color(0xFFD97706),
+                onTap: () =>
+                    _loginWithPassword('staff_afternoon', 'DemoPass123!'),
+              ),
+              _buildShiftChip(
+                key: const Key('login-shift-split-chip'),
+                icon: Icons.access_time_outlined,
+                label: 'Ca Lỡ (07:30 - 18:00)',
+                color: const Color(0xFF0284C7),
+                onTap: () => _loginWithPassword('staff_split', 'DemoPass123!'),
+              ),
+              _buildShiftChip(
+                key: const Key('login-shift-manager-chip'),
+                icon: Icons.admin_panel_settings_outlined,
+                label: 'Chủ Quán / Quản Lý',
+                color: const Color(0xFF7C3AED),
+                onTap: () => _loginWithPassword('manager_demo', 'DemoPass123!'),
+              ),
+            ],
+          ),
+        if (kDebugMode) const SizedBox(height: 16),
 
         Row(
           children: [

@@ -1,3 +1,5 @@
 sku,location_code,quantity,source_row_key
-DEMO-PAPER-A4,DEMO-HN,10,template-001
-DEMO-LAPTOP,DEMO-HCM,2,template-002
+TRA-DEN-SO9,BAR-MAIN,20,template-001
+BOT-BEO-BONE,BAR-MAIN,10,template-002
+DEMO-PAPER-A4,DEMO-HN,10,template-003
+DEMO-LAPTOP,DEMO-HCM,2,template-004

@@ -11,18 +11,20 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   X-XSS-Protection: 1; mode=block
 
-# Entrypoint scripts & HTML: no-cache so deployed updates load immediately
+# Entrypoint scripts & HTML: always revalidate deployments, but allow the
+# browser/Cloudflare to retain a local copy and answer with a small 304.
+# `no-store` forced every visit to redownload the 4.6 MB Flutter bundle.
 /index.html
-  Cache-Control: no-cache, no-store, must-revalidate
+  Cache-Control: no-cache, must-revalidate
 
 /flutter_service_worker.js
-  Cache-Control: no-cache, no-store, must-revalidate
+  Cache-Control: no-cache, must-revalidate
 
 /flutter_bootstrap.js
-  Cache-Control: no-cache, no-store, must-revalidate
+  Cache-Control: no-cache, must-revalidate
 
 /main.dart.js
-  Cache-Control: no-cache, no-store, must-revalidate
+  Cache-Control: no-cache, must-revalidate
 
 # Cache Flutter static assets lâu (hash trong tên file)
 /assets/*

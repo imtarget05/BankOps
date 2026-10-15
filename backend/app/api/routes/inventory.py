@@ -139,6 +139,63 @@ def _format_qty(val) -> str | None:
     return s
 
 
+# Khung giờ 3 ca quầy trà sữa (SRS §3.3): Sáng 07:30–15:00,
+# Chiều 15:00–23:00, Lỡ ngày 07:30–18:00. Ca Lỡ ghi nhận độc lập,
+# không thay thế chuỗi bàn giao Sáng → Chiều.
+_SHIFT_WINDOWS = {
+    "morning": ("Ca Sáng", "07:30", "15:00"),
+    "afternoon": ("Ca Chiều", "15:00", "23:00"),
+    "split": ("Ca Lỡ ngày", "07:30", "18:00"),
+}
+_SHIFT_ORDER = {"morning": 0, "split": 1, "afternoon": 2}
+
+
+def _hanoi_today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+    except Exception:
+        return datetime.now(UTC).date()
+
+
+def _parse_day(raw, field: str = "business_date") -> date | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError:
+        raise AppError(422, "INVALID_DATE", f"{field} phải theo định dạng YYYY-MM-DD") from None
+
+
+def _parse_expiry(raw) -> date | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError:
+        raise AppError(422, "INVALID_EXPIRY", "expiry_date phải theo định dạng YYYY-MM-DD") from None
+
+
+def _parse_money(raw, field: str = "unit_price") -> Decimal | None:
+    if raw in (None, ""):
+        return None
+    try:
+        val = Decimal(str(raw))
+    except (InvalidOperation, ValueError, TypeError):
+        raise AppError(422, "INVALID_PRICE", f"{field} không hợp lệ: {raw!r}") from None
+    if val < 0:
+        raise AppError(422, "NEGATIVE_PRICE", f"{field} không được âm")
+    return val
+
+
+def _line_total(qty: Decimal, price: Decimal | None) -> str | None:
+    if price is None:
+        return None
+    total = (qty * price).quantize(Decimal("0.01"))
+    return str(total)
+
+
 def _item_out(item: Item) -> dict:
     """Return the ingredient catalog representation used by all item APIs."""
     return {
@@ -219,6 +276,10 @@ async def _load_lines(db: AsyncSession, request_id) -> list:
             "quantity": str(r.quantity),
             "direction": getattr(r, "direction", "increase"),
             "serial": r.serial,
+            "unit_price": str(r.unit_price) if r.unit_price is not None else None,
+            "line_total": _line_total(r.quantity, r.unit_price),
+            "lot_no": getattr(r, "lot_no", None),
+            "expiry_date": r.expiry_date.isoformat() if getattr(r, "expiry_date", None) else None,
         }
         for r in rows
     ]
@@ -495,7 +556,7 @@ async def create_item(
     if not sku:
         raise AppError(422, "MISSING_SKU", "SKU không được để trống")
     if not name:
-        raise AppError(422, "MISSING_NAME", "Tên vật tư/ấn chỉ không được để trống")
+        raise AppError(422, "MISSING_NAME", "Tên nguyên liệu không được để trống")
     existing = (await db.execute(select(Item).where(Item.sku == sku))).scalars().first()
     if existing:
         raise AppError(409, "DUPLICATE_SKU", f"SKU {sku} đã tồn tại")
@@ -842,6 +903,8 @@ async def create_request(
         source_id=src,
         dest_id=dst,
         reason=payload.get("reason"),
+        supplier=str(payload.get("supplier", "")).strip() or None,
+        received_at=_now(),
         version=1,
     )
     db.add(req)
@@ -850,6 +913,7 @@ async def create_request(
     lines_in = payload.get("lines") or []
     if not isinstance(lines_in, list):
         raise AppError(422, "INVALID_LINES", "lines phải là danh sách")
+    receipt_day = _hanoi_today()
     for ln in lines_in:
         if not isinstance(ln, dict):
             raise AppError(422, "INVALID_LINES", f"line không hợp lệ: {ln!r}")
@@ -873,10 +937,18 @@ async def create_request(
                 "Chỉ phiếu adjustment mới có direction=decrease",
             )
         serial = str(ln["serial"]).strip() if ln.get("serial") else None
+        # Phiếu nhập trà sữa (SRS §3.2): NCC, đơn giá/thành tiền,
+        # số lô và HSD. HSD không được trước ngày nhận.
+        unit_price = _parse_money(ln.get("unit_price")) if kind == "receipt" else None
+        lot_no = str(ln.get("lot_no", "")).strip() or None
+        expiry = _parse_expiry(ln.get("expiry_date")) if kind == "receipt" else None
+        if kind == "receipt" and expiry is not None and expiry < receipt_day:
+            raise AppError(422, "EXPIRED_LOT", f"Lô {lot_no or ''} đã hết hạn ngày {expiry.isoformat()}")
         db.add(
             InventoryRequestLine(
                 id=uuid.uuid4(), request_id=req.id, item_id=item_id,
                 quantity=qty, direction=direction, serial=serial,
+                unit_price=unit_price, lot_no=lot_no, expiry_date=expiry,
             )
         )
     await _audit(db, user.id, "inventory.request.created", req, {"status": None})
@@ -1438,7 +1510,7 @@ async def get_asset_history(
     except (ValueError, AttributeError):
         asset = (await db.execute(select(Asset).where(Asset.serial == str(asset_id)))).scalars().first()
     if not asset:
-        raise AppError(404, "ASSET_NOT_FOUND", "Không tìm thấy ấn chỉ")
+        raise AppError(404, "ASSET_NOT_FOUND", "Không tìm thấy nguyên liệu")
     aid = asset.id
 
     logs = (
@@ -1511,7 +1583,7 @@ async def handover_asset(
         asset_stmt = select(Asset).where(Asset.serial == str(asset_id).strip())
     asset = (await db.execute(asset_stmt.with_for_update())).scalars().first()
     if not asset:
-        raise AppError(404, "ASSET_NOT_FOUND", "Không tìm thấy ấn chỉ")
+        raise AppError(404, "ASSET_NOT_FOUND", "Không tìm thấy nguyên liệu")
 
     to_location_id = (
         _uuid(payload["to_location_id"], "to_location_id")
@@ -1548,7 +1620,7 @@ async def handover_asset(
     raw_notes = payload.get("notes")
     if raw_notes is not None and not isinstance(raw_notes, str):
         raise AppError(422, "INVALID_NOTES", "notes phải là chuỗi")
-    notes = raw_notes.strip() if isinstance(raw_notes, str) else "Bàn giao ấn chỉ nội bộ"
+    notes = raw_notes.strip() if isinstance(raw_notes, str) else "Bàn giao nguyên liệu nội bộ"
     if len(notes) > 1024:
         raise AppError(422, "INVALID_NOTES", "notes không được quá 1024 ký tự")
 
@@ -1593,6 +1665,89 @@ async def handover_asset(
 # --------------------------------------------------------------------------
 # Stock Levels & Low Stock Alerts
 # --------------------------------------------------------------------------
+@router.get("/inventory/low-stock-alerts")
+async def low_stock_alerts(
+    location_id: str | None = None,
+    current_user=Depends(require_any_capability("inventory:view_balances", "inventory:manage_catalog")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cảnh báo tồn thấp trà sữa (SRS §3.4): tồn cuối <= Min → đỏ, cần đặt hàng."""
+    stmt = (
+        select(Balance, StockLevel, Item, Location)
+        .join(StockLevel, (StockLevel.location_id == Balance.location_id) & (StockLevel.item_id == Balance.item_id))
+        .join(Item, Item.id == Balance.item_id)
+        .join(Location, Location.id == Balance.location_id)
+    )
+    if location_id:
+        lid = _uuid(location_id, "location_id")
+        stmt = stmt.where(Balance.location_id == lid)
+    rows = (await db.execute(stmt)).all()
+    alerts = []
+    for bal, lvl, item, loc in rows:
+        qty, minimum = Decimal(str(bal.quantity)), Decimal(str(lvl.min_qty))
+        if qty <= minimum:
+            alerts.append(
+                {
+                    "location_id": str(loc.id),
+                    "location_code": loc.code,
+                    "location_name": loc.name,
+                    "item_id": str(item.id),
+                    "sku": item.sku,
+                    "item_name": item.name,
+                    "unit": item.unit,
+                    "quantity": _format_qty(bal.quantity),
+                    "min_qty": _format_qty(lvl.min_qty),
+                    "severity": "critical",
+                    "message": f"{item.name} tại {loc.name} còn {_format_qty(bal.quantity)} {item.unit} (Min {_format_qty(lvl.min_qty)}) — cần đặt hàng",
+                }
+            )
+    alerts.sort(key=lambda a: (a["location_code"], a["sku"]))
+    return {"alerts": alerts, "count": len(alerts), "rule": "quantity <= min_qty"}
+
+
+@router.get("/inventory/expiry-alerts")
+async def expiry_alerts(
+    days: int = 7,
+    current_user=Depends(require_any_capability("inventory:view_balances", "inventory:manage_catalog")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cảnh báo cận date (SRS §3.4): vàng khi sắp hết HSD, đỏ khi hết trong ngày/quá hạn."""
+    if days < 0 or days > 365:
+        raise AppError(422, "INVALID_DAYS", "days phải trong 0..365")
+    today = _hanoi_today()
+    stmt = (
+        select(InventoryRequestLine, InventoryRequest, Item)
+        .join(InventoryRequest, InventoryRequest.id == InventoryRequestLine.request_id)
+        .join(Item, Item.id == InventoryRequestLine.item_id)
+        .where(
+            InventoryRequest.kind == "receipt",
+            InventoryRequest.status == "posted",
+            InventoryRequestLine.expiry_date.is_not(None),
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+    alerts = []
+    for line, req, item in rows:
+        delta = (line.expiry_date - today).days
+        if delta <= days:
+            alerts.append(
+                {
+                    "item_id": str(item.id),
+                    "sku": item.sku,
+                    "item_name": item.name,
+                    "unit": item.unit,
+                    "lot_no": line.lot_no,
+                    "expiry_date": line.expiry_date.isoformat(),
+                    "days_left": delta,
+                    "quantity": _format_qty(line.quantity),
+                    "severity": "critical" if delta <= 0 else ("watch" if delta > 3 else "warning"),
+                    "message": f"Lô {line.lot_no or '?'} {item.name} HSD {line.expiry_date.isoformat()} (còn {delta} ngày)",
+                }
+            )
+    alerts.sort(key=lambda a: (a["days_left"], a["sku"]))
+    return {"alerts": alerts, "count": len(alerts), "today": today.isoformat(), "window_days": days}
+
+
 @router.put("/inventory/stock-levels")
 async def put_stock_level(
     payload: dict,
@@ -1774,12 +1929,20 @@ async def create_stocktake(
     shift_code = str(payload.get("shift_code") or "").strip().lower() or None
     if shift_code not in (None, "morning", "afternoon", "split"):
         raise AppError(422, "INVALID_SHIFT", "shift_code phải là morning, afternoon hoặc split")
-    business_date = None
-    if payload.get("business_date"):
-        try:
-            business_date = date.fromisoformat(str(payload["business_date"]))
-        except ValueError:
-            raise AppError(422, "INVALID_DATE", "business_date phải theo định dạng YYYY-MM-DD") from None
+    business_date = _parse_day(payload.get("business_date")) or _hanoi_today()
+    # Chống mở trùng ca đang mở (SRS §3.3): 1 ca/location/ngày.
+    existing_open = (
+        await db.execute(
+            select(Stocktake.id).where(
+                Stocktake.location_id == location_id,
+                Stocktake.business_date == business_date,
+                Stocktake.shift_code == shift_code,
+                Stocktake.status == "open",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_open is not None:
+        raise AppError(409, "SHIFT_ALREADY_OPEN", "Ca này đã mở, không được mở trùng")
     st = Stocktake(
         id=uuid.uuid4(),
         location_id=location_id,
@@ -1790,9 +1953,53 @@ async def create_stocktake(
         business_date=business_date,
     )
     db.add(st)
+    await db.flush()
+    # Tồn đầu ca kế thừa số thực tế đã chốt của ca bàn giao trước:
+    # Sáng ← tồn cuối ngày hôm trước; Chiều ← Sáng cùng ngày; Lỡ ← độc lập
+    # nhưng vẫn khởi tạo từ tồn gần nhất để giảm nhập tay.
+    items = (await db.execute(select(Item).where(Item.active == True))).scalars().all()  # noqa: E712
+    prev_counted: dict[str, Decimal] = {}
+    if shift_code in ("morning", "afternoon"):
+        prev_stmt = select(Stocktake).where(
+            Stocktake.location_id == location_id,
+            Stocktake.status.in_(["submitted", "closed"]),
+        )
+        if shift_code == "morning":
+            prev_stmt = prev_stmt.where(Stocktake.business_date < business_date)
+        else:
+            prev_stmt = prev_stmt.where(
+                Stocktake.business_date == business_date,
+                Stocktake.shift_code == "morning",
+            )
+        prev = (
+            await db.execute(
+                prev_stmt.order_by(Stocktake.business_date.desc(), Stocktake.created_at.desc()).limit(1)
+            )
+        ).scalars().first()
+        if prev is not None:
+            prev_lines = (
+                await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == prev.id))
+            ).scalars().all()
+            prev_counted = {str(l.item_id): Decimal(str(l.counted_qty)) for l in prev_lines}
+    balances = (
+        await db.execute(select(Balance).where(Balance.location_id == location_id))
+    ).scalars().all()
+    bal_map = {str(b.item_id): Decimal(str(b.quantity)) for b in balances}
+    for item in items:
+        opening = prev_counted.get(str(item.id), bal_map.get(str(item.id), _ZERO))
+        db.add(
+            StocktakeLine(
+                id=uuid.uuid4(), stocktake_id=st.id, item_id=item.id,
+                book_qty=opening, opening_qty=opening,
+                received_qty=_ZERO, used_qty=_ZERO,
+                theoretical_qty=opening, counted_qty=opening,
+                variance=_ZERO,
+            )
+        )
     await db.commit()
     await db.refresh(st)
 
+    shift_label = _SHIFT_WINDOWS.get(shift_code, ("Kiểm kê", "", ""))[0] if shift_code else "Kiểm kê"
     body = {
         "id": str(st.id),
         "location_id": str(st.location_id),
@@ -1800,6 +2007,7 @@ async def create_stocktake(
         "note": st.note,
         "maker_id": str(st.maker_id),
         "shift_code": st.shift_code,
+        "shift_label": shift_label,
         "business_date": st.business_date.isoformat() if st.business_date else None,
         "created_at": st.created_at.isoformat() if st.created_at else None,
     }
@@ -1893,7 +2101,7 @@ async def update_stocktake_lines(
     if not st:
         raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
     if st.status != "open":
-        raise AppError(409, "STATE_CONFLICT", f"Không thể sửa dòng khi đợt kiểm kê ở trạng thái {st.status}")
+        raise AppError(409, "STOCKTAKE_LOCKED", f"Ca đã {st.status}, không được sửa — phải tạo Phiếu điều chỉnh kiểm kê")
     if str(st.maker_id) != str(user.id):
         raise AppError(403, "FORBIDDEN", "Chỉ maker mới được cập nhật dòng kiểm kê của mình")
 
@@ -1923,9 +2131,16 @@ async def update_stocktake_lines(
         ).scalars().first()
 
         if existing_line:
+            # SRS §3.3: nhân viên chỉ nhập Sử dụng + Kiểm thực tế;
+            # Tồn đầu/Nhập do hệ thống giữ, Còn lại + Lệch tự tính.
+            # Giao diện ca hiển thị cả ba thành phần công thức. Khi client gửi
+            # số liệu mở ca/nhập hàng (ví dụ ca được bàn giao thủ công), ghi
+            # nhận chúng; nếu không gửi thì giữ số hệ thống đã khởi tạo.
             opening_qty = _qty(row.get("opening_qty", existing_line.opening_qty))
             received_qty = _qty(row.get("received_qty", existing_line.received_qty))
             used_qty = _qty(row.get("used_qty", existing_line.used_qty))
+            if used_qty < 0:
+                raise AppError(422, "NEGATIVE_USED", "Sử dụng trong ca không được âm")
             theoretical_qty = opening_qty + received_qty - used_qty
             existing_line.book_qty = theoretical_qty if st.shift_code else book_qty
             existing_line.opening_qty = opening_qty

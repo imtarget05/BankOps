@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:bankops/src/data/models/dtos.dart';
-import 'package:bankops/src/data/repositories/http_bankops_repository.dart';
-import 'package:bankops/src/features/auth/auth_service.dart';
-import 'package:bankops/src/features/auth/login_screen.dart';
+import 'package:kho_tra_sua/src/data/models/dtos.dart';
+import 'package:kho_tra_sua/src/data/repositories/http_bankops_repository.dart';
+import 'package:kho_tra_sua/src/features/auth/auth_service.dart';
+import 'package:kho_tra_sua/src/features/auth/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;

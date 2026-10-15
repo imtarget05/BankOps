@@ -4,3 +4,13 @@ compatibility_date = "2026-10-15"
 [assets]
 directory = "../../frontend/build/worker-assets"
 not_found_handling = "single-page-application"
+
+# Observability for the public Flutter asset Worker.  Sampling keeps the
+# production signal useful without recording every static-asset request.
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.25
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.05

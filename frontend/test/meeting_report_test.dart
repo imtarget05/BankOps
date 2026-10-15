@@ -1,11 +1,11 @@
-import 'package:bankops/src/app/app_shell.dart';
-import 'package:bankops/src/core/theme/app_theme.dart';
-import 'package:bankops/src/data/models/dtos.dart';
-import 'package:bankops/src/data/repositories/fake_repository.dart';
-import 'package:bankops/src/features/reports/reports_filter.dart';
-import 'package:bankops/src/features/reports/reports_screen.dart';
-import 'package:bankops/src/features/reports/widgets/meeting_report_pdf.dart';
-import 'package:bankops/src/features/reports/widgets/meeting_summary_formatter.dart';
+import 'package:kho_tra_sua/src/app/app_shell.dart';
+import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
+import 'package:kho_tra_sua/src/data/models/dtos.dart';
+import 'package:kho_tra_sua/src/data/repositories/fake_repository.dart';
+import 'package:kho_tra_sua/src/features/reports/reports_filter.dart';
+import 'package:kho_tra_sua/src/features/reports/reports_screen.dart';
+import 'package:kho_tra_sua/src/features/reports/widgets/meeting_report_pdf.dart';
+import 'package:kho_tra_sua/src/features/reports/widgets/meeting_summary_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,7 +13,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Meeting Summary & PDF Unit Tests', () {
-    test('MeetingSummaryFormatter produces structured markdown with all sections', () {
+    test(
+        'MeetingSummaryFormatter produces structured markdown with all sections',
+        () {
       final md = MeetingSummaryFormatter.generateMarkdown(
         inventoryBuckets: [
           const InventoryBucket(
@@ -57,9 +59,9 @@ void main() {
         staffNotes: 'Kiến nghị xuất 50 cuốn sổ cho chi nhánh.',
       );
 
-      expect(md, contains('BÁO CÁO GIAO BAN VẬN HÀNH & ĐIỀU HÀNH BANKOPS'));
+      expect(md, contains('BÁO CÁO VẬN HÀNH QUẢN LÝ KHO TRÀ SỮA'));
       expect(md, contains('1. DÒNG TIỀN & THANH KHOẢN'));
-      expect(md, contains('2. VẬN HÀNH KHO ẤN CHỈ'));
+      expect(md, contains('2. VẬN HÀNH KHO NGUYÊN LIỆU'));
       expect(md, contains('3. ĐIỂM NÓNG TỒN ĐỌNG'));
       expect(md, contains('4. KIỂM SOÁT ĐỐI SOÁT'));
       expect(md, contains('5. TRỌNG TÂM THẢO LUẬN'));
@@ -68,7 +70,8 @@ void main() {
       expect(md, contains('Kiến nghị xuất 50 cuốn sổ'));
     });
 
-    test('MeetingReportPdf.encode generates non-empty A4 PDF document', () async {
+    test('MeetingReportPdf.encode generates non-empty A4 PDF document',
+        () async {
       final bytes = await MeetingReportPdf.encode(
         inventoryBuckets: [
           const InventoryBucket(
@@ -117,7 +120,9 @@ void main() {
   });
 
   group('ReportsScreen Executive Meeting UI Tests', () {
-    testWidgets('Renders Executive KPI Deck and allows entering presentation mode', (tester) async {
+    testWidgets(
+        'Renders Executive KPI Deck and allows entering presentation mode',
+        (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -138,7 +143,8 @@ void main() {
       expect(find.text('Báo cáo & Biểu đồ'), findsOneWidget);
       expect(find.byKey(const Key('btn-meeting-mode-header')), findsOneWidget);
       expect(find.byKey(const Key('btn-copy-meeting-header')), findsOneWidget);
-      expect(find.byKey(const Key('btn-print-meeting-pdf-header')), findsOneWidget);
+      expect(find.byKey(const Key('btn-print-meeting-pdf-header')),
+          findsOneWidget);
 
       // Check 4 Executive KPI cards
       expect(find.byKey(const Key('kpi-cash-liquidity')), findsOneWidget);
@@ -150,14 +156,19 @@ void main() {
       await tester.tap(find.byKey(const Key('btn-meeting-mode-header')));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Báo Cáo Điều Hành Cuộc Họp Giao Ban · Slide 1/4'), findsOneWidget);
-      expect(find.text('1. TỔNG QUAN TÌNH HÌNH VẬN HÀNH TRONG KỲ'), findsOneWidget);
+      expect(
+          find.textContaining(
+              'Báo Cáo Điều Hành Cuộc Họp Giao Ban · Slide 1/4'),
+          findsOneWidget);
+      expect(find.text('1. TỔNG QUAN TÌNH HÌNH VẬN HÀNH TRONG KỲ'),
+          findsOneWidget);
 
       // Navigate to Slide 2
       await tester.tap(find.text('Tiếp theo'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Slide 2/4'), findsOneWidget);
-      expect(find.text('2. PHÂN TÍCH HÀNG TỒN ĐỌNG & RỦI RO LỖI THỜI'), findsOneWidget);
+      expect(find.text('2. PHÂN TÍCH HÀNG TỒN ĐỌNG & RỦI RO LỖI THỜI'),
+          findsOneWidget);
 
       // Close presentation dialog
       await tester.tap(find.byIcon(Icons.close));
@@ -167,9 +178,12 @@ void main() {
       await tester.tap(find.byKey(const Key('tab-reports-meeting-notes')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Bàn Làm Việc Giao Ban & Chuẩn Bị Cuộc Họp'), findsOneWidget);
-      expect(find.text('1. ĐÁNH GIÁ TRẠNG THÁI VẬN HÀNH (STAFF ASSESSMENT)'), findsOneWidget);
-      expect(find.textContaining('TRỌNG TÂM PHÁT BIỂU & KIẾN NGHỊ CUỘC HỌP'), findsOneWidget);
+      expect(find.text('Bàn Làm Việc Giao Ban & Chuẩn Bị Cuộc Họp'),
+          findsOneWidget);
+      expect(find.text('1. ĐÁNH GIÁ TRẠNG THÁI VẬN HÀNH (STAFF ASSESSMENT)'),
+          findsOneWidget);
+      expect(find.textContaining('TRỌNG TÂM PHÁT BIỂU & KIẾN NGHỊ CUỘC HỌP'),
+          findsOneWidget);
     });
   });
 }

@@ -100,7 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Cảnh Báo Vận Hành: ${data.lowStockAlerts.length} mặt hàng ấn chỉ đang thiếu hụt tồn kho định mức',
+                                  'Cảnh báo vận hành: ${data.lowStockAlerts.length} nguyên liệu đang thấp hơn định mức an toàn',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
@@ -194,6 +194,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCashboxDistribution(BuildContext context, DashboardData data) {
+    // Pilot trà sữa: ẩn card phân bổ quỹ khỏi dashboard quản lý.
+    // Giữ nguyên hàm để dễ bật lại khi phục vụ module Cash.
+    return const SizedBox.shrink();
+
+    // ignore: dead_code
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -249,7 +254,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Cơ cấu & Phân bổ Tồn Quỹ Tiền Mặt',
+                            'Cơ cấu & phân bổ tồn nguyên liệu',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
@@ -511,7 +516,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _actionButton(
                     context,
                     icon: Icons.savings_outlined,
-                    label: 'Lập phiếu Quỹ tiền mặt',
+                    label: 'Lập phiếu nhập nguyên liệu',
                     color: const Color(0xFF059669),
                     tabIndex: 3,
                   ),
@@ -623,7 +628,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'Danh mục Ấn chỉ & Trạng thái tồn kho',
+                  'Danh mục nguyên liệu & trạng thái tồn kho',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -1244,7 +1249,7 @@ class SummaryCard extends StatelessWidget {
             context,
             key: const Key('kpi-cash-card'),
             tabIndex: 2,
-            title: 'TỔNG TỒN QUỸ TIỀN MẶT',
+            title: 'TỔNG TỒN NGUYÊN LIỆU',
             value: data.cashboxes.isEmpty
                 ? '—'
                 : AppFormat.money(totalCashAmount.toStringAsFixed(0)),
@@ -1263,7 +1268,7 @@ class SummaryCard extends StatelessWidget {
             context,
             key: const Key('kpi-stock-card'),
             tabIndex: 1,
-            title: 'ẤN CHỈ & PHÔI TỒN KHO',
+            title: 'NGUYÊN LIỆU TỒN KHO',
             value: data.items.isEmpty || data.locations.isEmpty
                 ? '—'
                 : '${AppFormat.intFormat(totalStockQty.round())} phôi',
@@ -1605,7 +1610,7 @@ class DashboardKpiGrid extends StatelessWidget {
       const _KpiTile(
           'Bản ghi tồn kho', Icons.checklist_rounded, Color(0xFF059669)),
       const _KpiTile(
-          'Mã ấn chỉ Serial', Icons.qr_code_rounded, Color(0xFF7C3AED)),
+          'Mã nguyên liệu', Icons.qr_code_rounded, Color(0xFF7C3AED)),
       const _KpiTile(
           'Phiếu yêu cầu', Icons.receipt_long_rounded, Color(0xFFEA580C)),
       canApprove

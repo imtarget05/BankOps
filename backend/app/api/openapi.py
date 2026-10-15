@@ -9,9 +9,9 @@ def custom_openapi(app):
     from fastapi.openapi.utils import get_openapi
 
     openapi_schema = get_openapi(
-        title="BankOps API",
+        title="Quản Lý Kho Trà Sữa API",
         version="0.1.0",
-        description="BankOps API - Inventory and Cash Simulation System (Demo). All data is simulated.",
+        description="API quản lý nhập, xuất và tồn nguyên vật liệu quán trà sữa.",
         routes=app.routes,
     )
 

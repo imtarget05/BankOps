@@ -26,7 +26,9 @@ class ChatRequest(BaseModel):
 class RequestAssessmentInput(BaseModel):
     model_config = ConfigDict(extra='ignore', str_strip_whitespace=True)
     request_id: str
-    kind: Literal['cash', 'inventory', 'quỹ', 'kho'] = 'cash'
+    # Cash/kho giữ để tương thích module cash còn lưu hành; receipt/issue/
+    # transfer/adjustment là loại phiếu kho theo SRS trà sữa.
+    kind: Literal['cash', 'inventory', 'quỹ', 'kho', 'receipt', 'issue', 'transfer', 'adjustment'] = 'cash'
     amount_or_qty: str = '0'
     maker: str = 'Maker'
     reason: str = ''

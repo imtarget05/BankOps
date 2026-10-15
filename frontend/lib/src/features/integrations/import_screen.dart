@@ -111,11 +111,11 @@ class _ImportScreenState extends State<ImportScreen> {
     final repo = RepositoryScope.of(context);
     final csv = includeInvalidRow
         ? 'sku,location_code,quantity,source_row_key\n'
-            'DEMO-PAPER-A4,DEMO-HN,10,sample-ok-1\n'
-            'INVALID-SKU,DEMO-HN,-5,sample-bad-2\n'
+            'TRA-DEN-SO9,BAR-MAIN,10,sample-ok-1\n'
+            'INVALID-SKU,BAR-MAIN,-5,sample-bad-2\n'
         : 'sku,location_code,quantity,source_row_key\n'
-            'DEMO-PAPER-A4,DEMO-HN,10,sample-ok-1\n'
-            'DEMO-LAPTOP,DEMO-HCM,2,sample-ok-2\n';
+            'TRA-DEN-SO9,BAR-MAIN,10,sample-ok-1\n'
+            'TRAN-CHAU-DEN,KHO-TT,20,sample-ok-2\n';
     await _uploadBytes(
       repoName: includeInvalidRow ? 'sample_mixed.csv' : 'sample_valid.csv',
       bytes: utf8.encode(csv),
@@ -278,8 +278,8 @@ class _ImportScreenState extends State<ImportScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Định dạng: sku, location_code, quantity, source_row_key — '
-                  'SKU và mã kho phải tồn tại trong danh mục demo '
-                  '(vd: DEMO-PAPER-A4, DEMO-HN). Tối đa 5MB / 10.000 dòng.',
+                  'SKU và mã kho phải tồn tại trong danh mục '
+                  '(vd: TRA-DEN-SO9, BAR-MAIN). Tối đa 5MB / 10.000 dòng.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const Divider(height: 28),

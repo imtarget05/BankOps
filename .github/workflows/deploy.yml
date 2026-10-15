@@ -105,40 +105,34 @@ jobs:
         id: apiurl
         run: |
           if [ "${{ needs.resolve.outputs.target }}" = "prod" ]; then
-            echo "url=https://imtarget05--bankops-api-api.us-east.modal.run" >> "$GITHUB_OUTPUT"
-            echo "pages=bankops-web" >> "$GITHUB_OUTPUT"
-            echo "branch=main" >> "$GITHUB_OUTPUT"
+            echo "url=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run" >> "$GITHUB_OUTPUT"
+            echo "site=quan-ly-kho-tra-sua" >> "$GITHUB_OUTPUT"
           else
             # Chưa có FastAPI staging riêng nên staging tạm dùng chung backend Modal.
             # Deploy vào branch 'staging' = bản preview, KHÔNG đụng tới production.
-            echo "url=https://imtarget05--bankops-api-api.us-east.modal.run" >> "$GITHUB_OUTPUT"
-            echo "pages=bankops-web" >> "$GITHUB_OUTPUT"
-            echo "branch=staging" >> "$GITHUB_OUTPUT"
+            echo "url=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run" >> "$GITHUB_OUTPUT"
+            echo "site=quan-ly-kho-tra-sua" >> "$GITHUB_OUTPUT"
           fi
       - name: Build Flutter Web (API_BASE_URL=${{ steps.apiurl.outputs.url }})
         working-directory: frontend
         run: |
           flutter build web --release \
             --dart-define=API_BASE_URL=${{ steps.apiurl.outputs.url }}
-      - name: Copy _headers/_redirects into build
-        run: cp infra/cloudflare-pages/_headers infra/cloudflare-pages/_redirects frontend/build/web/
+      - name: Prepare Workers Assets bundle
+        run: |
+          rm -rf frontend/build/worker-assets
+          rsync -a --exclude='_redirects' frontend/build/web/ frontend/build/worker-assets/
+          cp infra/cloudflare-pages/_headers frontend/build/worker-assets/_headers
       - name: Worker is legacy — không deploy
         run: |
           echo "Cloudflare Worker là mã legacy/compat (ADR-0001 Phase 2)."
           echo "FastAPI trên Modal là API canonical; workflow này KHÔNG deploy Worker."
           echo "Kiểm tra Worker chỉ chạy qua deploy-worker.yml (validate-only)."
-      - name: Ensure Pages project exists
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        working-directory: ${{ env.WORKER_DIR }}
-        run: npx wrangler pages project create ${{ steps.apiurl.outputs.pages }} --production-branch=main 2>/dev/null || true
-      - name: Deploy Pages (${{ steps.apiurl.outputs.pages }})
+      - name: Deploy Workers Assets (${{ steps.apiurl.outputs.site }})
         working-directory: ${{ env.WORKER_DIR }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        # --branch ép đúng môi trường: prod → 'main' (production), staging → 'staging'
-        # (bản preview). Thiếu cờ này wrangler lấy branch checkout → dễ tạo preview nhầm.
-        run: npx wrangler pages deploy ../../frontend/build/web --project-name=${{ steps.apiurl.outputs.pages }} --branch=${{ steps.apiurl.outputs.branch }} --commit-dirty=true
+        run: npx wrangler deploy --config wrangler.tea-inventory.toml
       - name: Smoke test (health/live)
         run: |
           curl -fsS -m 90 "${{ steps.apiurl.outputs.url }}/api/v1/health/live" | grep -q '"status":"alive"'

@@ -15,7 +15,7 @@ import '../../data/repositories/bankops_repository.dart';
 import '../../data/repositories/fake_repository.dart';
 import '../ai/ai_voucher_audit.dart';
 
-/// Màn duyệt — approval inbox (Maker != Checker) chuẩn ngân hàng 4-Eyes Principle.
+/// Màn duyệt phiếu điều chỉnh kho cho Quản lý.
 class ApprovalsScreen extends StatefulWidget {
   const ApprovalsScreen({super.key});
 
@@ -104,7 +104,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   }) {
     final repo = RepositoryScope.of(context);
     final isDemoRepository = repo is FakeBankOpsRepository;
-    final demoPin = repo is FakeBankOpsRepository ? repo.supervisorPin : '123456';
+    final demoPin =
+        repo is FakeBankOpsRepository ? repo.supervisorPin : '123456';
     return showDialog<String?>(
       context: context,
       barrierDismissible: false,
@@ -150,7 +151,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
 
   Future<void> _reject(ApprovalItem item) async {
     final repo = RepositoryScope.of(context);
-    final reasonCtrl = TextEditingController(text: 'Chưa đủ chứng từ đối chiếu');
+    final reasonCtrl =
+        TextEditingController(text: 'Chưa đủ chứng từ đối chiếu');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -182,7 +184,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           ),
           FilledButton(
             key: const Key('reject-dialog-confirm-btn'),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626)),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Xác nhận từ chối'),
           ),
@@ -214,14 +217,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
 
   Future<void> _returnForRework(ApprovalItem item) async {
     final repo = RepositoryScope.of(context);
-    final reasonCtrl = TextEditingController(text: 'Cần bổ sung thêm thông tin chứng từ đối chiếu');
+    final reasonCtrl = TextEditingController(
+        text: 'Cần bổ sung thêm thông tin chứng từ đối chiếu');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.assignment_return_outlined, color: Color(0xFFD97706)),
+            const Icon(Icons.assignment_return_outlined,
+                color: Color(0xFFD97706)),
             const SizedBox(width: 8),
             Text('Trả về phiếu ${item.id}'),
           ],
@@ -254,7 +259,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           ),
           FilledButton(
             key: const Key('return-dialog-confirm-btn'),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD97706)),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Xác nhận trả về'),
           ),
@@ -310,13 +316,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       );
       if (!proceed) {
         if (mounted) {
-          AppToast.info(context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
+          AppToast.info(
+              context, 'Đã hủy in để rà soát lại thông tin chứng từ.');
         }
         return;
       }
     } else {
       if (mounted) {
-        AppToast.success(context, 'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
+        AppToast.success(context,
+            'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
       }
     }
 
@@ -478,7 +486,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.auto_awesome, color: Color(0xFF2563EB), size: 22),
+                  child: const Icon(Icons.auto_awesome,
+                      color: Color(0xFF2563EB), size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -487,11 +496,14 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     children: [
                       const Text(
                         'Đánh giá rủi ro bằng AI',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800),
                       ),
                       Text(
                         'Phiếu: ${item.id} · Người lập: ${item.maker}',
-                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant),
                       ),
                       if (assessment != null)
                         Text(
@@ -530,12 +542,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       decoration: BoxDecoration(
                         color: _riskColor(assessment).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _riskColor(assessment).withValues(alpha: 0.25)),
+                        border: Border.all(
+                            color:
+                                _riskColor(assessment).withValues(alpha: 0.25)),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
                               color: _riskColor(assessment),
                               borderRadius: BorderRadius.circular(10),
@@ -544,11 +559,17 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                               children: [
                                 Text(
                                   '${assessment.riskScore}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w900),
                                 ),
                                 const Text(
                                   'ĐIỂM RỦI RO',
-                                  style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w700),
+                                  style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700),
                                 ),
                               ],
                             ),
@@ -560,7 +581,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
                               ),
                             ),
                           ),
@@ -570,21 +593,26 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     const SizedBox(height: 18),
                     const Text(
                       'Quy tắc kiểm soát nội bộ cảnh báo:',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                     ),
                     const SizedBox(height: 8),
                     if (assessment.flaggedRules.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                          color:
+                              const Color(0xFF10B981).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Row(
                           children: [
-                            Icon(Icons.check_circle_outline, color: Color(0xFF059669), size: 18),
+                            Icon(Icons.check_circle_outline,
+                                color: Color(0xFF059669), size: 18),
                             SizedBox(width: 8),
-                            Text('Không vi phạm ngưỡng cảnh báo quy chế.', style: TextStyle(fontSize: 12.5, color: Color(0xFF059669))),
+                            Text('Không vi phạm ngưỡng cảnh báo quy chế.',
+                                style: TextStyle(
+                                    fontSize: 12.5, color: Color(0xFF059669))),
                           ],
                         ),
                       )
@@ -595,16 +623,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.report_problem_outlined, color: Color(0xFFDC2626), size: 16),
+                              const Icon(Icons.report_problem_outlined,
+                                  color: Color(0xFFDC2626), size: 16),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(rule, style: const TextStyle(fontSize: 12.5))),
+                              Expanded(
+                                  child: Text(rule,
+                                      style: const TextStyle(fontSize: 12.5))),
                             ],
                           ),
                         ),
                     const SizedBox(height: 16),
                     const Text(
                       'Kiến nghị hành động cho Kiểm soát viên:',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                     ),
                     const SizedBox(height: 8),
                     for (final rec in assessment.recommendations)
@@ -613,16 +645,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.lightbulb_outline, color: Color(0xFFD97706), size: 16),
+                            const Icon(Icons.lightbulb_outline,
+                                color: Color(0xFFD97706), size: 16),
                             const SizedBox(width: 8),
-                            Expanded(child: Text(rec, style: const TextStyle(fontSize: 12.5))),
+                            Expanded(
+                                child: Text(rec,
+                                    style: const TextStyle(fontSize: 12.5))),
                           ],
                         ),
                       ),
                     const SizedBox(height: 16),
                     const Text(
                       'Dấu kiểm toán số (Audit Stamp SHA-256):',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                     ),
                     const SizedBox(height: 6),
                     Container(
@@ -633,7 +669,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       ),
                       child: SelectableText(
                         assessment.auditStamp,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -701,16 +740,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   ),
                   const SizedBox(width: 16),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color:
+                              const Color(0xFFF59E0B).withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.shield_outlined, size: 16, color: Color(0xFFD97706)),
+                        const Icon(Icons.shield_outlined,
+                            size: 16, color: Color(0xFFD97706)),
                         const SizedBox(width: 6),
                         Text(
                           '${items.length} YÊU CẦU CHỜ DUYỆT',
@@ -733,11 +776,13 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E3A8A).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF1E3A8A).withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: const Color(0xFF1E3A8A).withValues(alpha: 0.2)),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.info_outline_rounded, size: 20, color: Color(0xFF1E3A8A)),
+                    Icon(Icons.info_outline_rounded,
+                        size: 20, color: Color(0xFF1E3A8A)),
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -761,11 +806,13 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                    border: Border.all(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.remove_red_eye_outlined, size: 20, color: Color(0xFFB45309)),
+                      const Icon(Icons.remove_red_eye_outlined,
+                          size: 20, color: Color(0xFFB45309)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -821,7 +868,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                      color: theme.colorScheme.outlineVariant
+                          .withValues(alpha: 0.5),
                     ),
                   ),
                   child: Center(
@@ -830,7 +878,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                            color:
+                                const Color(0xFF10B981).withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -842,7 +891,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                         const SizedBox(height: 12),
                         const Text(
                           'Hộp thư phê duyệt hoàn toàn trống',
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 16),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -861,20 +911,25 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   Builder(
                     builder: (context) {
                       final isCash = _isCash(item);
-                      final accentColor = isCash ? const Color(0xFF059669) : const Color(0xFF2563EB);
+                      final accentColor = isCash
+                          ? const Color(0xFF059669)
+                          : const Color(0xFF2563EB);
 
                       return Container(
                         key: Key('approval-card-${item.id}'),
                         margin: const EdgeInsets.only(bottom: 14),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          color:
+                              isDark ? const Color(0xFF1E293B) : Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                            color: theme.colorScheme.outlineVariant
+                                .withValues(alpha: 0.5),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                              color: Colors.black
+                                  .withValues(alpha: isDark ? 0.2 : 0.04),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -895,22 +950,28 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                 Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: accentColor.withValues(alpha: 0.1),
+                                        color:
+                                            accentColor.withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            isCash ? Icons.savings_outlined : Icons.inventory_2_outlined,
+                                            isCash
+                                                ? Icons.savings_outlined
+                                                : Icons.inventory_2_outlined,
                                             size: 14,
                                             color: accentColor,
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
-                                            isCash ? 'QUỸ TIỀN MẶT' : 'KHO ẤN CHỈ',
+                                            isCash
+                                                ? 'ĐIỀU CHỈNH KHO'
+                                                : 'KHO NGUYÊN LIỆU',
                                             style: TextStyle(
                                               color: accentColor,
                                               fontSize: 10.5,
@@ -925,15 +986,18 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                       'Mã phiếu: ${item.id}',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: theme.colorScheme.onSurfaceVariant,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     const Spacer(),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                        color: const Color(0xFFF59E0B)
+                                            .withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: const Text(
@@ -968,19 +1032,25 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                     ],
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text.rich(
                                             TextSpan(
                                               children: [
                                                 WidgetSpan(
-                                                  alignment: PlaceholderAlignment.middle,
+                                                  alignment:
+                                                      PlaceholderAlignment
+                                                          .middle,
                                                   child: Padding(
-                                                    padding: const EdgeInsets.only(right: 6),
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 6),
                                                     child: Icon(
                                                       Icons.person_outline,
                                                       size: 16,
-                                                      color: theme.colorScheme.onSurfaceVariant,
+                                                      color: theme.colorScheme
+                                                          .onSurfaceVariant,
                                                     ),
                                                   ),
                                                 ),
@@ -988,7 +1058,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                   text: 'Người lập phiếu: ',
                                                   style: TextStyle(
                                                     fontSize: 12.5,
-                                                    color: theme.colorScheme.onSurfaceVariant,
+                                                    color: theme.colorScheme
+                                                        .onSurfaceVariant,
                                                   ),
                                                 ),
                                                 TextSpan(
@@ -1007,9 +1078,13 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                             TextSpan(
                                               children: [
                                                 WidgetSpan(
-                                                  alignment: PlaceholderAlignment.middle,
+                                                  alignment:
+                                                      PlaceholderAlignment
+                                                          .middle,
                                                   child: Padding(
-                                                    padding: const EdgeInsets.only(right: 6),
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 6),
                                                     child: Icon(
                                                       Icons.trending_up_rounded,
                                                       size: 16,
@@ -1021,7 +1096,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                   text: 'Tác động số dư: ',
                                                   style: TextStyle(
                                                     fontSize: 12.5,
-                                                    color: theme.colorScheme.onSurfaceVariant,
+                                                    color: theme.colorScheme
+                                                        .onSurfaceVariant,
                                                   ),
                                                 ),
                                                 TextSpan(
@@ -1042,7 +1118,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                               'Chi tiết: ${item.detail}',
                                               style: TextStyle(
                                                 fontSize: 12,
-                                                color: theme.colorScheme.onSurfaceVariant,
+                                                color: theme.colorScheme
+                                                    .onSurfaceVariant,
                                               ),
                                             ),
                                           ],
@@ -1050,33 +1127,56 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                           Wrap(
                                             spacing: 8,
                                             runSpacing: 6,
-                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
                                             children: [
-                                              _buildRiskLevelBadge(_assessments[item.id]),
+                                              _buildRiskLevelBadge(
+                                                  _assessments[item.id]),
                                               InkWell(
-                                                key: Key('btn-ai-assess-${item.id}'),
-                                                onTap: () => _showAiAssessmentSheet(item),
-                                                borderRadius: BorderRadius.circular(8),
+                                                key: Key(
+                                                    'btn-ai-assess-${item.id}'),
+                                                onTap: () =>
+                                                    _showAiAssessmentSheet(
+                                                        item),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
                                                 child: Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                                                    borderRadius: BorderRadius.circular(6),
+                                                    color:
+                                                        const Color(0xFF2563EB)
+                                                            .withValues(
+                                                                alpha: 0.1),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            6),
                                                     border: Border.all(
-                                                      color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                                      color: const Color(
+                                                              0xFF2563EB)
+                                                          .withValues(
+                                                              alpha: 0.25),
                                                     ),
                                                   ),
                                                   child: const Row(
-                                                    mainAxisSize: MainAxisSize.min,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
                                                     children: [
-                                                      Icon(Icons.auto_awesome, size: 12, color: Color(0xFF2563EB)),
+                                                      Icon(Icons.auto_awesome,
+                                                          size: 12,
+                                                          color: Color(
+                                                              0xFF2563EB)),
                                                       SizedBox(width: 4),
                                                       Text(
                                                         'Xem đánh giá AI',
                                                         style: TextStyle(
                                                           fontSize: 10.5,
-                                                          fontWeight: FontWeight.w700,
-                                                          color: Color(0xFF2563EB),
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color:
+                                                              Color(0xFF2563EB),
                                                         ),
                                                       ),
                                                     ],
@@ -1090,69 +1190,118 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                     ),
                                     Wrap(
                                       spacing: 8,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         IconButton(
                                           key: Key('print-approval-${item.id}'),
                                           onPressed: () =>
                                               _exportVoucherWithAiCheck(item),
-                                          icon: const Icon(
-                                              Icons.print_outlined,
+                                          icon: const Icon(Icons.print_outlined,
                                               size: 20),
-                                          tooltip: 'In phiếu ${item.id} (AI Kiểm Duyệt)',
+                                          tooltip:
+                                              'In phiếu ${item.id} (AI Kiểm Duyệt)',
                                         ),
                                         if (canApprove) ...[
                                           OutlinedButton.icon(
                                             key: Key('btn-return-${item.id}'),
-                                            onPressed: _busy ? null : () => _returnForRework(item),
-                                            icon: const Icon(Icons.assignment_return_outlined, size: 16, color: Color(0xFFD97706)),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _returnForRework(item),
+                                            icon: const Icon(
+                                                Icons
+                                                    .assignment_return_outlined,
+                                                size: 16,
+                                                color: Color(0xFFD97706)),
                                             label: const Text(
                                               'Trả về',
-                                              style: TextStyle(color: Color(0xFFD97706), fontWeight: FontWeight.w700),
+                                              style: TextStyle(
+                                                  color: Color(0xFFD97706),
+                                                  fontWeight: FontWeight.w700),
                                             ),
                                             style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(color: Color(0xFFFDE68A)),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                              side: const BorderSide(
+                                                  color: Color(0xFFFDE68A)),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          10)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 10),
                                             ),
                                           ),
                                           OutlinedButton.icon(
                                             key: Key('btn-reject-${item.id}'),
-                                            onPressed: _busy ? null : () => _reject(item),
-                                            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _reject(item),
+                                            icon: const Icon(
+                                                Icons.close_rounded,
+                                                size: 16,
+                                                color: Color(0xFFDC2626)),
                                             label: const Text(
                                               'Từ chối',
-                                              style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w700),
+                                              style: TextStyle(
+                                                  color: Color(0xFFDC2626),
+                                                  fontWeight: FontWeight.w700),
                                             ),
                                             style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(color: Color(0xFFFCA5A5)),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                              side: const BorderSide(
+                                                  color: Color(0xFFFCA5A5)),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          10)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 10),
                                             ),
                                           ),
                                           FilledButton.icon(
                                             key: Key('btn-approve-${item.id}'),
-                                            onPressed: _busy ? null : () => _approve(item),
-                                            icon: const Icon(Icons.verified_rounded, size: 16),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _approve(item),
+                                            icon: const Icon(
+                                                Icons.verified_rounded,
+                                                size: 16),
                                             label: const Text(
                                               'Phê duyệt & Ghi sổ',
-                                              style: TextStyle(fontWeight: FontWeight.w700),
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.w700),
                                             ),
                                             style: FilledButton.styleFrom(
-                                              backgroundColor: const Color(0xFF059669),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                              backgroundColor:
+                                                  const Color(0xFF059669),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          10)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 10),
                                             ),
                                           ),
                                         ] else ...[
                                           Container(
-                                            key: Key('approval-readonly-tag-${item.id}'),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            key: Key(
+                                                'approval-readonly-tag-${item.id}'),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 8),
                                             decoration: BoxDecoration(
-                                              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                                              borderRadius: BorderRadius.circular(8),
+                                              color: theme.colorScheme
+                                                  .surfaceContainerHighest
+                                                  .withValues(alpha: 0.6),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                               border: Border.all(
-                                                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                                                color: theme
+                                                    .colorScheme.outlineVariant
+                                                    .withValues(alpha: 0.5),
                                               ),
                                             ),
                                             child: Row(
@@ -1161,7 +1310,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                 Icon(
                                                   Icons.lock_clock_outlined,
                                                   size: 15,
-                                                  color: theme.colorScheme.onSurfaceVariant,
+                                                  color: theme.colorScheme
+                                                      .onSurfaceVariant,
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Text(
@@ -1169,7 +1319,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w600,
-                                                    color: theme.colorScheme.onSurfaceVariant,
+                                                    color: theme.colorScheme
+                                                        .onSurfaceVariant,
                                                   ),
                                                 ),
                                               ],
@@ -1213,8 +1364,7 @@ class _SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allSelected =
-        selected.isNotEmpty && selected.length == allIds.length;
+    final allSelected = selected.isNotEmpty && selected.length == allIds.length;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -1319,7 +1469,8 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
               color: const Color(0xFFDC2626).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.security_rounded, color: Color(0xFFDC2626), size: 22),
+            child: const Icon(Icons.security_rounded,
+                color: Color(0xFFDC2626), size: 22),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1346,14 +1497,18 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: Color(0xFFDC2626), size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       widget.isBatch
                           ? 'Lô duyệt có phiếu giá trị lớn hoặc rủi ro cao. Bắt buộc Kiểm soát viên nhập PIN để cấp phép.'
                           : 'Phiếu ${widget.item.id} có rủi ro cao (${widget.item.impact}). Kiểm tra chứng từ và nhập PIN kiểm soát viên trước khi duyệt.',
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B), fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF991B1B),
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -1379,7 +1534,10 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
                 ),
                 child: SelectableText(
                   widget.assessment!.auditStamp,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 14),
@@ -1413,7 +1571,8 @@ class _DualControlPinDialogState extends State<_DualControlPinDialog> {
         ),
         FilledButton(
           key: const Key('confirm-supervisor-pin-btn'),
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+          style:
+              FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
           onPressed: _onConfirm,
           child: const Text('Ký Số & Phê Duyệt'),
         ),

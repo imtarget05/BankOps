@@ -1,5 +1,5 @@
 /**
- * BankOps Cloudflare Worker – Retired boundary (health only)
+ * Quản Lý Kho Trà Sữa Cloudflare Worker – Retired boundary (health only)
  *
  * ADR 0001 (docs/adr/0001-canonical-api-fastapi-worker-proxy-deprecation.md):
  * FastAPI (backend/) is the ONLY business API. This Worker is a thin,
@@ -33,7 +33,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5000",
   "http://localhost:8080",
   "http://127.0.0.1:8080",
-  "https://bankops-web.pages.dev",
+  "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev",
 ];
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ app.all("/openapi.json", gone);
 // Root: small status pointer — no business data.
 app.get("/", (c) =>
   c.json({
-    service: "BankOps Cloudflare Worker",
+    service: "Quản Lý Kho Trà Sữa Cloudflare Worker",
     status: "retired",
     message: GONE_MESSAGE,
     health: "/api/v1/health/live",

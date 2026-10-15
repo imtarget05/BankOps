@@ -313,7 +313,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     if (_assetLogs.isEmpty) _assetLogs.addAll(_seedAssetLogs());
     final idx =
         _assets.indexWhere((a) => a.id == assetId || a.serial == assetId);
-    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy ấn chỉ');
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy nguyên liệu');
     final cur = _assets[idx];
     final newStatus = status != null ? _assetStatus(status) : cur.status;
     _assets[idx] = AssetRecord(
@@ -937,8 +937,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       if (val >= 50) {
         riskLevel = 'high';
         riskScore = 85;
-        flagged.add(
-            'Số lượng xuất/nhập ấn chỉ/phôi thẻ vượt hạn mức (≥ 50 đơn vị).');
+        flagged
+            .add('Số lượng nhập/xuất nguyên liệu vượt hạn mức (≥ 50 đơn vị).');
         flagged.add(
             'Nguy cơ thất thoát phôi bảo mật (thẻ chip EMV, sổ séc trắng).');
         recs.add(
@@ -947,8 +947,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
         riskLevel = 'medium';
         riskScore = 52;
         flagged.add('Số lượng phôi xuất kho trung bình (20 - 50 đơn vị).');
-        recs.add(
-            'Kiểm tra kế hoạch cấp phát ấn chỉ định kỳ của phòng giao dịch.');
+        recs.add('Kiểm tra kế hoạch nhập nguyên liệu định kỳ của cửa hàng.');
       } else {
         riskLevel = 'low';
         riskScore = 18;
@@ -1116,15 +1115,15 @@ class FakeBankOpsRepository implements BankOpsRepository {
     }
     final demoRows = <Map<String, dynamic>>[
       {
-        'sku': 'DEMO-PAPER-A4',
-        'location_code': 'DEMO-HN',
+        'sku': 'TRA-DEN-SO9',
+        'location_code': 'BAR-MAIN',
         'quantity': '15',
         'source_row_key': 'sheet-$sheetId-1',
       },
       {
-        'sku': 'DEMO-LAPTOP',
-        'location_code': 'DEMO-HCM',
-        'quantity': '2',
+        'sku': 'TRAN-CHAU-DEN',
+        'location_code': 'KHO-TT',
+        'quantity': '20',
         'source_row_key': 'sheet-$sheetId-2',
       },
     ];

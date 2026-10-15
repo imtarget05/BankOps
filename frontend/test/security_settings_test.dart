@@ -1,17 +1,17 @@
-import 'package:bankops/src/app/app_shell.dart';
-import 'package:bankops/src/app/theme_mode_controller.dart';
-import 'package:bankops/src/core/theme/app_theme.dart';
-import 'package:bankops/src/core/widgets/google_logo.dart';
-import 'package:bankops/src/data/repositories/fake_repository.dart';
-import 'package:bankops/src/features/auth/auth_service.dart';
-import 'package:bankops/src/features/auth/login_screen.dart';
-import 'package:bankops/src/features/auth/widgets/forgot_password_dialog.dart';
-import 'package:bankops/src/features/settings/settings_screen.dart';
-import 'package:bankops/src/data/models/dtos.dart';
-import 'package:bankops/src/features/settings/widgets/change_password_dialog.dart';
-import 'package:bankops/src/features/settings/widgets/change_pin_dialog.dart';
-import 'package:bankops/src/features/settings/widgets/edit_profile_dialog.dart';
-import 'package:bankops/src/features/approvals/approvals_screen.dart';
+import 'package:kho_tra_sua/src/app/app_shell.dart';
+import 'package:kho_tra_sua/src/app/theme_mode_controller.dart';
+import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
+import 'package:kho_tra_sua/src/core/widgets/google_logo.dart';
+import 'package:kho_tra_sua/src/data/repositories/fake_repository.dart';
+import 'package:kho_tra_sua/src/features/auth/auth_service.dart';
+import 'package:kho_tra_sua/src/features/auth/login_screen.dart';
+import 'package:kho_tra_sua/src/features/auth/widgets/forgot_password_dialog.dart';
+import 'package:kho_tra_sua/src/features/settings/settings_screen.dart';
+import 'package:kho_tra_sua/src/data/models/dtos.dart';
+import 'package:kho_tra_sua/src/features/settings/widgets/change_password_dialog.dart';
+import 'package:kho_tra_sua/src/features/settings/widgets/change_pin_dialog.dart';
+import 'package:kho_tra_sua/src/features/settings/widgets/edit_profile_dialog.dart';
+import 'package:kho_tra_sua/src/features/approvals/approvals_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -38,10 +38,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check username & password fields are empty
-      final usernameField =
-          tester.widget<TextField>(find.byKey(const Key('login-username-field')));
-      final passwordField =
-          tester.widget<TextField>(find.byKey(const Key('login-password-field')));
+      final usernameField = tester
+          .widget<TextField>(find.byKey(const Key('login-username-field')));
+      final passwordField = tester
+          .widget<TextField>(find.byKey(const Key('login-password-field')));
 
       expect(usernameField.controller?.text, isEmpty);
       expect(passwordField.controller?.text, isEmpty);
@@ -143,7 +143,8 @@ void main() {
   });
 
   group('ChangePinDialog Tests', () {
-    testWidgets('Validates 6-digit PIN and calls repository on valid submission',
+    testWidgets(
+        'Validates 6-digit PIN and calls repository on valid submission',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -212,7 +213,8 @@ void main() {
   });
 
   group('SettingsScreen Security Options Tests', () {
-    testWidgets('SettingsScreen displays change password and change PIN actions',
+    testWidgets(
+        'SettingsScreen displays change password and change PIN actions',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -245,6 +247,8 @@ void main() {
       expect(find.byKey(const Key('settings-change-pin-tile')), findsOneWidget);
 
       // Tap change password tile opens dialog
+      await tester.ensureVisible(
+          find.byKey(const Key('settings-change-password-tile')));
       await tester.tap(find.byKey(const Key('settings-change-password-tile')));
       await tester.pumpAndSettle();
       expect(find.byType(ChangePasswordDialog), findsOneWidget);
@@ -255,6 +259,8 @@ void main() {
       expect(find.byType(ChangePasswordDialog), findsNothing);
 
       // Tap change PIN tile opens dialog
+      await tester
+          .ensureVisible(find.byKey(const Key('settings-change-pin-tile')));
       await tester.tap(find.byKey(const Key('settings-change-pin-tile')));
       await tester.pumpAndSettle();
       expect(find.byType(ChangePinDialog), findsOneWidget);
@@ -265,7 +271,8 @@ void main() {
       expect(find.byType(ChangePinDialog), findsNothing);
     });
 
-    testWidgets('SettingsScreen does not display demo accounts, simulation disclaimers, or reset commands',
+    testWidgets(
+        'SettingsScreen does not display demo accounts, simulation disclaimers, or reset commands',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 1600);
       tester.view.devicePixelRatio = 1.0;
@@ -297,9 +304,11 @@ void main() {
       expect(find.text('Môi trường giả lập'), findsNothing);
       expect(find.text('Tài khoản demo'), findsNothing);
       expect(find.text('Reset demo về dữ liệu gốc'), findsNothing);
-      expect(find.byKey(const Key('settings-copy-reset-cmd-btn')), findsNothing);
+      expect(
+          find.byKey(const Key('settings-copy-reset-cmd-btn')), findsNothing);
       expect(find.textContaining('DemoPass123!'), findsNothing);
-      expect(find.textContaining('Bản demo — mọi dữ liệu là giả lập.'), findsNothing);
+      expect(find.textContaining('Bản demo — mọi dữ liệu là giả lập.'),
+          findsNothing);
 
       // Verify enterprise sections exist
       expect(find.text('Hồ Sơ Của Tôi'), findsOneWidget);
@@ -342,22 +351,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ForgotPasswordDialog), findsOneWidget);
-      expect(find.text('Bước 1/2: Xác thực tài khoản người dùng'),
-          findsOneWidget);
+      expect(
+          find.text('Bước 1/2: Xác thực tài khoản người dùng'), findsOneWidget);
 
       // Submit empty username -> error
-      await tester
-          .tap(find.byKey(const Key('forgot-password-send-otp-btn')));
+      await tester.tap(find.byKey(const Key('forgot-password-send-otp-btn')));
       await tester.pumpAndSettle();
-      expect(find.text('Vui lòng nhập tên đăng nhập hoặc email.'),
-          findsOneWidget);
+      expect(
+          find.text('Vui lòng nhập tên đăng nhập hoặc email.'), findsOneWidget);
 
       // Submit invalid user -> error
       await tester.enterText(
           find.byKey(const Key('forgot-password-username-field')),
           'non_existent_user');
-      await tester
-          .tap(find.byKey(const Key('forgot-password-send-otp-btn')));
+      await tester.tap(find.byKey(const Key('forgot-password-send-otp-btn')));
       await tester.pumpAndSettle();
       expect(find.text('Không tìm thấy tài khoản với tên đăng nhập này.'),
           findsOneWidget);
@@ -366,8 +373,7 @@ void main() {
       await tester.enterText(
           find.byKey(const Key('forgot-password-username-field')),
           'demo_maker');
-      await tester
-          .tap(find.byKey(const Key('forgot-password-send-otp-btn')));
+      await tester.tap(find.byKey(const Key('forgot-password-send-otp-btn')));
       await tester.pumpAndSettle();
 
       expect(find.text('Bước 2/2: Nhập mã OTP & Đặt mật khẩu mới'),
@@ -404,12 +410,11 @@ void main() {
       // Test Back button returns to Step 1
       await tester.tap(find.byKey(const Key('forgot-password-back-btn')));
       await tester.pumpAndSettle();
-      expect(find.text('Bước 1/2: Xác thực tài khoản người dùng'),
-          findsOneWidget);
+      expect(
+          find.text('Bước 1/2: Xác thực tài khoản người dùng'), findsOneWidget);
 
       // Re-advance to Step 2
-      await tester
-          .tap(find.byKey(const Key('forgot-password-send-otp-btn')));
+      await tester.tap(find.byKey(const Key('forgot-password-send-otp-btn')));
       await tester.pumpAndSettle();
 
       // Submit valid OTP and matching password
@@ -427,7 +432,8 @@ void main() {
       expect(find.byType(ForgotPasswordDialog), findsNothing);
     });
 
-    testWidgets('LoginScreen Quên mật khẩu button opens dialog and sets username',
+    testWidgets(
+        'LoginScreen Quên mật khẩu button opens dialog and sets username',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -459,8 +465,7 @@ void main() {
       await tester.enterText(
           find.byKey(const Key('forgot-password-username-field')),
           'demo_checker');
-      await tester
-          .tap(find.byKey(const Key('forgot-password-send-otp-btn')));
+      await tester.tap(find.byKey(const Key('forgot-password-send-otp-btn')));
       await tester.pumpAndSettle();
 
       // Set new password
@@ -476,8 +481,8 @@ void main() {
 
       // Dialog closed and login username field populated with demo_checker
       expect(find.byType(ForgotPasswordDialog), findsNothing);
-      final usernameField =
-          tester.widget<TextField>(find.byKey(const Key('login-username-field')));
+      final usernameField = tester
+          .widget<TextField>(find.byKey(const Key('login-username-field')));
       expect(usernameField.controller?.text, 'demo_checker');
       expect(find.text('Khôi phục mật khẩu thành công! Vui lòng đăng nhập.'),
           findsOneWidget);
@@ -485,7 +490,8 @@ void main() {
   });
 
   group('SettingsScreen My Profile Tests', () {
-    testWidgets('SettingsScreen displays My Profile card with full user information',
+    testWidgets(
+        'SettingsScreen displays My Profile card with full user information',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -533,10 +539,12 @@ void main() {
       expect(find.text('0901 234 567'), findsOneWidget);
       expect(find.text('Chi nhánh Bến Thành (Hội sở)'), findsOneWidget);
       expect(find.text('ISO 27001 · Dual Control Active'), findsOneWidget);
-      expect(find.byKey(const Key('settings-edit-profile-btn')), findsOneWidget);
+      expect(
+          find.byKey(const Key('settings-edit-profile-btn')), findsOneWidget);
     });
 
-    testWidgets('EditProfileDialog validates inputs and updates user profile in settings',
+    testWidgets(
+        'EditProfileDialog validates inputs and updates user profile in settings',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -575,6 +583,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Edit Profile button
+      await tester
+          .ensureVisible(find.byKey(const Key('settings-edit-profile-btn')));
       await tester.tap(find.byKey(const Key('settings-edit-profile-btn')));
       await tester.pumpAndSettle();
 
@@ -582,8 +592,8 @@ void main() {
       expect(find.text('Chỉnh sửa hồ sơ cá nhân'), findsOneWidget);
 
       // Verify fields are pre-filled
-      final nameField = tester.widget<TextField>(
-          find.byKey(const Key('edit-profile-name-field')));
+      final nameField = tester
+          .widget<TextField>(find.byKey(const Key('edit-profile-name-field')));
       expect(nameField.controller?.text, 'Nguyễn Văn Maker');
 
       // Test validation: empty name
@@ -603,16 +613,13 @@ void main() {
       expect(find.text('Địa chỉ email không đúng định dạng.'), findsOneWidget);
 
       // Fill valid information and submit
-      await tester.enterText(
-          find.byKey(const Key('edit-profile-name-field')),
+      await tester.enterText(find.byKey(const Key('edit-profile-name-field')),
           'Nguyễn Hoàng An (Trưởng GDV)');
-      await tester.enterText(
-          find.byKey(const Key('edit-profile-email-field')),
+      await tester.enterText(find.byKey(const Key('edit-profile-email-field')),
           'hoangan@bankops.vn');
       await tester.enterText(
           find.byKey(const Key('edit-profile-phone-field')), '0912 345 678');
-      await tester.enterText(
-          find.byKey(const Key('edit-profile-branch-field')),
+      await tester.enterText(find.byKey(const Key('edit-profile-branch-field')),
           'Sở Giao Dịch TP.HCM');
 
       await tester.tap(find.byKey(const Key('edit-profile-save-btn')));
@@ -644,7 +651,8 @@ void main() {
       expect(fakeRepo.supervisorPin, '123456');
 
       // Change PIN to 654321 via changePin
-      await fakeRepo.changePin(currentPassword: 'DemoPass123!', newPin: '654321');
+      await fakeRepo.changePin(
+          currentPassword: 'DemoPass123!', newPin: '654321');
       expect(fakeRepo.supervisorPin, '654321');
 
       // Create high-risk cash request: 600,000,000 VND
@@ -672,8 +680,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Xác Thực Quyền Kiểm Soát Kép (Supervisor Authorization)'), findsOneWidget);
-      expect(find.text('Nhập PIN demo Kiểm soát viên (654321):'), findsOneWidget);
+      expect(
+          find.text('Xác Thực Quyền Kiểm Soát Kép (Supervisor Authorization)'),
+          findsOneWidget);
+      expect(
+          find.text('Nhập PIN demo Kiểm soát viên (654321):'), findsOneWidget);
 
       // Enter old PIN 123456 -> rejected!
       await tester.enterText(
@@ -682,7 +693,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.textContaining('Mã PIN không đúng (Demo: 654321)'), findsOneWidget);
+      expect(find.textContaining('Mã PIN không đúng (Demo: 654321)'),
+          findsOneWidget);
 
       // Enter new PIN 654321 -> approved!
       await tester.enterText(
@@ -695,4 +707,3 @@ void main() {
     });
   });
 }
-

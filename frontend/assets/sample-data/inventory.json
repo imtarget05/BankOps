@@ -3,119 +3,300 @@
   "locations": [
     {
       "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
-      "code": "DEMO-HN",
-      "name": "Kho Ấn Chỉ Trung Tâm - Hội Sở Chính"
+      "code": "BAR-MAIN",
+      "name": "Quầy Pha Chế Chính (Bar Counter)"
     },
     {
       "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
-      "code": "DEMO-HCM",
-      "name": "Kho Quỹ Chi Nhánh Sở Giao Dịch TP.HCM"
+      "code": "STORAGE-COOL",
+      "name": "Kho Mát & Tủ Bảo Quản Nguyên Liệu"
     },
     {
       "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
-      "code": "KHO-DNG-01",
-      "name": "Kho Ấn Chỉ Chi Nhánh Đà Nẵng"
+      "code": "STORAGE-DRY",
+      "name": "Kho Khô & Vật Tư Sau Quầy"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbc1",
+      "code": "KHO-TT",
+      "name": "Kho Trung Tâm Cung Ứng"
     }
   ],
   "items": [
     {
       "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
-      "sku": "DEMO-PAPER-A4",
-      "name": "Sổ Séc Bảo Chi Ngân Hàng (50 tờ/cuốn)",
-      "unit": "cuốn",
+      "sku": "TRA-DEN-SO9",
+      "name": "Trà Đen Lộc Phát Số 9",
+      "unit": "gói",
+      "category": "Nhóm Trà",
+      "packaging": "500g/gói (Thùng 20 gói)",
+      "min_qty": "30.000",
+      "max_qty": "100.000",
       "tracked_serial": false
     },
     {
       "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc2",
-      "sku": "DEMO-LAPTOP",
-      "name": "Phôi Thẻ Ghi Nợ Quốc Tế Visa Debit EMV Chip",
-      "unit": "chiếc",
-      "tracked_serial": true
+      "sku": "TRA-LAI-500G",
+      "name": "Trà Xanh Hoa Lài Thượng Hạng",
+      "unit": "gói",
+      "category": "Nhóm Trà",
+      "packaging": "500g/gói (Thùng 20 gói)",
+      "min_qty": "20.000",
+      "max_qty": "80.000",
+      "tracked_serial": false
     },
     {
       "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc3",
-      "sku": "STK-PASSBOOK",
-      "name": "Sổ Tiết Kiệm Có Kỳ Hạn Tích Hợp QR Bảo Mật",
-      "unit": "quyển",
-      "tracked_serial": true
+      "sku": "TRA-OLONG-500G",
+      "name": "Trà Ô Long Nướng Đặc Biệt",
+      "unit": "gói",
+      "category": "Nhóm Trà",
+      "packaging": "500g/gói (Thùng 20 gói)",
+      "min_qty": "15.000",
+      "max_qty": "60.000",
+      "tracked_serial": false
     },
     {
       "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc4",
-      "sku": "CARD-NAPAS",
-      "name": "Phôi Thẻ Chip Không Tiếp Xúc Napas Contactless",
-      "unit": "chiếc",
-      "tracked_serial": true
+      "sku": "BOT-BEO-BONE",
+      "name": "Bột Kem Béo B-One Thái Lan",
+      "unit": "túi",
+      "category": "Nhóm Bột & Sữa",
+      "packaging": "1kg/túi (Thùng 12 túi)",
+      "min_qty": "10.000",
+      "max_qty": "50.000",
+      "tracked_serial": false
     },
     {
       "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc5",
-      "sku": "FORM-LC-IMP",
-      "name": "Mẫu Đơn Mở Thư Tín Dụng L/C Nhập Khẩu",
-      "unit": "xấp",
+      "sku": "SUA-TUOI-1L",
+      "name": "Sữa Tươi Tiệt Trùng Barista Milk",
+      "unit": "hộp",
+      "category": "Nhóm Bột & Sữa",
+      "packaging": "1 Lít/hộp (Thùng 12 hộp)",
+      "min_qty": "15.000",
+      "max_qty": "60.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc6",
+      "sku": "SUA-DAC-1KG",
+      "name": "Sữa Đặc Ngọt Larosee",
+      "unit": "túi",
+      "category": "Nhóm Bột & Sữa",
+      "packaging": "1kg/túi (Thùng 12 túi)",
+      "min_qty": "12.000",
+      "max_qty": "48.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc7",
+      "sku": "BOT-MATCHA-500G",
+      "name": "Bột Trà Xanh Matcha Uji",
+      "unit": "túi",
+      "category": "Nhóm Bột & Sữa",
+      "packaging": "500g/túi",
+      "min_qty": "5.000",
+      "max_qty": "20.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc8",
+      "sku": "TRAN-CHAU-DEN",
+      "name": "Trân Châu Đen Gia Uy Thượng Hạng",
+      "unit": "gói",
+      "category": "Topping",
+      "packaging": "1kg/gói (Thùng 20 gói)",
+      "min_qty": "25.000",
+      "max_qty": "100.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc9",
+      "sku": "TRAN-CHAU-3Q",
+      "name": "Trân Châu Trắng 3Q Sea Jelly",
+      "unit": "túi",
+      "category": "Topping",
+      "packaging": "2kg/túi (Thùng 6 túi)",
+      "min_qty": "10.000",
+      "max_qty": "40.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc10",
+      "sku": "THACH-NHA-DAM",
+      "name": "Thạch Nha Đam Giòn Aloka",
+      "unit": "túi",
+      "category": "Topping",
+      "packaging": "1kg/túi (Thùng 10 túi)",
+      "min_qty": "8.000",
+      "max_qty": "30.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc11",
+      "sku": "SYRUP-DAO-700ML",
+      "name": "Syrup Đào Monin Chai Thủy Tinh",
+      "unit": "chai",
+      "category": "Syrup & Mứt",
+      "packaging": "700ml/chai (Thùng 6 chai)",
+      "min_qty": "6.000",
+      "max_qty": "24.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc12",
+      "sku": "DUONG-NUOC-5L",
+      "name": "Nước Đường Bắp Đậm Đặc",
+      "unit": "can",
+      "category": "Syrup & Mứt",
+      "packaging": "5 Lít/can (Thùng 4 can)",
+      "min_qty": "4.000",
+      "max_qty": "20.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc13",
+      "sku": "LY-PP-700ML",
+      "name": "Ly Nhựa PP Trong 700ml",
+      "unit": "cái",
+      "category": "Bao bì",
+      "packaging": "50 cái/cây (Kiện 1000 cái)",
+      "min_qty": "200.000",
+      "max_qty": "2000.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc14",
+      "sku": "LY-GIAY-500ML",
+      "name": "Ly Giấy Nóng/Lạnh 500ml",
+      "unit": "cái",
+      "category": "Bao bì",
+      "packaging": "50 cái/cây (Kiện 1000 cái)",
+      "min_qty": "150.000",
+      "max_qty": "1500.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc15",
+      "sku": "CUON-MANG-EP",
+      "name": "Cuộn Màng Ép Miệng Ly Trà Sữa",
+      "unit": "cuộn",
+      "category": "Bao bì",
+      "packaging": "3000 nắp/cuộn",
+      "min_qty": "2.000",
+      "max_qty": "10.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc20",
+      "sku": "ONG-HUT-PP",
+      "name": "Ống Hút Phi 12 Trà Sữa",
+      "unit": "cái",
+      "category": "Bao bì",
+      "packaging": "100 cái/bịch (Kiện 5000 cái)",
+      "min_qty": "500.000",
+      "max_qty": "5000.000",
+      "tracked_serial": false
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccc21",
+      "sku": "TUI-MANG-VE",
+      "name": "Túi Mang Về 2 Ngăn",
+      "unit": "cái",
+      "category": "Bao bì",
+      "packaging": "100 cái/xấp (Kiện 2000 cái)",
+      "min_qty": "300.000",
+      "max_qty": "3000.000",
       "tracked_serial": false
     }
   ],
   "initial_balances": [
     {
-      "location_code": "DEMO-HN",
-      "sku": "DEMO-PAPER-A4",
-      "quantity": "250.000"
+      "location_code": "BAR-MAIN",
+      "sku": "TRA-DEN-SO9",
+      "quantity": "50.000"
     },
     {
-      "location_code": "DEMO-HN",
-      "sku": "DEMO-LAPTOP",
-      "quantity": "1000.000"
+      "location_code": "BAR-MAIN",
+      "sku": "TRA-LAI-500G",
+      "quantity": "35.000"
     },
     {
-      "location_code": "DEMO-HN",
-      "sku": "STK-PASSBOOK",
-      "quantity": "500.000"
+      "location_code": "BAR-MAIN",
+      "sku": "TRA-OLONG-500G",
+      "quantity": "25.000"
     },
     {
-      "location_code": "DEMO-HN",
-      "sku": "CARD-NAPAS",
+      "location_code": "BAR-MAIN",
+      "sku": "BOT-BEO-BONE",
+      "quantity": "20.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "SUA-TUOI-1L",
+      "quantity": "25.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "SUA-DAC-1KG",
+      "quantity": "18.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "TRAN-CHAU-DEN",
+      "quantity": "35.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "TRAN-CHAU-3Q",
+      "quantity": "15.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "THACH-NHA-DAM",
+      "quantity": "12.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "SYRUP-DAO-700ML",
+      "quantity": "10.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "DUONG-NUOC-5L",
+      "quantity": "6.000"
+    },
+    {
+      "location_code": "BAR-MAIN",
+      "sku": "LY-PP-700ML",
       "quantity": "800.000"
     },
     {
-      "location_code": "DEMO-HCM",
-      "sku": "DEMO-PAPER-A4",
-      "quantity": "120.000"
+      "location_code": "BAR-MAIN",
+      "sku": "CUON-MANG-EP",
+      "quantity": "4.000"
     },
     {
-      "location_code": "DEMO-HCM",
-      "sku": "DEMO-LAPTOP",
-      "quantity": "500.000"
+      "location_code": "BAR-MAIN",
+      "sku": "ONG-HUT-PP",
+      "quantity": "2000.000"
+    },
+    {
+      "location_code": "KHO-TT",
+      "sku": "TRA-DEN-SO9",
+      "quantity": "200.000"
+    },
+    {
+      "location_code": "KHO-TT",
+      "sku": "BOT-BEO-BONE",
+      "quantity": "100.000"
+    },
+    {
+      "location_code": "KHO-TT",
+      "sku": "TRAN-CHAU-DEN",
+      "quantity": "150.000"
     }
   ],
-  "assets": [
-    {
-      "sku": "DEMO-LAPTOP",
-      "serial": "EMV-VISA-2026-000101",
-      "location_code": "DEMO-HN",
-      "status": "available"
-    },
-    {
-      "sku": "DEMO-LAPTOP",
-      "serial": "EMV-VISA-2026-000102",
-      "location_code": "DEMO-HN",
-      "status": "available"
-    },
-    {
-      "sku": "DEMO-LAPTOP",
-      "serial": "EMV-VISA-2026-000103",
-      "location_code": "DEMO-HCM",
-      "status": "available"
-    },
-    {
-      "sku": "STK-PASSBOOK",
-      "serial": "STK-QR-2026-880001",
-      "location_code": "DEMO-HN",
-      "status": "available"
-    },
-    {
-      "sku": "STK-PASSBOOK",
-      "serial": "STK-QR-2026-880002",
-      "location_code": "DEMO-HN",
-      "status": "available"
-    }
-  ]
+  "assets": []
 }

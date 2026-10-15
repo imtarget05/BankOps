@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BankOps — Sync Secrets to GitHub Actions via GitHub CLI (gh)
+# Quản Lý Kho Trà Sữa — Sync Secrets to GitHub Actions via GitHub CLI (gh)
 #
 # Reads from .env / .env.production and uploads secrets to GitHub Repository Secrets
 # =============================================================================
@@ -45,7 +45,7 @@ if ! command -v gh >/dev/null 2>&1; then
     echo "   - CLOUDFLARE_API_TOKEN:  ${CLOUDFLARE_API_TOKEN:-}"
     echo "   - DATABASE_URL:          ${DATABASE_URL:-}"
     echo "   - SECRET_KEY:            ${SECRET_KEY:-}"
-    echo "   - API_BASE_URL:          https://api.bankops.yourbank.com"
+    echo "   - API_BASE_URL:          https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
     exit 0
 fi
 
@@ -74,7 +74,7 @@ set_secret "DATABASE_URL" "${DATABASE_URL:-}"
 set_secret "SECRET_KEY" "${SECRET_KEY:-}"
 set_secret "AWS_ACCESS_KEY_ID" "${AWS_ACCESS_KEY_ID:-}"
 set_secret "AWS_SECRET_ACCESS_KEY" "${AWS_SECRET_ACCESS_KEY:-}"
-set_secret "API_BASE_URL" "https://api.bankops.yourbank.com"
+set_secret "API_BASE_URL" "https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
 
 echo ""
 success "All available secrets successfully synchronized to GitHub Actions!"

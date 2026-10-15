@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -93,7 +94,15 @@ class TestStocktake:
         r = client.post(
             "/inventory/stocktakes",
             headers=_idem(headers),
-            json={"location_id": loc_id, "note": "Kiểm kê định kỳ"},
+            json={
+                "location_id": loc_id,
+                "note": "Kiểm kê định kỳ",
+                # Ngày nghiệp vụ ngẫu nhiên: tránh va chạm guard
+                # "1 ca đang mở / kho / ngày" với stocktake do test khác để lại.
+                "business_date": (
+                    date.today() + timedelta(days=uuid.uuid4().int % 300 + 1)
+                ).isoformat(),
+            },
         )
         assert r.status_code in (200, 201), r.text
         return r.json()
@@ -197,7 +206,9 @@ class TestStocktake:
             json={"lines": [{"item_id": item_id, "counted_qty": str(counted_qty)}]},
         )
         assert r.status_code == 200, r.text
-        assert float(r.json()["lines"][0]["variance"]) < 0
+        matched = [l for l in r.json()["lines"] if l["item_id"] == item_id]
+        assert matched, "dòng kiểm kê của item phải tồn tại trong response"
+        assert float(matched[0]["variance"]) < 0
         assert client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(mgr)).status_code == 200
 
         approved = client.post(f"/inventory/stocktakes/{st_id}/approve", headers=_idem(checker))
@@ -274,7 +285,10 @@ class TestStocktake:
         assert submit.status_code == 200, submit.text
         assert edit.status_code in (200, 409), edit.text
         if edit.status_code == 409:
-            assert edit.json()["error"]["code"] == "STATE_CONFLICT"
+            # Theo contract kiểm kê, mọi PUT sau khi ca không còn open phải
+            # dùng mã chuyên biệt STOCKTAKE_LOCKED, kể cả khi submit vừa xảy
+            # ra song song với thao tác sửa.
+            assert edit.json()["error"]["code"] == "STOCKTAKE_LOCKED"
 
         frozen = client.get(f"/inventory/stocktakes/{st_id}", headers=maker)
         assert frozen.status_code == 200, frozen.text
@@ -285,7 +299,7 @@ class TestStocktake:
             json={"lines": [{"item_id": item_id, "counted_qty": "999"}]},
         )
         assert rejected_edit.status_code == 409, rejected_edit.text
-        assert rejected_edit.json()["error"]["code"] == "STATE_CONFLICT"
+        assert rejected_edit.json()["error"]["code"] == "STOCKTAKE_LOCKED"
 
 
 def test_legacy_stock_level_module_reexports_canonical_models():

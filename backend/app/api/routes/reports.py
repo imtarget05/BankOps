@@ -166,6 +166,113 @@ async def inventory_monthly(
     }
 
 
+@router.get("/consumption-top")
+async def consumption_top(
+    current_user=Depends(require_any_capability(*_READ_CAPS)),
+    db: AsyncSession = Depends(get_db),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=100),
+):
+    """Top nguyên liệu tiêu hao (SRS §3.5): tổng Sử dụng theo ca + Movement xuất."""
+    from collections import defaultdict
+    from decimal import Decimal
+
+    from app.models.inventory import Stocktake, StocktakeLine
+
+    df, dt = _parse_date(date_from, "date_from"), _parse_date(date_to, "date_to")
+    used: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    st_stmt = select(Stocktake)
+    if df:
+        st_stmt = st_stmt.where(Stocktake.created_at >= df)
+    if dt:
+        st_stmt = st_stmt.where(Stocktake.created_at <= dt)
+    st_ids = [str(s.id) for s in (await db.execute(st_stmt)).scalars().all()]
+    if st_ids:
+        from sqlalchemy import func as _func
+
+        lines = (
+            await db.execute(
+                select(StocktakeLine.item_id, _func.sum(StocktakeLine.used_qty)).where(
+                    StocktakeLine.stocktake_id.in_(st_ids)
+                ).group_by(StocktakeLine.item_id)
+            )
+        ).all()
+        for item_id, total in lines:
+            used[str(item_id)] += Decimal(str(total or 0))
+    move_stmt = select(Movement).where(Movement.quantity_signed < 0)
+    if df:
+        move_stmt = move_stmt.where(Movement.posted_at >= df)
+    if dt:
+        move_stmt = move_stmt.where(Movement.posted_at <= dt)
+    for m in (await db.execute(move_stmt)).scalars().all():
+        used[str(m.item_id)] += -Decimal(str(m.quantity_signed))
+    items = {str(i.id): i for i in (await db.execute(select(Item))).scalars().all()}
+    ranked = sorted(used.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+    return {
+        "items": [
+            {
+                "item_id": item_id,
+                "sku": items[item_id].sku if item_id in items else item_id,
+                "name": items[item_id].name if item_id in items else item_id,
+                "unit": items[item_id].unit if item_id in items else None,
+                "category": items[item_id].category if item_id in items else None,
+                "used_qty": str(qty),
+            }
+            for item_id, qty in ranked
+        ],
+        "simulation": True,
+    }
+
+
+@router.get("/shift-history")
+async def shift_history(
+    current_user=Depends(require_any_capability(*_READ_CAPS)),
+    db: AsyncSession = Depends(get_db),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    shift_code: str | None = Query(default=None),
+):
+    """Lịch sử chốt ca (SRS §3.5): chi tiết từng ca + nhân viên chốt."""
+    from decimal import Decimal
+
+    from app.models.iam import User
+    from app.models.inventory import Stocktake, StocktakeLine
+
+    df, dt = _parse_date(date_from, "date_from"), _parse_date(date_to, "date_to")
+    stmt = select(Stocktake)
+    if df:
+        stmt = stmt.where(Stocktake.created_at >= df)
+    if dt:
+        stmt = stmt.where(Stocktake.created_at <= dt)
+    if shift_code:
+        stmt = stmt.where(Stocktake.shift_code == shift_code)
+    shifts = (await db.execute(stmt.order_by(Stocktake.business_date.desc(), Stocktake.created_at.desc()))).scalars().all()
+    users = {str(u.id): u for u in (await db.execute(select(User))).scalars().all()}
+    out = []
+    for s in shifts:
+        lines = (
+            await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == s.id))
+        ).scalars().all()
+        total_var = sum((abs(Decimal(str(l.variance))) for l in lines), Decimal("0"))
+        maker = users.get(str(s.maker_id))
+        out.append(
+            {
+                "id": str(s.id),
+                "business_date": s.business_date.isoformat() if s.business_date else None,
+                "shift_code": s.shift_code,
+                "location_id": str(s.location_id),
+                "status": s.status,
+                "maker": maker.display_name_demo if maker else str(s.maker_id),
+                "line_count": len(lines),
+                "variance_lines": sum(1 for l in lines if Decimal(str(l.variance)) != 0),
+                "total_abs_variance": str(total_var),
+                "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+            }
+        )
+    return {"shifts": out, "count": len(out), "simulation": True}
+
+
 @router.get("/cashflow-daily")
 async def cashflow_daily(
     current_user=Depends(require_any_capability(*_READ_CAPS)),

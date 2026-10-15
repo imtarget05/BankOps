@@ -60,3 +60,16 @@ Mỗi mặt hàng tại từng kho đều có định mức tối thiểu (`min_
 ## Mẫu lỗi nghiệp vụ
 
 `INSUFFICIENT_STOCK`, `INSUFFICIENT_SIM_CASH`, `SELF_APPROVAL_FORBIDDEN`, `INVALID_STATE`, `CONFLICT_VERSION`, `IDEMPOTENCY_KEY_REUSED`, `DUPLICATE_SERIAL`, `RECONCILIATION_EXCEPTION`.
+
+## Chốt ca theo ca (trà sữa pilot)
+
+Ba khung giờ chuẩn: Ca Sáng `07:30–15:00`, Ca Chiều `15:00–23:00`, Ca Lỡ ngày `07:30–18:00`.
+Quy tắc:
+
+1. **Mở ca:** 1 ca đang mở duy nhất theo `(kho, ngày nghiệp vụ, loại ca)` — vi phạm trả 409 `SHIFT_ALREADY_OPEN`. Dòng kiểm kê được seed tự động; `opening_qty` kế thừa số `counted_qty` đã chốt của ca bàn giao (Sáng ← tồn cuối ngày trước; Chiều ← Sáng cùng ngày; Lỡ独立 khởi tạo từ tồn gần nhất).
+2. **Trong ca:** hàng nhập từ Phiếu nhập đã duyệt cộng vào `received_qty` của ca đang mở tại kho nhận.
+3. **Nhập liệu:** nhân viên chỉ sửa `used_qty` + `counted_qty`; `theoretical_qty = opening + received − used`, `variance = counted − theoretical` do server tính, client không tự quyết toán.
+4. **Chốt:** submit → approve (maker ≠ checker, cần `Idempotency-Key`). Ca chuyển `closed`, mọi PUT lines sau đó trả 409 `STOCKTAKE_LOCKED`.
+5. **Điều chỉnh:** approve phát sinh lệch tự tạo phiếu `kind=adjustment` (direction increase/decrease theo dấu lệch) chờ Quản lý duyệt; chỉ khi posted mới đổi tồn.
+6. **Cảnh báo:** tồn cuối ≤ Min → đỏ + sự kiện outbox; HSD lô ≤ 7 ngày → vàng/đỏ.
+

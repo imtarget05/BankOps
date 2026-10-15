@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
+import 'app_ui_settings_controller.dart';
 
 /// Màu trạng thái + nhãn DEMO, expose qua ThemeExtension để không hardcode
 /// trong widget (docs/07-flutter.md).
@@ -74,39 +75,102 @@ class AppStatusColors extends ThemeExtension<AppStatusColors> {
 }
 
 abstract final class AppTheme {
-  static const Color navy = Color(0xFF1E3A8A);
-  static const Color teal = Color(0xFF059669);
-  static const Color surface = Color(0xFFF8FAFC);
+  /// Màu thương hiệu lịch sử (giữ tương thích ngược)
+  static const Color navy = Color(0xFF4A2C2A);
+  static const Color teal = Color(0xFF3F7A5A);
+  static const Color surface = Color(0xFFFFFBF5);
 
-  static const _seed = navy;
+  static ThemeData light({
+    AppColorPreset preset = AppColorPreset.matcha,
+    AppDensity density = AppDensity.comfortable,
+  }) =>
+      _build(Brightness.light, preset: preset, density: density);
 
-  static ThemeData light() => _build(Brightness.light);
-  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData dark({
+    AppColorPreset preset = AppColorPreset.matcha,
+    AppDensity density = AppDensity.comfortable,
+  }) =>
+      _build(Brightness.dark, preset: preset, density: density);
 
-  static ThemeData _build(Brightness brightness) {
+  static (Color primary, Color secondary, Color surfaceLight, Color containerLight, Color surfaceDark, Color containerDark)
+      _colorsForPreset(AppColorPreset preset) {
+    switch (preset) {
+      case AppColorPreset.matcha:
+        return (
+          const Color(0xFF059669), // Emerald 600
+          const Color(0xFF10B981), // Emerald 500
+          const Color(0xFFF8FAFC),
+          const Color(0xFFECFDF5), // Matcha cream
+          const Color(0xFF0F172A),
+          const Color(0xFF064E3B),
+        );
+      case AppColorPreset.milktea:
+        return (
+          const Color(0xFF8D5B4C), // Caramel Chestnut
+          const Color(0xFFD97706), // Warm Amber
+          const Color(0xFFFFFDF9), // Milk foam
+          const Color(0xFFFFF7ED),
+          const Color(0xFF211815),
+          const Color(0xFF362823),
+        );
+      case AppColorPreset.oolong:
+        return (
+          const Color(0xFF1E293B), // Royal Slate
+          const Color(0xFF0284C7), // Sky Cyan
+          const Color(0xFFF8FAFC),
+          const Color(0xFFF0F9FF),
+          const Color(0xFF0B1120),
+          const Color(0xFF1E293B),
+        );
+      case AppColorPreset.berry:
+        return (
+          const Color(0xFFBE185D), // Berry Rose
+          const Color(0xFFE11D48), // Crimson
+          const Color(0xFFFFF5F7),
+          const Color(0xFFFFE4E6),
+          const Color(0xFF1F0B14),
+          const Color(0xFF4C0519),
+        );
+    }
+  }
+
+  static ThemeData _build(
+    Brightness brightness, {
+    AppColorPreset preset = AppColorPreset.matcha,
+    AppDensity density = AppDensity.comfortable,
+  }) {
     final isLight = brightness == Brightness.light;
+    final (prim, sec, surfL, contL, surfD, contD) = _colorsForPreset(preset);
+
     final scheme = ColorScheme.fromSeed(
-      seedColor: _seed,
+      seedColor: prim,
       brightness: brightness,
     ).copyWith(
-      primary: isLight ? navy : const Color(0xFF60A5FA),
-      secondary: teal,
-      surface: isLight ? surface : const Color(0xFF0B1120),
-      surfaceContainerLowest: isLight ? Colors.white : const Color(0xFF0F172A),
-      surfaceContainerLow: isLight ? Colors.white : const Color(0xFF1E293B),
-      surfaceContainer: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+      primary: prim,
+      secondary: sec,
+      surface: isLight ? surfL : surfD,
+      surfaceContainerLowest: isLight ? Colors.white : (surfD == const Color(0xFF0F172A) ? const Color(0xFF1E293B) : const Color(0xFF2B201C)),
+      surfaceContainerLow: isLight ? Colors.white : (surfD == const Color(0xFF0F172A) ? const Color(0xFF1E293B) : const Color(0xFF362823)),
+      surfaceContainer: isLight ? contL : contD,
       outlineVariant: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
     );
+
+    final visualDensity = density == AppDensity.compact
+        ? VisualDensity.compact
+        : VisualDensity.standard;
+
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      visualDensity: VisualDensity.standard,
+      visualDensity: visualDensity,
     );
-    final status =
-        brightness == Brightness.light ? AppStatusColors.light : AppStatusColors.dark;
+    final status = brightness == Brightness.light
+        ? AppStatusColors.light
+        : AppStatusColors.dark;
 
     return base.copyWith(
       extensions: [status],
+      visualDensity: visualDensity,
       // Typography scale 12/14/16/20/20/28 theo docs/07:9.
       textTheme: textTheme(brightness),
       appBarTheme: AppBarThemeData(

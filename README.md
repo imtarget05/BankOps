@@ -1,11 +1,11 @@
-# BankOps — Hệ Thống Vận Hành Kho & Quỹ Ngân Hàng Thông Minh (AI-Powered Core Banking Ops)
+# Kho-Trà-Sữa — Hệ Thống Vận Hành Kho & Quỹ Ngân Hàng Thông Minh (AI-Powered Core Banking Ops)
 
-[![CI](https://github.com/imtarget05/BankOps/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/BankOps/actions/workflows/ci.yml)
+[![CI](https://github.com/imtarget05/Kho-Trà-Sữa/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/Kho-Trà-Sữa/actions/workflows/ci.yml)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24+-02569B?logo=flutter)](https://flutter.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql)](https://postgresql.org)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%20%2F%20AI%20provider-F38020?logo=cloudflare)](https://developers.cloudflare.com)
-[![Quality Gate](https://img.shields.io/badge/Quality_Gate-Passed-success)](https://github.com/imtarget05/BankOps)
+[![Quality Gate](https://img.shields.io/badge/Quality_Gate-Passed-success)](https://github.com/imtarget05/Kho-Trà-Sữa)
 
 > **Lưu ý an toàn:** Tất cả số tiền, tồn quỹ, giao dịch, mã ấn chỉ và danh tính trong hệ thống là **mô phỏng nghiệp vụ** (`simulation: true`). Không kết nối trực tiếp core banking sản xuất và không sử dụng dữ liệu khách hàng thật.
 
@@ -58,14 +58,14 @@ flowchart TD
 
 ## 2. Hệ Thống Trợ Lý AI & Small LLM Pipeline
 
-1. **Trợ lý Hội thoại BankOps AI (qua FastAPI)**:
+1. **Trợ lý Hội thoại Kho-Trà-Sữa AI (qua FastAPI)**:
    - FastAPI là lớp duy nhất áp dụng RBAC, retrieval và guardrail trước khi gọi provider AI.
    - Cloudflare Workers AI có thể là provider từ xa khi FastAPI được cấu hình phù hợp; Worker trong repository không phục vụ API chat production.
 2. **Small LLM Pipeline Cho Máy Không Có GPU & Google Colab T4**:
    - Mô hình nền tảng: `Qwen2.5-1.5B-Instruct` (GGUF Quantized 4-bit `q4_k_m`, tiêu thụ < 1.4 GB RAM trên CPU).
-   - Notebook huấn luyện 1-click: [`ai/colab_finetune_bankops_t4.ipynb`](file:///Users/mainguyenbinhtan/Downloads/BankOps/ai/colab_finetune_bankops_t4.ipynb) (Fine-tune ~12 phút trên Colab T4 miễn phí).
-   - Tập dữ liệu ngân hàng chuẩn hóa: [`ai/dataset/train.jsonl`](file:///Users/mainguyenbinhtan/Downloads/BankOps/ai/dataset/train.jsonl) (hơn 120 mẫu hội thoại chuẩn hóa quy trình).
-   - Máy chủ suy luận CPU độc lập: [`ai/serve_cpu.py`](file:///Users/mainguyenbinhtan/Downloads/BankOps/ai/serve_cpu.py) tương thích OpenAI API và Ollama.
+   - Notebook huấn luyện 1-click: [`ai/colab_finetune_kho-tra-sua_t4.ipynb`](file:///Users/mainguyenbinhtan/Downloads/Kho-Trà-Sữa/ai/colab_finetune_kho-tra-sua_t4.ipynb) (Fine-tune ~12 phút trên Colab T4 miễn phí).
+   - Tập dữ liệu ngân hàng chuẩn hóa: [`ai/dataset/train.jsonl`](file:///Users/mainguyenbinhtan/Downloads/Kho-Trà-Sữa/ai/dataset/train.jsonl) (hơn 120 mẫu hội thoại chuẩn hóa quy trình).
+   - Máy chủ suy luận CPU độc lập: [`ai/serve_cpu.py`](file:///Users/mainguyenbinhtan/Downloads/Kho-Trà-Sữa/ai/serve_cpu.py) tương thích OpenAI API và Ollama.
 
 ---
 
@@ -94,7 +94,7 @@ docker compose up -d --build
 - **Giao diện Web App (Nginx Flutter Web):** [http://localhost:8080](http://localhost:8080)
 - **Tài liệu Backend Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **API Health Check:** [http://localhost:8000/health/live](http://localhost:8000/health/live)
-- **Cơ sở dữ liệu PostgreSQL:** `localhost:5432` (`bankops` / `bankops`)
+- **Cơ sở dữ liệu PostgreSQL:** `localhost:5432` (`kho-tra-sua` / `kho-tra-sua`)
 
 ---
 
@@ -130,7 +130,7 @@ PYTHONPATH=backend python3 -m pytest backend/tests/ -q
 ## 6. Cấu Trúc Thư Mục Dự Án
 
 ```
-BankOps/
+Kho-Trà-Sữa/
 ├── ai/                          # Small LLM Pipeline (Qwen2.5-1.5B, Colab Notebook, Dataset)
 ├── backend/                     # FastAPI Backend (Clean Architecture, Async SQLAlchemy)
 │   ├── app/api/routes/          # API Routers (auth, cash_sim, inventory, approvals, ai, reports)
@@ -144,3 +144,19 @@ BankOps/
 ├── sample-data/                 # Dữ liệu mẫu ban đầu (users, cashboxes, items, locations)
 └── docker-compose.yml           # Cấu hình cụm Docker 4 containers
 ```
+
+---
+
+## 7. Phạm vi pilot thay bằng ứng dụng kho trà sữa (10/2026)
+
+> **Domain hiện tại:** Nhập–Xuất–Tồn nguyên liệu theo 3 ca (Sáng 07:30–15:00,
+> Chiều 15:00–23:00, Lỡ ngày 07:30–18:00), theo `docs/SRS_QUAN_LY_KHO_TRA_SUA.md`.
+> Module Quỹ/Tích hợp/Đối soát (di sản core-banking) ẩn khỏi UI nhưng giữ backend
+> để rollback.
+>
+> Năng lực đã triển khai: danh mục 5 nhóm nguyên liệu + Min/Max, phiếu nhập(lô/HSD),
+> chốt ca + khóa ca + điều chỉnh, cảnh báo tồn thấp/cận date, báo cáo top tiêu hao,
+> AI trợ lý tài phòng, E2E API 253/254 test xanh.
+>
+> Chưa triển khai (cần consent của TEAM): offline chốt ca + outbox đồng bộ (Phase 6),
+> FCM/push real, tích hợp Google Sheets/APPs Script, deploy staging + UAT luồng ca.

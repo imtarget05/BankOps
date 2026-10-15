@@ -150,7 +150,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
           Text('Không tìm thấy kết quả phù hợp'),
           SizedBox(height: 4),
           Text(
-            'Thử mã phiếu (vd: sr-0001), SKU (vd: DEMO-PAPER-A4) hoặc tên kho/quỹ.',
+            'Thử mã phiếu (vd: sr-0001), SKU (vd: TRA-DEN-SO9) hoặc tên kho.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12),
           ),

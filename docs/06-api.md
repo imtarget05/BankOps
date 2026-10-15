@@ -75,3 +75,18 @@ Status: 200 read/transition, 201 create, 202 queued job, 400 validation syntax, 
 ## SSE contract
 
 `GET /events/stream?cursor=<last_event_id>`; `text/event-stream`, `id`, `event: job.updated|activity.created|heartbeat`, `data` JSON `{event_id, occurred_at, subject_id, status, processed, total, message_key}`. Server replay theo cursor trong cửa sổ retention, client dùng `Last-Event-ID` khi reconnect rồi GET REST để đồng bộ. Không gửi token trong URL; xác thực header/cookie. Nếu cursor quá cũ, gửi `resync_required` và client tải lại REST.
+
+## Nghiệp vụ ca trà sữa (pilot — bao phủ bởi test_tea_shift_regression)
+
+| Method/path | Permission | Nội dung |
+|---|---|---|
+| POST `/inventory/stocktakes` | inventory.write | mở ca theo `location_id` + `shift_code` (morning/afternoon/split) + `business_date`; 1 ca/kho/ngày, chống trùng 409 `SHIFT_ALREADY_OPEN`; tự seed dòng + `opening_qty` kế thừa từ ca bàn giao trước |
+| GET `/inventory/stocktakes`, `/inventory/stocktakes/{id}` | inventory.read | danh sách/chi tiết ca kèm `opening_qty, received_qty, used_qty, theoretical_qty, counted_qty, variance` |
+| PUT `/inventory/stocktakes/{id}/lines` | inventory.write (maker) | chỉ nhập `used_qty` + `counted_qty`; hệ thống tính `theoretical = opening + received - used`, `variance = counted - theoretical`; ca đã chốt trả 409 `STOCKTAKE_LOCKED` |
+| POST `/inventory/stocktakes/{id}/submit`, `/approve` | owner / inventory.approve (+`Idempotency-Key`) | chốt ca; approve tạo Phiếu điều chỉnh tự động khi lệch ≠ 0; maker ≠ checker |
+| POST `/inventory/requests` `kind=receipt` | inventory.write | thêm `supplier`, `received_at`; dòng `unit_price` (thành tiền tự tính), `lot_no`, `expiry_date`; HSD < ngày nhận → 422 `EXPIRED_LOT` |
+| GET `/inventory/low-stock-alerts` | inventory.read | tồn cuối ≤ Min → đỏ, cần đặt hàng (`rule: quantity <= min_qty`) |
+| GET `/inventory/expiry-alerts?days=7` | inventory.read | cảnh báo HSD theo lô: critical ≤ 0 ngày, warning 1–3, watch 4–7 |
+| GET `/reports/consumption-top?date_from=&date_to=&limit=10` | inventory.read/audit | Top nguyên liệu tiêu hao (tổng `used_qty` ca + movement xuất) |
+| GET `/reports/shift-history?date_from=&date_to=&shift_code=` | inventory.read/audit | lịch sử chốt ca: ngày, ca, kho, người chốt, số dòng lệch, tổng lệch tuyệt đối |
+

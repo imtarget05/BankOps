@@ -45,40 +45,55 @@ class MeetingSummaryFormatter {
     final netInventory = totalInbound - totalOutbound;
 
     // Phân tầng tồn đọng
-    final critical = stagnationItems.where((i) => i.severity == 'critical').toList();
-    final stagnant = stagnationItems.where((i) => i.severity == 'stagnant').toList();
+    final critical =
+        stagnationItems.where((i) => i.severity == 'critical').toList();
+    final stagnant =
+        stagnationItems.where((i) => i.severity == 'stagnant').toList();
     final watch = stagnationItems.where((i) => i.severity == 'watch').toList();
 
     // Đối soát
     final totalRuns = reconciliations.length;
     final cleanRuns = reconciliations.where((r) => r.exceptions.isEmpty).length;
-    final matchRate = totalRuns > 0 ? (cleanRuns / totalRuns * 100).toStringAsFixed(1) : '100.0';
+    final matchRate = totalRuns > 0
+        ? (cleanRuns / totalRuns * 100).toStringAsFixed(1)
+        : '100.0';
 
     final periodStr = dateRange != null
         ? '${AppFormat.date(dateRange.start)} → ${AppFormat.date(dateRange.end)}'
-        : (granularity == ReportGranularity.daily ? 'Tổng hợp theo ngày' : 'Tổng hợp theo tháng');
+        : (granularity == ReportGranularity.daily
+            ? 'Tổng hợp theo ngày'
+            : 'Tổng hợp theo tháng');
 
     final assessmentStr = staffAssessment ??
-        (critical.isNotEmpty ? 'Cảnh báo rủi ro cao (Có tồn đọng >= 90 ngày)' : 'Vận hành ổn định');
+        (critical.isNotEmpty
+            ? 'Cảnh báo rủi ro cao (Có tồn đọng >= 90 ngày)'
+            : 'Vận hành ổn định');
 
     final sb = StringBuffer();
-    sb.writeln('# BÁO CÁO GIAO BAN VẬN HÀNH & ĐIỀU HÀNH BANKOPS');
+    sb.writeln('# BÁO CÁO VẬN HÀNH QUẢN LÝ KHO TRÀ SỮA');
     sb.writeln('**Kỳ báo cáo:** $periodStr');
-    sb.writeln('**Thời điểm trích xuất:** ${AppFormat.dateTime(DateTime.now())}');
+    sb.writeln(
+        '**Thời điểm trích xuất:** ${AppFormat.dateTime(DateTime.now())}');
     sb.writeln('**Đánh giá sức khỏe vận hành:** $assessmentStr');
     sb.writeln();
 
     sb.writeln('## 1. DÒNG TIỀN & THANH KHOẢN QUỸ MÔ PHỎNG');
-    sb.writeln('- **Tổng thu quỹ:** ${AppFormat.money(totalIn.toStringAsFixed(0))}');
-    sb.writeln('- **Tổng chi quỹ:** ${AppFormat.money(totalOut.toStringAsFixed(0))}');
-    sb.writeln('- **Dòng tiền ròng (Net):** ${AppFormat.money(netCash.toStringAsFixed(0))} ${netCash >= 0 ? '(Thặng dư)' : '(Thâm hụt)'}');
+    sb.writeln(
+        '- **Tổng thu quỹ:** ${AppFormat.money(totalIn.toStringAsFixed(0))}');
+    sb.writeln(
+        '- **Tổng chi quỹ:** ${AppFormat.money(totalOut.toStringAsFixed(0))}');
+    sb.writeln(
+        '- **Dòng tiền ròng (Net):** ${AppFormat.money(netCash.toStringAsFixed(0))} ${netCash >= 0 ? '(Thặng dư)' : '(Thâm hụt)'}');
     sb.writeln('- **Tổng số giao dịch:** $totalJournals bút toán');
     sb.writeln();
 
-    sb.writeln('## 2. VẬN HÀNH KHO ẤN CHỈ & VẬT TƯ');
-    sb.writeln('- **Tổng nhập kho:** ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} đơn vị ($totalReceipts phiếu)');
-    sb.writeln('- **Tổng xuất kho:** ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))} đơn vị ($totalIssues phiếu)');
-    sb.writeln('- **Biến động lưu kho ròng:** ${AppFormat.quantity(netInventory.toStringAsFixed(0))} đơn vị');
+    sb.writeln('## 2. VẬN HÀNH KHO NGUYÊN LIỆU');
+    sb.writeln(
+        '- **Tổng nhập kho:** ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} đơn vị ($totalReceipts phiếu)');
+    sb.writeln(
+        '- **Tổng xuất kho:** ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))} đơn vị ($totalIssues phiếu)');
+    sb.writeln(
+        '- **Biến động lưu kho ròng:** ${AppFormat.quantity(netInventory.toStringAsFixed(0))} đơn vị');
     sb.writeln();
 
     sb.writeln('## 3. ĐIỂM NÓNG TỒN ĐỌNG & RỦI RO');
@@ -88,8 +103,11 @@ class MeetingSummaryFormatter {
     if (critical.isNotEmpty) {
       sb.writeln('**Danh sách hàng cần xử lý gấp:**');
       for (final item in critical.take(5)) {
-        final days = item.daysSinceLastIssue != null ? '${item.daysSinceLastIssue} ngày' : 'Chưa từng xuất';
-        sb.writeln('  * [${item.sku}] ${item.name} — Tồn: ${item.quantity} (Tồn đọng $days)');
+        final days = item.daysSinceLastIssue != null
+            ? '${item.daysSinceLastIssue} ngày'
+            : 'Chưa từng xuất';
+        sb.writeln(
+            '  * [${item.sku}] ${item.name} — Tồn: ${item.quantity} (Tồn đọng $days)');
       }
     }
     sb.writeln();
@@ -102,17 +120,22 @@ class MeetingSummaryFormatter {
 
     sb.writeln('## 5. TRỌNG TÂM THẢO LUẬN & KIẾN NGHỊ CUỘC HỌP');
     if (critical.isNotEmpty) {
-      sb.writeln('1. **Thanh lý / Luân chuyển ấn chỉ:** Khẩn trương rà soát ${critical.length} mặt hàng tồn đọng trên 90 ngày.');
+      sb.writeln(
+          '1. **Xử lý hàng tồn:** Rà soát ${critical.length} nguyên liệu tồn đọng trên 90 ngày.');
     }
     if (netCash < 0) {
-      sb.writeln('2. **Cân đối thanh khoản:** Dòng tiền chi đang vượt dòng tiền thu trong kỳ báo cáo.');
+      sb.writeln(
+          '2. **Cân đối thanh khoản:** Dòng tiền chi đang vượt dòng tiền thu trong kỳ báo cáo.');
     } else {
-      sb.writeln('2. **Cân đối quỹ:** Duy trì thanh khoản an toàn theo hạn mức định mức chi nhánh.');
+      sb.writeln(
+          '2. **Cân đối quỹ:** Duy trì thanh khoản an toàn theo hạn mức định mức chi nhánh.');
     }
     if (totalRuns - cleanRuns > 0) {
-      sb.writeln('3. **Xử lý ngoại lệ đối soát:** Đề nghị Checker và bộ phận kiểm toán nội bộ lập biên bản giải trình các chênh lệch.');
+      sb.writeln(
+          '3. **Xử lý ngoại lệ đối soát:** Đề nghị Checker và bộ phận kiểm toán nội bộ lập biên bản giải trình các chênh lệch.');
     } else {
-      sb.writeln('3. **Kiểm soát quy trình:** Tiếp tục duy trì chuẩn kiểm duyệt 4 mắt và bảo mật mã PIN phê duyệt.');
+      sb.writeln(
+          '3. **Kiểm soát quy trình:** Tiếp tục duy trì chuẩn kiểm duyệt 4 mắt và bảo mật mã PIN phê duyệt.');
     }
 
     if (staffNotes != null && staffNotes.trim().isNotEmpty) {

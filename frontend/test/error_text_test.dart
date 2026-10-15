@@ -1,5 +1,5 @@
-import 'package:bankops/src/core/util/error_text.dart';
-import 'package:bankops/src/data/repositories/bankops_repository.dart';
+import 'package:kho_tra_sua/src/core/util/error_text.dart';
+import 'package:kho_tra_sua/src/data/repositories/bankops_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -18,7 +18,7 @@ void main() {
     test('che transport exception (chứa URI nội bộ)', () {
       final transport = Exception(
         'ClientException: Failed to fetch, '
-        'uri=https://imtarget05--bankops-api-api.us-east.modal.run/api/v1/inventory/items',
+        'uri=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run/api/v1/inventory/items',
       );
       final msg = friendlyError(transport);
       expect(msg, isNot(contains('modal.run')));

@@ -7,67 +7,195 @@ List<AppUser> _seedUsers() => const [
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
           username: 'demo_maker',
-          displayName: 'Nguyễn Hoàng An (GDV)',
+          displayName: 'Nguyễn Thị Mai (Trưởng Ca Sáng - Staff)',
           roles: ['staff']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
           username: 'demo_checker',
-          displayName: 'Trần Tuấn Bình (KSV)',
-          roles: ['approver']),
+          displayName: 'Trần Văn Quản Lý (Quản Lý Cửa Hàng - Admin)',
+          roles: ['approver', 'inventory_manager', 'admin']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3',
           username: 'demo_auditor',
-          displayName: 'Lê Khánh Chi (KTNB)',
+          displayName: 'Lê Khánh Chi (Kiểm Soát Viên - Auditor)',
           roles: ['auditor']),
+      AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
+          username: 'staff_morning',
+          displayName: 'Nguyễn Thị Mai (Pha Chế Ca Sáng 07:30 - 15:00)',
+          roles: ['staff']),
+      AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5',
+          username: 'staff_afternoon',
+          displayName: 'Lê Hoàng Nam (Pha Chế Ca Chiều 15:00 - 23:00)',
+          roles: ['staff']),
+      AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6',
+          username: 'staff_split',
+          displayName: 'Phạm Minh Tuấn (Pha Chế Ca Lỡ 07:30 - 18:00)',
+          roles: ['staff']),
+      AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
+          username: 'manager_demo',
+          displayName: 'Trần Văn Quản Lý (Chủ Quán / Quản Lý)',
+          roles: ['admin', 'inventory_manager']),
     ];
 
 List<InventoryLocation> _seedLocations() => const [
       InventoryLocation(
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-          code: 'DEMO-HN',
-          name: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính'),
+          code: 'BAR-MAIN',
+          name: 'Quầy Pha Chế Chính (Bar Counter)'),
       InventoryLocation(
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
-          code: 'DEMO-HCM',
-          name: 'Kho Quỹ Chi Nhánh Sở Giao Dịch TP.HCM'),
+          code: 'STORAGE-COOL',
+          name: 'Kho Mát & Tủ Bảo Quản Nguyên Liệu'),
       InventoryLocation(
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3',
-          code: 'KHO-DNG-01',
-          name: 'Kho Ấn Chỉ Chi Nhánh Đà Nẵng'),
+          code: 'STORAGE-DRY',
+          name: 'Kho Khô & Vật Tư Sau Quầy'),
+      InventoryLocation(
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbc1',
+          code: 'KHO-TT',
+          name: 'Kho Trung Tâm Cung Ứng'),
     ];
 
 List<InventoryItem> _seedItems() => const [
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
-          sku: 'TRA-OLONG-500G',
-          name: 'Trà ô long',
+          sku: 'TRA-DEN-SO9',
+          name: 'Trà Đen Lộc Phát Số 9',
           unit: 'gói',
           category: 'Nhóm Trà',
-          packaging: '500 g/gói',
+          packaging: '500g/gói (Thùng 20 gói)',
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
-          sku: 'SUA-DAC-1KG',
-          name: 'Sữa đặc',
-          unit: 'túi',
-          category: 'Nhóm Bột & Sữa',
-          packaging: '1 kg/túi',
+          sku: 'TRA-LAI-500G',
+          name: 'Trà Xanh Hoa Lài Thượng Hạng',
+          unit: 'gói',
+          category: 'Nhóm Trà',
+          packaging: '500g/gói (Thùng 20 gói)',
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3',
-          sku: 'TRAN-CHAU-1KG',
-          name: 'Trân châu đen',
-          unit: 'túi',
-          category: 'Topping',
-          packaging: '1 kg/túi',
+          sku: 'TRA-OLONG-500G',
+          name: 'Trà Ô Long Nướng Đặc Biệt',
+          unit: 'gói',
+          category: 'Nhóm Trà',
+          packaging: '500g/gói (Thùng 20 gói)',
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc4',
+          sku: 'BOT-BEO-BONE',
+          name: 'Bột Kem Béo B-One Thái Lan',
+          unit: 'túi',
+          category: 'Nhóm Bột & Sữa',
+          packaging: '1kg/túi (Thùng 12 túi)',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc5',
+          sku: 'SUA-TUOI-1L',
+          name: 'Sữa Tươi Tiệt Trùng Barista Milk',
+          unit: 'hộp',
+          category: 'Nhóm Bột & Sữa',
+          packaging: '1 Lít/hộp (Thùng 12 hộp)',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc6',
+          sku: 'SUA-DAC-1KG',
+          name: 'Sữa Đặc Ngọt Larosee',
+          unit: 'túi',
+          category: 'Nhóm Bột & Sữa',
+          packaging: '1kg/túi (Thùng 12 túi)',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc7',
+          sku: 'TRAN-CHAU-DEN',
+          name: 'Trân Châu Đen Gia Uy',
+          unit: 'gói',
+          category: 'Topping',
+          packaging: '1kg/gói (Thùng 20 gói)',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc8',
+          sku: 'TRAN-CHAU-1KG',
+          name: 'Trân Châu Đen Đóng Túi',
+          unit: 'túi',
+          category: 'Topping',
+          packaging: '1kg/túi',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc9',
+          sku: 'TRAN-CHAU-3Q',
+          name: 'Trân Châu Trắng 3Q Sea Jelly',
+          unit: 'túi',
+          category: 'Topping',
+          packaging: '2kg/túi',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc10',
+          sku: 'THACH-NHA-DAM',
+          name: 'Thạch Nha Đam Giòn Aloka',
+          unit: 'túi',
+          category: 'Topping',
+          packaging: '1kg/túi',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc11',
+          sku: 'SYRUP-DAO-700ML',
+          name: 'Syrup Đào Monin Chai Thủy Tinh',
+          unit: 'chai',
+          category: 'Syrup & Mứt',
+          packaging: '700ml/chai',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc12',
+          sku: 'DUONG-NUOC-5L',
+          name: 'Nước Đường Bắp Đậm Đặc',
+          unit: 'can',
+          category: 'Syrup & Mứt',
+          packaging: '5 Lít/can',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc13',
+          sku: 'LY-PP-700ML',
+          name: 'Ly Nhựa PP Trong 700ml',
+          unit: 'cái',
+          category: 'Bao bì',
+          packaging: '50 cái/cây',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc14',
           sku: 'LY-700ML',
           name: 'Ly nhựa 700 ml',
           unit: 'cái',
           category: 'Bao bì',
           packaging: '50 cái/lốc',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc15',
+          sku: 'CUON-MANG-EP',
+          name: 'Cuộn Màng Ép Miệng Ly Trà Sữa',
+          unit: 'cuộn',
+          category: 'Bao bì',
+          packaging: '3000 nắp/cuộn',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc20',
+          sku: 'ONG-HUT-PP',
+          name: 'Ống Hút Phi 12 Trà Sữa',
+          unit: 'cái',
+          category: 'Bao bì',
+          packaging: '100 cái/bịch (Kiện 5000 cái)',
+          trackedSerial: false),
+      InventoryItem(
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc21',
+          sku: 'TUI-MANG-VE',
+          name: 'Túi Mang Về 2 Ngăn',
+          unit: 'cái',
+          category: 'Bao bì',
+          packaging: '100 cái/xấp (Kiện 2000 cái)',
           trackedSerial: false),
     ];
 
@@ -90,58 +218,9 @@ List<StockBalance> _seedBalances() => const [
           quantity: '120.000'),
     ];
 
-List<AssetRecord> _seedAssets() => const [
-      AssetRecord(
-          id: 'asset-001',
-          serial: 'EMV-VISA-2026-000101',
-          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
-          locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-          status: AssetStatus.available,
-          assignee: 'Nguyễn Hoàng An'),
-      AssetRecord(
-          id: 'asset-002',
-          serial: 'EMV-VISA-2026-000102',
-          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
-          locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-          status: AssetStatus.available),
-      AssetRecord(
-          id: 'asset-003',
-          serial: 'STK-QR-2026-880001',
-          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3',
-          locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-          status: AssetStatus.available),
-    ];
+List<AssetRecord> _seedAssets() => const [];
 
-List<AssetLogItem> _seedAssetLogs() => [
-      AssetLogItem(
-        id: 'log-001',
-        serial: 'EMV-VISA-2026-000101',
-        fromLocationId: null,
-        fromLocationName: 'NCC Thẻ Thông Minh',
-        toLocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-        toLocationName: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính',
-        statusBefore: null,
-        statusAfter: 'in_stock',
-        actorName: 'Trần Tuấn Bình (KSV)',
-        notes: 'Nhập kho lô phôi thẻ chip bảo mật mới',
-        createdAt: DateTime.utc(2026, 10, 1, 9, 0),
-      ),
-      AssetLogItem(
-        id: 'log-002',
-        serial: 'EMV-VISA-2026-000101',
-        fromLocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-        fromLocationName: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính',
-        toLocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-        toLocationName: 'Kho Ấn Chỉ Trung Tâm - Hội Sở Chính',
-        fromAssignee: null,
-        toAssignee: 'Nguyễn Hoàng An (GDV)',
-        statusBefore: 'in_stock',
-        statusAfter: 'assigned',
-        actorName: 'Trần Tuấn Bình (KSV)',
-        notes: 'Bàn giao phôi thẻ cho GDV phục vụ phát hành tại quầy',
-        createdAt: DateTime.utc(2026, 10, 5, 14, 30),
-      ),
-    ];
+List<AssetLogItem> _seedAssetLogs() => const [];
 
 List<StockMovement> _seedMovements() => [
       StockMovement(
@@ -160,14 +239,14 @@ List<StockRequest> _seedStockRequests() => [
           status: RequestStatus.draft,
           version: 1,
           createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
-          createdByName: 'Nguyễn Hoàng An (GDV)',
+          createdByName: 'Nguyễn Thị Mai (Trưởng Ca Sáng)',
           locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
           items: const [
             StockRequestLine(
                 itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
                 quantity: '10.000')
           ],
-          reason: 'Nhập kho bổ sung séc bảo chi quý 4',
+          reason: 'Nhập bổ sung trà đen cho ca sáng cuối tuần',
           createdAt: DateTime.utc(2026, 10, 5)),
       StockRequest(
           id: 'sr-0002',
@@ -175,14 +254,14 @@ List<StockRequest> _seedStockRequests() => [
           status: RequestStatus.pending,
           version: 1,
           createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
-          createdByName: 'Trần Tuấn Bình (KSV)',
+          createdByName: 'Trần Văn Quản Lý (Quản Lý)',
           locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
           items: const [
             StockRequestLine(
                 itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
                 quantity: '1.000')
           ],
-          reason: 'Xuất phôi thẻ Visa cấp mới cho KH VIP',
+          reason: 'Xuất trà lài bổ sung quầy pha chế ca chiều',
           createdAt: DateTime.utc(2026, 10, 6)),
     ];
 
@@ -443,16 +522,16 @@ List<CashflowBucket> _seedCashflowMonthly() => const [
 List<StagnationItem> _seedStagnation() => const [
       StagnationItem(
         itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
-        sku: 'DEMO-LAPTOP',
-        name: 'Laptop mẫu',
+        sku: 'TRA-LAI-500G',
+        name: 'Trà Xanh Hoa Lài Thượng Hạng',
         quantity: '4.000',
         daysSinceLastIssue: 98,
         severity: 'critical',
       ),
       StagnationItem(
         itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
-        sku: 'DEMO-PAPER-A4',
-        name: 'Giấy A4 giả lập',
+        sku: 'TRA-DEN-SO9',
+        name: 'Trà Đen Lộc Phát Số 9',
         quantity: '100.000',
         daysSinceLastIssue: 45,
         severity: 'watch',

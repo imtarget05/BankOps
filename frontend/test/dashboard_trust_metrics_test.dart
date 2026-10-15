@@ -1,5 +1,5 @@
-import 'package:bankops/src/data/models/dtos.dart';
-import 'package:bankops/src/features/dashboard/dashboard_trust_metrics.dart';
+import 'package:kho_tra_sua/src/data/models/dtos.dart';
+import 'package:kho_tra_sua/src/features/dashboard/dashboard_trust_metrics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

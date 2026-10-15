@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:bankops/src/core/theme/app_theme.dart';
-import 'package:bankops/src/core/widgets/async_view.dart';
-import 'package:bankops/src/data/repositories/bankops_repository.dart';
-import 'package:bankops/src/features/auth/auth_service.dart';
+import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
+import 'package:kho_tra_sua/src/core/widgets/async_view.dart';
+import 'package:kho_tra_sua/src/data/repositories/bankops_repository.dart';
+import 'package:kho_tra_sua/src/features/auth/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -14,8 +14,8 @@ import 'package:http/testing.dart';
 /// straight into the UI.
 void main() {
   const rawLeak = 'ClientException: Failed to fetch, '
-      'uri=https://imtarget05--bankops-api-api.us-east.modal.run/api/v1/reports/inventory-daily';
-  const host = 'imtarget05--bankops-api-api.us-east.modal.run';
+      'uri=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run/api/v1/reports/inventory-daily';
+  const host = 'imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run';
 
   Future<void> pumpAsync(WidgetTester tester, Object error) async {
     // Attach the listener first, then complete with the error — otherwise the

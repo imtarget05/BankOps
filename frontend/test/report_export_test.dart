@@ -1,6 +1,6 @@
-import 'package:bankops/src/core/util/approval_pdf.dart';
-import 'package:bankops/src/core/util/report_excel.dart';
-import 'package:bankops/src/data/models/dtos.dart';
+import 'package:kho_tra_sua/src/core/util/approval_pdf.dart';
+import 'package:kho_tra_sua/src/core/util/report_excel.dart';
+import 'package:kho_tra_sua/src/data/models/dtos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

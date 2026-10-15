@@ -1,4 +1,4 @@
-name = "bankops-api"
+name = "kho-tra-sua-api"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
@@ -27,7 +27,7 @@ APP_ENV = "production"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 [env.staging]
-name = "bankops-api-staging"
+name = "kho-tra-sua-api-staging"
 vars = { APP_ENV = "staging" }
 
 # ─── Secrets (Staging) ────────────────────────────────────────────────────────

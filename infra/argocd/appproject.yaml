@@ -1,22 +1,22 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: bankops
+  name: kho-tra-sua
   namespace: argocd
   labels:
-    app.kubernetes.io/name: bankops-project
-    app.kubernetes.io/part-of: bankops-system
+    app.kubernetes.io/name: kho-tra-sua-project
+    app.kubernetes.io/part-of: kho-tra-sua-system
 spec:
-  description: "BankOps Core Banking Operations System Project"
+  description: "Kho-Trà-Sữa Core Banking Operations System Project"
   # Allowed source Git repositories
   sourceRepos:
-    - "https://github.com/imtarget05/BankOps.git"
-    - "git@github.com:imtarget05/BankOps.git"
+    - "https://github.com/imtarget05/Kho-Trà-Sữa.git"
+    - "git@github.com:imtarget05/Kho-Trà-Sữa.git"
   # Allowed destination clusters and namespaces
   destinations:
-    - namespace: "bankops-prod"
+    - namespace: "kho-tra-sua-prod"
       server: "https://kubernetes.default.svc"
-    - namespace: "bankops-staging"
+    - namespace: "kho-tra-sua-staging"
       server: "https://kubernetes.default.svc"
   # Cluster-scoped resources whitelist (keep minimal for security)
   clusterResourceWhitelist:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BankOps — Script setup Neon PostgreSQL cho Cloudflare deployment
+# Quản Lý Kho Trà Sữa — Script setup Neon PostgreSQL + Cloudflare
 # =============================================================================
 # Chạy: bash infra/scripts/setup-neon.sh
 # Yêu cầu: psql, wrangler đã cài và đăng nhập Cloudflare
@@ -25,8 +25,8 @@ error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # ─── Banner ──────────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║       BankOps — Cloudflare + Neon Setup Script           ║"
-echo "║  Zero cold start cho nhân viên thu chi 24/7              ║"
+echo "║   Quản Lý Kho Trà Sữa — Cloudflare + Neon Setup Script   ║"
+echo "║  Backend Modal + frontend Cloudflare Workers Assets       ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -41,9 +41,9 @@ success "Tất cả tools OK"
 echo ""
 info "=== BƯỚC 1: Neon Database ==="
 echo ""
-echo "1. Vào https://console.neon.tech và tạo project 'bankops'"
+echo "1. Vào https://console.neon.tech và tạo project cho Quản Lý Kho Trà Sữa"
 echo "2. Lấy connection string dạng:"
-echo "   postgresql://user:password@ep-xxx.ap-southeast-1.aws.neon.tech/bankops?sslmode=require"
+echo "   postgresql://user:password@ep-xxx.ap-southeast-1.aws.neon.tech/kho-tra-sua?sslmode=require"
 echo ""
 read -rp "Dán Neon connection string (pooled endpoint): " NEON_URL
 [[ -z "$NEON_URL" ]] && error "Connection string không được trống"
@@ -137,20 +137,23 @@ echo "╔═══════════════════════�
 echo "║                    ✅ SETUP HOÀN TẤT                     ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "Worker URL: https://bankops-api.<account>.workers.dev"
+echo "Web URL: https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
+echo "API URL: https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
 echo ""
 echo "Bước tiếp theo:"
 echo "  1. Build Flutter web:"
 echo "     cd frontend"
 echo "     flutter build web --release \\"
-echo "       --dart-define=API_BASE_URL=https://bankops-api.<account>.workers.dev"
+echo "       --dart-define=API_BASE_URL=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
 echo ""
 echo "  2. Deploy Pages:"
-echo "     cd infra/cloudflare-worker"
-echo "     wrangler pages deploy ../../frontend/build/web --project-name=bankops-web"
+echo "     cd frontend"
+echo "     rsync -a --exclude='_redirects' build/web/ build/worker-assets/"
+echo "     cp ../infra/cloudflare-pages/_headers build/worker-assets/_headers"
+echo "     npx wrangler@4 deploy --config ../infra/cloudflare-worker/wrangler.tea-inventory.toml"
 echo ""
 echo "  3. Thêm secrets GitHub Actions:"
 echo "     CLOUDFLARE_API_TOKEN  = <lấy từ dash.cloudflare.com → My Profile → API Tokens>"
 echo "     CLOUDFLARE_ACCOUNT_ID = $(wrangler whoami 2>/dev/null | grep -oE '[a-f0-9]{32}' | head -1 || echo '<lấy từ dash.cloudflare.com>')"
-echo "     API_BASE_URL          = https://bankops-api.<account>.workers.dev"
+echo "     API_BASE_URL          = https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
 echo ""

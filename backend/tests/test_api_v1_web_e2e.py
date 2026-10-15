@@ -252,10 +252,13 @@ def test_high_risk_dual_control_pin_e2e_flow(client):
         headers=chk_headers,
         json={
             "request_id": cr_id,
-            "kind": "cash",
-            "amount_or_qty": "600000000.00",
+            # Heuristic theo domain trà sữa: chốt rủi ro cao trên phiếu
+            # điều chỉnh lệch lớn; luồng PIN dual-control của cash module
+            # giữ nguyên.
+            "kind": "adjustment",
+            "amount_or_qty": "12",
             "maker": "demo_maker",
-            "reason": "Xuất quỹ khẩn cấp ATM trung tâm",
+            "reason": "Lệch kiểm kê ca cuối ngày thiếu 12 đơn vị nguyên liệu",
         },
     )
     assert ai_resp.status_code == 200

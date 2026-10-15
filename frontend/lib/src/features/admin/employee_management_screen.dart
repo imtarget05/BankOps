@@ -57,7 +57,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
       final branchesFuture = repo.getBranches();
       final rolesFuture = repo.getRoles();
       final employeesFuture = repo.getEmployees(
-        search: _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim(),
+        search:
+            _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim(),
         branchId: _selectedBranchId,
         role: _selectedRole,
         status: _selectedStatus,
@@ -160,7 +161,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                           controller: emailCtrl,
                           decoration: const InputDecoration(
                             labelText: 'Email công vụ',
-                            hintText: 'a.nguyen@bankops.internal',
+                            hintText: 'a.nguyen@khotrasua.local',
                             prefixIcon: Icon(Icons.email_outlined),
                             border: OutlineInputBorder(),
                           ),
@@ -183,7 +184,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Chi nhánh & Vai trò ngân hàng',
+                    'Cửa hàng & vai trò nhân viên',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 8),
@@ -192,14 +193,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     isExpanded: true,
                     initialValue: branchId,
                     decoration: const InputDecoration(
-                      labelText: 'Chi nhánh công tác',
+                      labelText: 'Cửa hàng làm việc',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.account_balance_outlined),
                     ),
                     items: _branches
                         .map((b) => DropdownMenuItem(
                               value: b.id,
-                              child: Text('${b.code} - ${b.name}', overflow: TextOverflow.ellipsis),
+                              child: Text('${b.code} - ${b.name}',
+                                  overflow: TextOverflow.ellipsis),
                             ))
                         .toList(),
                     onChanged: (v) => setDialogState(() => branchId = v),
@@ -289,7 +291,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           username: usernameCtrl.text.trim(),
           displayName: displayNameCtrl.text.trim(),
           email: emailCtrl.text.trim().isEmpty ? null : emailCtrl.text.trim(),
-          phoneNumber: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+          phoneNumber:
+              phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
           branchId: branchId,
           roles: selectedRoles.toList(),
           onboardingMethod: onboardingMethod,
@@ -362,12 +365,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     }
   }
 
-  Future<void> _toggleLockUser(EmployeeUserDto user, AppUser? currentUser) async {
+  Future<void> _toggleLockUser(
+      EmployeeUserDto user, AppUser? currentUser) async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
 
-    if (currentUser != null && (currentUser.id == user.id || currentUser.username == user.username)) {
-      AppToast.error(context, 'Chính sách an toàn: Bạn không thể tự khóa tài khoản của chính mình!');
+    if (currentUser != null &&
+        (currentUser.id == user.id || currentUser.username == user.username)) {
+      AppToast.error(context,
+          'Chính sách an toàn: Bạn không thể tự khóa tài khoản của chính mình!');
       return;
     }
 
@@ -381,7 +387,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           children: [
             Icon(
               willLock ? Icons.lock_outline : Icons.lock_open_outlined,
-              color: willLock ? const Color(0xFFDC2626) : const Color(0xFF059669),
+              color:
+                  willLock ? const Color(0xFFDC2626) : const Color(0xFF059669),
             ),
             const SizedBox(width: 8),
             Text(willLock ? 'Khóa tài khoản nhân viên' : 'Mở khóa tài khoản'),
@@ -414,7 +421,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: willLock ? const Color(0xFFDC2626) : const Color(0xFF059669),
+              backgroundColor:
+                  willLock ? const Color(0xFFDC2626) : const Color(0xFF059669),
             ),
             onPressed: () {
               if (reasonCtrl.text.trim().isEmpty) {
@@ -445,13 +453,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi cập nhật trạng thái: ${friendlyError(e)}');
+          AppToast.error(
+              context, 'Lỗi cập nhật trạng thái: ${friendlyError(e)}');
         }
       }
     }
   }
 
-  Future<void> _openRolesAndScopesDialog(EmployeeUserDto user, AppUser? currentUser) async {
+  Future<void> _openRolesAndScopesDialog(
+      EmployeeUserDto user, AppUser? currentUser) async {
     final repo = RepositoryScope.maybeOf(context);
     if (repo == null) return;
 
@@ -484,19 +494,25 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: selectedBranchId,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Không chỉ định / Toàn hệ thống', overflow: TextOverflow.ellipsis)),
+                      const DropdownMenuItem(
+                          value: null,
+                          child: Text('Không chỉ định / Toàn hệ thống',
+                              overflow: TextOverflow.ellipsis)),
                       ..._branches.map((b) => DropdownMenuItem(
                             value: b.id,
-                            child: Text('${b.code} - ${b.name}', overflow: TextOverflow.ellipsis),
+                            child: Text('${b.code} - ${b.name}',
+                                overflow: TextOverflow.ellipsis),
                           )),
                     ],
-                    onChanged: (v) => setDialogState(() => selectedBranchId = v),
+                    onChanged: (v) =>
+                        setDialogState(() => selectedBranchId = v),
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Vai trò hệ thống ngân hàng',
+                    'Vai trò hệ thống',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
@@ -504,7 +520,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     final isChecked = selectedRoles.contains(r.code);
                     return CheckboxListTile(
                       title: Text(r.name),
-                      subtitle: Text(r.description ?? r.code, style: const TextStyle(fontSize: 12)),
+                      subtitle: Text(r.description ?? r.code,
+                          style: const TextStyle(fontSize: 12)),
                       value: isChecked,
                       onChanged: (val) {
                         setDialogState(() {
@@ -549,7 +566,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
           ]);
         }
         if (mounted) {
-          AppToast.success(context, 'Đã cập nhật vai trò và phạm vi cho ${user.username}');
+          AppToast.success(
+              context, 'Đã cập nhật vai trò và phạm vi cho ${user.username}');
           _loadData();
         }
       } catch (e) {
@@ -594,7 +612,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
       try {
         await repo.revokeEmployeeSessions(user.id);
         if (mounted) {
-          AppToast.success(context, 'Đã thu hồi toàn bộ phiên đăng nhập của @${user.username}');
+          AppToast.success(context,
+              'Đã thu hồi toàn bộ phiên đăng nhập của @${user.username}');
           _loadData();
         }
       } catch (e) {
@@ -657,7 +676,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                 Text('Mật khẩu tạm thời cho tài khoản @${user.username}:'),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(8),
@@ -676,9 +696,11 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF2563EB)),
+                        icon: const Icon(Icons.copy_rounded,
+                            color: Color(0xFF2563EB)),
                         tooltip: 'Sao chép mật khẩu',
-                        onPressed: () => _copyToClipboard('mật khẩu tạm', newTempPassword),
+                        onPressed: () =>
+                            _copyToClipboard('mật khẩu tạm', newTempPassword),
                       ),
                     ],
                   ),
@@ -729,10 +751,12 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Mã kích hoạt mời mới cho @${user.username} (có hiệu lực 7 ngày):'),
+              Text(
+                  'Mã kích hoạt mời mới cho @${user.username} (có hiệu lực 7 ngày):'),
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
@@ -751,7 +775,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.copy_rounded, color: Color(0xFF2563EB)),
+                      icon: const Icon(Icons.copy_rounded,
+                          color: Color(0xFF2563EB)),
                       tooltip: 'Sao chép mã',
                       onPressed: () => _copyToClipboard('mã kích hoạt', token),
                     ),
@@ -811,7 +836,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     final totalCount = _employees.length;
     final activeCount = _employees.where((e) => e.isActive).length;
     final lockedCount = _employees.where((e) => e.isLocked).length;
-    final pendingInviteCount = _employees.where((e) => e.hasPendingInvite).length;
+    final pendingInviteCount =
+        _employees.where((e) => e.hasPendingInvite).length;
 
     return Scaffold(
       body: Column(
@@ -829,14 +855,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     children: [
                       Text(
                         'Quản trị Nhân viên & Cấp phát IAM',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.5,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.5,
+                                ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Quản lý tài khoản cán bộ ngân hàng, chi nhánh, vai trò Maker-Checker và phiên làm việc.',
+                        'Quản lý tài khoản nhân viên, cửa hàng, vai trò và phiên làm việc.',
                         style: TextStyle(
                           fontSize: 13,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -861,13 +888,17 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               children: [
-                _buildStatCard('Tổng nhân sự', '$totalCount', Icons.people_outline, const Color(0xFF2563EB)),
+                _buildStatCard('Tổng nhân sự', '$totalCount',
+                    Icons.people_outline, const Color(0xFF2563EB)),
                 const SizedBox(width: 12),
-                _buildStatCard('Đang hoạt động', '$activeCount', Icons.check_circle_outline, const Color(0xFF059669)),
+                _buildStatCard('Đang hoạt động', '$activeCount',
+                    Icons.check_circle_outline, const Color(0xFF059669)),
                 const SizedBox(width: 12),
-                _buildStatCard('Đã khóa', '$lockedCount', Icons.lock_outline, const Color(0xFFDC2626)),
+                _buildStatCard('Đã khóa', '$lockedCount', Icons.lock_outline,
+                    const Color(0xFFDC2626)),
                 const SizedBox(width: 12),
-                _buildStatCard('Chờ kích hoạt', '$pendingInviteCount', Icons.mail_outline, const Color(0xFFD97706)),
+                _buildStatCard('Chờ kích hoạt', '$pendingInviteCount',
+                    Icons.mail_outline, const Color(0xFFD97706)),
               ],
             ),
           ),
@@ -886,7 +917,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                       hintText: 'Tìm theo tên, username, email...',
                       prefixIcon: const Icon(Icons.search, size: 20),
                       border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       suffixIcon: _searchCtrl.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 18),
@@ -908,11 +940,18 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Chi nhánh',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Tất cả chi nhánh', overflow: TextOverflow.ellipsis)),
-                      ..._branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis))),
+                      const DropdownMenuItem(
+                          value: null,
+                          child: Text('Tất cả chi nhánh',
+                              overflow: TextOverflow.ellipsis)),
+                      ..._branches.map((b) => DropdownMenuItem(
+                          value: b.id,
+                          child:
+                              Text(b.name, overflow: TextOverflow.ellipsis))),
                     ],
                     onChanged: (v) {
                       setState(() => _selectedBranchId = v);
@@ -928,11 +967,18 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Vai trò',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Tất cả vai trò', overflow: TextOverflow.ellipsis)),
-                      ..._roles.map((r) => DropdownMenuItem(value: r.code, child: Text(r.name, overflow: TextOverflow.ellipsis))),
+                      const DropdownMenuItem(
+                          value: null,
+                          child: Text('Tất cả vai trò',
+                              overflow: TextOverflow.ellipsis)),
+                      ..._roles.map((r) => DropdownMenuItem(
+                          value: r.code,
+                          child:
+                              Text(r.name, overflow: TextOverflow.ellipsis))),
                     ],
                     onChanged: (v) {
                       setState(() => _selectedRole = v);
@@ -948,12 +994,22 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Trạng thái',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                     items: const [
-                      DropdownMenuItem(value: null, child: Text('Tất cả trạng thái', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'active', child: Text('Hoạt động', overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(value: 'locked', child: Text('Đã khóa', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(
+                          value: null,
+                          child: Text('Tất cả trạng thái',
+                              overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(
+                          value: 'active',
+                          child: Text('Hoạt động',
+                              overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(
+                          value: 'locked',
+                          child:
+                              Text('Đã khóa', overflow: TextOverflow.ellipsis)),
                     ],
                     onChanged: (v) {
                       setState(() => _selectedStatus = v);
@@ -978,12 +1034,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             child: _loading
                 ? const Center(child: LoadingView())
                 : _errorMessage != null
-                    ? Center(child: ErrorView(message: _errorMessage!, onRetry: _loadData))
+                    ? Center(
+                        child: ErrorView(
+                            message: _errorMessage!, onRetry: _loadData))
                     : _employees.isEmpty
                         ? Center(
                             child: EmptyView(
                               title: 'Không tìm thấy nhân viên nào',
-                              subtitle: 'Thử thay đổi bộ lọc tìm kiếm hoặc thêm nhân viên mới.',
+                              subtitle:
+                                  'Thử thay đổi bộ lọc tìm kiếm hoặc thêm nhân viên mới.',
                               icon: Icons.person_search_outlined,
                               action: OutlinedButton.icon(
                                 icon: const Icon(Icons.person_add),
@@ -993,13 +1052,16 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                             ),
                           )
                         : ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 12),
                             itemCount: _employees.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final user = _employees[index];
                               final isCurrent = currentUser != null &&
-                                  (currentUser.id == user.id || currentUser.username == user.username);
+                                  (currentUser.id == user.id ||
+                                      currentUser.username == user.username);
 
                               return Card(
                                 elevation: 0,
@@ -1014,7 +1076,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                 child: Padding(
                                   padding: const EdgeInsets.all(12),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       UserAvatar(
                                         name: user.displayName,
@@ -1024,7 +1087,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                       Expanded(
                                         flex: 3,
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
@@ -1038,20 +1102,26 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                                 if (isCurrent) ...[
                                                   const SizedBox(width: 8),
                                                   Container(
-                                                    padding: const EdgeInsets.symmetric(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
                                                       horizontal: 6,
                                                       vertical: 2,
                                                     ),
                                                     decoration: BoxDecoration(
-                                                      color: const Color(0xFFEFF6FF),
-                                                      borderRadius: BorderRadius.circular(4),
+                                                      color: const Color(
+                                                          0xFFEFF6FF),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
                                                     ),
                                                     child: const Text(
                                                       'Bạn',
                                                       style: TextStyle(
                                                         fontSize: 11,
-                                                        color: Color(0xFF2563EB),
-                                                        fontWeight: FontWeight.bold,
+                                                        color:
+                                                            Color(0xFF2563EB),
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                       ),
                                                     ),
                                                   ),
@@ -1083,35 +1153,48 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                       Expanded(
                                         flex: 2,
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
-                                                const Icon(Icons.account_balance_outlined, size: 14, color: Color(0xFF64748B)),
+                                                const Icon(
+                                                    Icons
+                                                        .account_balance_outlined,
+                                                    size: 14,
+                                                    color: Color(0xFF64748B)),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  user.branchName ?? 'Toàn hệ thống',
-                                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                                  user.branchName ??
+                                                      'Toàn hệ thống',
+                                                  style: const TextStyle(
+                                                      fontSize: 12.5,
+                                                      fontWeight:
+                                                          FontWeight.w600),
                                                 ),
                                               ],
                                             ),
                                             const SizedBox(height: 4),
                                             Wrap(
                                               spacing: 4,
-                                              children: user.roles.map((r) => _buildRoleChip(r)).toList(),
+                                              children: user.roles
+                                                  .map((r) => _buildRoleChip(r))
+                                                  .toList(),
                                             ),
                                           ],
                                         ),
                                       ),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 4),
                                         decoration: BoxDecoration(
                                           color: user.isLocked
                                               ? const Color(0xFFFEF2F2)
                                               : user.hasPendingInvite
                                                   ? const Color(0xFFFFFBEB)
                                                   : const Color(0xFFF0FDF4),
-                                          borderRadius: BorderRadius.circular(6),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
                                           border: Border.all(
                                             color: user.isLocked
                                                 ? const Color(0xFFEF4444)
@@ -1140,14 +1223,17 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                       const SizedBox(width: 8),
                                       PopupMenuButton<String>(
                                         tooltip: 'Tác vụ nhân viên',
-                                        icon: const Icon(Icons.more_vert_rounded),
+                                        icon:
+                                            const Icon(Icons.more_vert_rounded),
                                         onSelected: (action) {
                                           switch (action) {
                                             case 'toggle_lock':
-                                              _toggleLockUser(user, currentUser);
+                                              _toggleLockUser(
+                                                  user, currentUser);
                                               break;
                                             case 'roles_scopes':
-                                              _openRolesAndScopesDialog(user, currentUser);
+                                              _openRolesAndScopesDialog(
+                                                  user, currentUser);
                                               break;
                                             case 'reset_password':
                                               _resetPassword(user);
@@ -1165,9 +1251,11 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             value: 'roles_scopes',
                                             child: Row(
                                               children: [
-                                                Icon(Icons.shield_outlined, size: 18),
+                                                Icon(Icons.shield_outlined,
+                                                    size: 18),
                                                 SizedBox(width: 8),
-                                                Text('Phân vai trò & Chi nhánh'),
+                                                Text(
+                                                    'Phân vai trò & Chi nhánh'),
                                               ],
                                             ),
                                           ),
@@ -1175,7 +1263,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             value: 'reset_password',
                                             child: Row(
                                               children: [
-                                                Icon(Icons.lock_reset, size: 18),
+                                                Icon(Icons.lock_reset,
+                                                    size: 18),
                                                 SizedBox(width: 8),
                                                 Text('Cấp lại mật khẩu tạm'),
                                               ],
@@ -1186,7 +1275,10 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                               value: 'reinvite',
                                               child: Row(
                                                 children: [
-                                                  Icon(Icons.mark_email_read_outlined, size: 18),
+                                                  Icon(
+                                                      Icons
+                                                          .mark_email_read_outlined,
+                                                      size: 18),
                                                   SizedBox(width: 8),
                                                   Text('Gửi lại thư mời'),
                                                 ],
@@ -1196,7 +1288,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             value: 'revoke_sessions',
                                             child: Row(
                                               children: [
-                                                Icon(Icons.power_settings_new, size: 18),
+                                                Icon(Icons.power_settings_new,
+                                                    size: 18),
                                                 SizedBox(width: 8),
                                                 Text('Thu hồi phiên làm việc'),
                                               ],
@@ -1209,23 +1302,31 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                                             child: Row(
                                               children: [
                                                 Icon(
-                                                  user.isLocked ? Icons.lock_open : Icons.lock,
+                                                  user.isLocked
+                                                      ? Icons.lock_open
+                                                      : Icons.lock,
                                                   size: 18,
                                                   color: isCurrent
                                                       ? Colors.grey
                                                       : user.isLocked
-                                                          ? const Color(0xFF059669)
-                                                          : const Color(0xFFDC2626),
+                                                          ? const Color(
+                                                              0xFF059669)
+                                                          : const Color(
+                                                              0xFFDC2626),
                                                 ),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  user.isLocked ? 'Mở khóa tài khoản' : 'Khóa tài khoản',
+                                                  user.isLocked
+                                                      ? 'Mở khóa tài khoản'
+                                                      : 'Khóa tài khoản',
                                                   style: TextStyle(
                                                     color: isCurrent
                                                         ? Colors.grey
                                                         : user.isLocked
-                                                            ? const Color(0xFF059669)
-                                                            : const Color(0xFFDC2626),
+                                                            ? const Color(
+                                                                0xFF059669)
+                                                            : const Color(
+                                                                0xFFDC2626),
                                                   ),
                                                 ),
                                               ],
@@ -1245,7 +1346,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1263,7 +1365,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                  style:
+                      const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                 ),
                 Text(
                   value,

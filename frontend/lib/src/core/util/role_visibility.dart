@@ -86,12 +86,17 @@ class RoleVisibility {
   }
 
   /// Danh sách tab (full index theo AppShell) user được thấy.
-  /// 0 Tổng quan, 1 Kho, 2 Quỹ, 3 Yêu cầu, 4 Duyệt, 5 Tích hợp/ETL,
+  /// Pilot trà sữa: ẩn 2 Quỹ, 5 Tích hợp/ETL khỏi UI chính
+  /// (backend giữ nguyên để rollback). Index giữ nguyên để không vỡ _go().
+  /// 0 Tổng quan, 1 Kho, 2 Quỹ (ẩn), 3 Yêu cầu, 4 Duyệt, 5 Tích hợp/ETL (ẩn),
   /// 6 Hoạt động, 7 Báo cáo, 8 Cài đặt, 9 Quản trị nhân viên.
+  /// Vai trò hiển thị chuẩn SRS: Quản lý (admin/manager) và
+  /// Nhân viên/Trưởng ca (staff).
+  static const hiddenPilotTabs = {2, 5};
   static List<int> visibleTabs(Set<String> roles, [AppUser? user]) {
-    final list = <int>[0, 1, 2];
+    final list = <int>[0, 1];
     if (!isAuditorOnly(roles)) {
-      list.addAll([3, 4, 5]);
+      list.addAll([3, 4]);
     }
     list.addAll([6, 7, 8]);
     if ((user != null && canManageEmployees(user)) ||
@@ -100,5 +105,18 @@ class RoleVisibility {
       list.add(9);
     }
     return list;
+  }
+
+  /// Nhãn vai trò chuẩn SRS trà sữa (Quản lý / Nhân viên-Trưởng ca).
+  static String roleLabel(String role) {
+    switch (role.toLowerCase()) {
+      case 'admin':
+      case 'inventory_manager':
+        return 'Quản lý';
+      case 'auditor':
+        return 'Kiểm soát chất lượng';
+      default:
+        return 'Nhân viên/Trưởng ca';
+    }
   }
 }

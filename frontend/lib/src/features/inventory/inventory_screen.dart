@@ -8,6 +8,7 @@ import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import 'shift_stocktake_desk.dart';
 
 /// Màn quản lý nguyên vật liệu cho quán trà sữa.
 class InventoryScreen extends StatefulWidget {
@@ -442,7 +443,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                 },
                                 icon: const Icon(Icons.handshake_outlined,
                                     size: 16),
-                                label: const Text('Bàn giao ấn chỉ'),
+                                label: const Text('Bàn giao nguyên liệu'),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: const Color(0xFF7C3AED),
                                   padding: const EdgeInsets.symmetric(
@@ -467,7 +468,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                       snapshot.data!.isEmpty)
                                   ? const Center(
                                       child: Text(
-                                          'Chưa có lịch sử luân chuyển cho ấn chỉ này.'))
+                                          'Chưa có lịch sử luân chuyển cho nguyên liệu này.'))
                                   : ListView.separated(
                                       itemCount: snapshot.data!.length,
                                       separatorBuilder: (_, __) =>
@@ -687,7 +688,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   );
                   if (ctx.mounted) Navigator.of(ctx).pop(true);
                   if (mounted) {
-                    AppToast.success(context, 'Bàn giao ấn chỉ thành công!');
+                    AppToast.success(
+                        context, 'Bàn giao nguyên liệu thành công!');
                   }
                 } catch (e) {
                   if (mounted)
@@ -1018,7 +1020,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${stocktake.shiftCode == 'morning' ? 'Ca Sáng 07:30 – 15:00' : stocktake.shiftCode == 'afternoon' ? 'Ca Chiều 15:00 – 23:00' : stocktake.shiftCode == 'split' ? 'Ca Lỡ ngày 07:30 – 18:00' : 'Kiểm kê kho'}: $locName',
+                        '${stocktake.shiftCode == 'morning' ? 'Ca Sáng 07:30 – 15:00' : stocktake.shiftCode == 'afternoon' ? 'Ca Chiều 15:00 – 23:00' : stocktake.shiftCode == 'split' ? 'Ca Lỡ ngày 07:30 – 18:00' : 'Kiểm Kê Kho'}: $locName',
                         style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
@@ -1500,7 +1502,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     child: _buildKpiCard(
                       context,
                       title: 'ĐIỂM LƯU KHO',
-                      value: '${data.locations.length} kho quỹ',
+                      value: '${data.locations.length} khu vực kho',
                       subtitle: 'Kho quầy và kho trung tâm',
                       icon: Icons.warehouse_rounded,
                       color: const Color(0xFF059669),
@@ -2065,6 +2067,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ],
         ),
         const SizedBox(height: 12),
+        _buildShiftStocktakeDesk(data),
+        const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -2200,6 +2204,39 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildShiftStocktakeDesk(_InventoryData data) {
+    final activeStocktake = data.stocktakes.cast<StocktakeItem?>().firstWhere(
+          (stocktake) => stocktake?.status == 'open',
+          orElse: () => null,
+        );
+    final lines = data.items.map((item) {
+      final balance = data.balances.cast<StockBalance?>().firstWhere(
+            (value) => value?.itemId == item.id,
+            orElse: () => null,
+          );
+      final savedLine =
+          activeStocktake?.lines.cast<StocktakeLineItem?>().firstWhere(
+                (value) => value?.itemId == item.id,
+                orElse: () => null,
+              );
+      final opening = balance?.qtyNumber ?? 0;
+      return ShiftStocktakeLine(
+        name: item.name,
+        unit: item.unit,
+        openingQty: opening,
+        receivedQty: 0,
+        usedQty: 0,
+        countedQty: double.tryParse(savedLine?.countedQty ?? '') ?? opening,
+        reason: savedLine?.reason ?? '',
+      );
+    }).toList();
+
+    return ShiftStocktakeDesk(
+      lines: lines,
+      onStartShiftStocktake: () => _showCreateStocktakeDialog(data.locations),
     );
   }
 

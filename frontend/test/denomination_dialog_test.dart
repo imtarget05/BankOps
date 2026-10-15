@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bankops/src/features/requests/widgets/denomination_breakdown_dialog.dart';
+import 'package:kho_tra_sua/src/features/requests/widgets/denomination_breakdown_dialog.dart';
 
 void main() {
   testWidgets('DenominationBreakdownDialog calculates total and returns DenominationResult',

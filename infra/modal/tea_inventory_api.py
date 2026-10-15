@@ -9,7 +9,7 @@ Lưu ý gì cho người duy trì:
     modal secret create bankops-api ...              # cấu hình bí mật kết nối Neon DB, JWT, ...
     modal deploy infra/modal/tea_inventory_api.py   # deploy production backend
 
-URL dạng https://<workspace>--bankops-api-<name>.modal.run — lấy từ
+URL dạng https://<workspace>--quan-ly-kho-tra-sua-api.modal.run — lấy từ
 `modal app list` hoặc output của deploy, rồi nối vào Flutter bằng
 `flutter build web --dart-define=API_BASE_URL=<url>/api/v1`.
 """
@@ -102,7 +102,7 @@ image = (
     )
 )
 
-app = modal.App("bankops-api", image=image)
+app = modal.App("quan-ly-kho-tra-sua", image=image)
 
 
 @app.function(secrets=[modal.Secret.from_name("bankops-api")], timeout=10 * 60)

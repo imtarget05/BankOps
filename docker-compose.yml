@@ -1,18 +1,18 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bankops-db
+    container_name: kho-tra-sua-db
     environment:
-      POSTGRES_USER: bankops
-      POSTGRES_PASSWORD: bankops
-      POSTGRES_DB: bankops
+      POSTGRES_USER: kho-tra-sua
+      POSTGRES_PASSWORD: kho-tra-sua
+      POSTGRES_DB: kho-tra-sua
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bankops"]
+      test: ["CMD-SHELL", "pg_isready -U kho-tra-sua"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,7 +20,7 @@ services:
   api:
     build:
       context: backend
-    container_name: bankops-api
+    container_name: kho-tra-sua-api
     # Optional, ignored local configuration. Production injects secrets through
     # its platform secret manager instead; do not create this file in CI.
     env_file:
@@ -30,7 +30,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql+asyncpg://bankops:bankops@postgres:5432/bankops
+      - DATABASE_URL=postgresql+asyncpg://kho-tra-sua:kho-tra-sua@postgres:5432/kho-tra-sua
       - APP_ENV=demo
       - ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:8080","http://127.0.0.1:8080"]
       - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
@@ -62,12 +62,12 @@ services:
   worker:
     build:
       context: backend
-    container_name: bankops-worker
+    container_name: kho-tra-sua-worker
     depends_on:
       api:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql+asyncpg://bankops:bankops@postgres:5432/bankops
+      - DATABASE_URL=postgresql+asyncpg://kho-tra-sua:kho-tra-sua@postgres:5432/kho-tra-sua
       - APP_ENV=demo
     restart: unless-stopped
     command: >
@@ -77,7 +77,7 @@ services:
 
   frontend-web:
     image: nginx:alpine
-    container_name: bankops-frontend
+    container_name: kho-tra-sua-frontend
     depends_on:
       - api
     ports:

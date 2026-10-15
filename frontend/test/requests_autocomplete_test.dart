@@ -1,7 +1,7 @@
-import 'package:bankops/src/app/app_shell.dart';
-import 'package:bankops/src/core/theme/app_theme.dart';
-import 'package:bankops/src/data/repositories/fake_repository.dart';
-import 'package:bankops/src/features/requests/requests_screen.dart';
+import 'package:kho_tra_sua/src/app/app_shell.dart';
+import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
+import 'package:kho_tra_sua/src/data/repositories/fake_repository.dart';
+import 'package:kho_tra_sua/src/features/requests/requests_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,7 +16,7 @@ void main() {
       ..devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-        final repo = FakeBankOpsRepository(latency: Duration.zero);
+    final repo = FakeBankOpsRepository(latency: Duration.zero);
     await tester.pumpWidget(
       RepositoryScope(
         repository: repo,
@@ -41,9 +41,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tạo Phiếu Kho Mới'), findsOneWidget);
-      expect(find.byKey(const Key('stock-reason-autocomplete')), findsOneWidget);
+      expect(
+          find.byKey(const Key('stock-reason-autocomplete')), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('stock-reason-input')), 'Thay');
+      await tester.enterText(
+          find.byKey(const Key('stock-reason-input')), 'Thay');
       await tester.pump();
 
       expect(find.text('Thay mới'), findsWidgets);
@@ -59,12 +61,12 @@ void main() {
   );
 
   testWidgets(
-    'Cash reason field shows autocomplete suggestions and lets user pick one',
+    'Inventory adjustment reason field shows autocomplete suggestions and lets user pick one',
     (WidgetTester tester) async {
       await pumpRequests(tester, initialOpenCreateCash: true);
       await tester.pumpAndSettle();
 
-      expect(find.text('Tạo Phiếu Quỹ Tiền Mặt'), findsOneWidget);
+      expect(find.text('Tạo Phiếu Nhập Nguyên Liệu'), findsOneWidget);
       expect(find.byKey(const Key('cash-reason-autocomplete')), findsOneWidget);
 
       await tester.enterText(find.byKey(const Key('cash-reason-input')), 'Chi');

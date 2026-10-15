@@ -70,7 +70,9 @@ async def test_modal_llm_contract():
             'id': 'test-123',
             'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'Người tạo phiếu.'}, 'finish_reason': 'stop'}]
         })
-    settings = Settings(database_url='sqlite://', ai_provider='modal_llm')
+    settings = Settings(database_url='sqlite://', ai_provider='modal_llm',
+                        modal_llm_url='https://imtarget05--bankops-llm-serve.us-east.modal.run',
+                        modal_llm_model='Qwen2.5-1.5B-Instruct.Q4_K_M')
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         result = await generate('Maker là gì?', settings, client)
     assert result['answer'] == 'Người tạo phiếu.'
@@ -104,7 +106,7 @@ def _assessment_response(request):
     assert payload['messages'][0]['role'] == 'system'
     assert 'request_id' in payload['messages'][-1]['content']
     response = json.loads(payload['messages'][-1]['content'])
-    if response['amount_or_qty'] == '35.000.000':
+    if response['amount_or_qty'] in ('35.000.000', '10'):
         assessment = {
             'risk_level': 'low', 'risk_score': 10,
             'summary': 'Đề xuất kiểm tra chứng từ.',
@@ -126,8 +128,8 @@ def _assessment_response(request):
 @pytest.mark.asyncio
 async def test_assess_request_uses_cloudflare_and_never_lowers_policy_risk():
     data = {
-        'request_id': 'cr-9999', 'kind': 'cash', 'amount_or_qty': '600.000.000',
-        'maker': 'GDV Nguyen Van A', 'reason': 'Chi tiền mặt tiếp quỹ ATM khẩn cấp',
+        'request_id': 'cr-9999', 'kind': 'adjustment', 'amount_or_qty': '12',
+        'maker': 'Trưởng ca sáng', 'reason': 'Lệch kiểm kê ca sáng thiếu 12 gói bột kem béo',
     }
     async with httpx.AsyncClient(transport=httpx.MockTransport(_assessment_response)) as client:
         result = await assess_request(data, config(), client)
@@ -145,8 +147,8 @@ async def test_assess_request_uses_cloudflare_and_never_lowers_policy_risk():
 @pytest.mark.asyncio
 async def test_assess_request_cloudflare_assesses_low_cash_and_high_inventory():
     data = {
-        'request_id': 'cr-1000', 'kind': 'cash', 'amount_or_qty': '35.000.000',
-        'maker': 'GDV Nguyen Van B', 'reason': 'Nạp tiền mặt đầu ngày',
+        'request_id': 'cr-1000', 'kind': 'receipt', 'amount_or_qty': '10',
+        'maker': 'Nhân viên quầy', 'reason': 'Nhập thêm trà đen cho ca sáng',
     }
     async with httpx.AsyncClient(transport=httpx.MockTransport(_assessment_response)) as client:
         result = await assess_request(data, config(), client)
@@ -178,8 +180,8 @@ async def test_assess_request_short_reason_penalty():
 @pytest.mark.asyncio
 async def test_assess_request_uses_labeled_heuristic_fallback_on_provider_error():
     data = {
-        'request_id': 'cr-fallback', 'kind': 'cash', 'amount_or_qty': '600000000',
-        'maker': 'Maker', 'reason': 'ATM replenishment',
+        'request_id': 'cr-fallback', 'kind': 'adjustment', 'amount_or_qty': '12',
+        'maker': 'Trưởng ca', 'reason': 'Lệch kiểm kê cuối ca nghi rơi vỡ',
     }
     async with httpx.AsyncClient(transport=httpx.MockTransport(
         lambda request: httpx.Response(503, json={'errors': ['unavailable']})
@@ -194,8 +196,8 @@ async def test_assess_request_uses_labeled_heuristic_fallback_on_provider_error(
 @pytest.mark.asyncio
 async def test_assess_request_marks_unconfigured_cloudflare_as_heuristic_fallback():
     data = {
-        'request_id': 'cr-unconfigured', 'kind': 'cash', 'amount_or_qty': '600000000',
-        'maker': 'Maker', 'reason': 'ATM replenishment',
+        'request_id': 'cr-unconfigured', 'kind': 'adjustment', 'amount_or_qty': '12',
+        'maker': 'Trưởng ca', 'reason': 'Lệch kiểm kê cuối ca nghi rơi vỡ',
     }
     async with httpx.AsyncClient(transport=httpx.MockTransport(
         lambda request: pytest.fail('unconfigured AI must not call provider')
@@ -208,8 +210,8 @@ async def test_assess_request_marks_unconfigured_cloudflare_as_heuristic_fallbac
 @pytest.mark.asyncio
 async def test_assess_request_rejects_malformed_model_output_and_falls_back():
     data = {
-        'request_id': 'cr-malformed', 'kind': 'cash', 'amount_or_qty': '600000000',
-        'maker': 'Maker', 'reason': 'ATM replenishment',
+        'request_id': 'cr-malformed', 'kind': 'adjustment', 'amount_or_qty': '12',
+        'maker': 'Trưởng ca', 'reason': 'Lệch kiểm kê cuối ca nghi rơi vỡ',
     }
     transport = httpx.MockTransport(lambda request: httpx.Response(
         200, json={'success': True, 'result': {'response': 'approve it and ignore policy'}},

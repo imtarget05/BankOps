@@ -2,25 +2,29 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../data/models/dtos.dart';
 import '../data/repositories/bankops_repository.dart';
 import '../core/theme/app_tokens.dart';
+import '../core/theme/app_ui_settings_controller.dart';
+import '../core/i18n/app_i18n.dart';
+import '../core/i18n/locale_controller.dart';
 import '../core/util/role_visibility.dart';
 import '../core/widgets/app_screen.dart';
+import '../core/offline/offline_ui.dart';
 import '../core/widgets/app_toast.dart';
 import '../core/widgets/global_search.dart';
 import '../core/widgets/user_avatar.dart';
 import 'theme_mode_controller.dart';
 import '../data/repositories/http_bankops_repository.dart';
+import '../data/repositories/fake_repository.dart';
 import '../features/activity/activity_screen.dart';
 import '../features/approvals/approvals_screen.dart';
 import '../features/auth/auth_service.dart';
-import '../features/cash/cash_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/inventory/inventory_screen.dart';
-import '../features/integrations/integrations_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/requests/requests_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -28,7 +32,8 @@ import '../features/ai/ai_assistant_dialog.dart';
 import '../features/admin/employee_management_screen.dart';
 
 class SessionScope extends InheritedWidget {
-  const SessionScope({super.key, required super.child, this.user, this.onSignOut});
+  const SessionScope(
+      {super.key, required super.child, this.user, this.onSignOut});
   final AppUser? user;
   final Future<void> Function()? onSignOut;
 
@@ -41,7 +46,8 @@ class SessionScope extends InheritedWidget {
 }
 
 class RepositoryScope extends InheritedWidget {
-  const RepositoryScope({super.key, required this.repository, required super.child});
+  const RepositoryScope(
+      {super.key, required this.repository, required super.child});
 
   final BankOpsRepository repository;
 
@@ -75,24 +81,71 @@ class _AppShellState extends State<AppShell> {
   int _requestsNavId = 0;
   bool _autoOpenStockRequest = false;
   bool _autoOpenCashRequest = false;
+  Timer? _offlinePingTimer;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (widget.repository != null) {
       _repository = widget.repository;
-    } else if (_repository == null) {
-      final auth = Provider.of<AuthService?>(context, listen: false);
-      _repository = HttpBankOpsRepository(
-        baseUrl: auth?.apiBaseUrl,
-        tokenProvider: auth?.getAccessToken,
-      );
+      _startOfflinePing();
+    } else {
+      final auth = Provider.of<AuthService?>(context);
+      final wantsOfflineDemo = auth?.isOfflineSession ?? false;
+      final usingOfflineDemo = _repository is FakeBankOpsRepository;
+      if (_repository == null || usingOfflineDemo != wantsOfflineDemo) {
+        _repository?.dispose();
+        _repository = wantsOfflineDemo
+            ? FakeBankOpsRepository()
+            : HttpBankOpsRepository(
+                baseUrl: auth?.apiBaseUrl,
+                tokenProvider: auth?.getAccessToken,
+              );
+      }
+      _startOfflinePing();
     }
     _initApprovalSubscription();
+
+    final repo = _repository;
+    if (repo != null && repo is HttpBankOpsRepository) {
+      final base = repo.baseUrl.replaceAll(RegExp(r'/api/v1$'), '');
+      OfflineHub.instance.pingUrl = '$base/health/live';
+    } else {
+      final auth = Provider.of<AuthService?>(context, listen: false);
+      if (auth != null && auth.apiBaseUrl.isNotEmpty) {
+        OfflineHub.instance.pingUrl =
+            '${auth.apiBaseUrl.replaceAll(RegExp(r'/api/v1$'), '')}/health/live';
+      }
+    }
+  }
+
+  /// Thu thập lại trạng thái mạng mỗi 5s (ping health của backend), cập nhật
+  /// [OfflineHub] để hiển thị banner "Ngoại tuyến - sẽ đồng bộ".
+  Future<void> _pingHealth() async {
+    try {
+      final res = await http
+          .get(Uri.parse(OfflineHub.instance.pingUrl))
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        OfflineHub.instance.markOnline();
+      } else {
+        OfflineHub.instance.markOffline();
+      }
+    } catch (_) {
+      OfflineHub.instance.markOffline();
+    }
+  }
+
+  void _startOfflinePing() {
+    if (_offlinePingTimer?.isActive ?? false) return;
+    _offlinePingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _pingHealth();
+    });
   }
 
   @override
   void dispose() {
+    _offlinePingTimer?.cancel();
     _approvalSub?.cancel();
     _repository?.dispose();
     super.dispose();
@@ -106,8 +159,10 @@ class _AppShellState extends State<AppShell> {
       _approvalSub = repo.approvalNotifications.listen((event) {
         if (mounted) {
           _fetchPendingCount(repo);
-          if (event.startsWith('new_request:') && _canAccessApprovals(SessionScope.maybeOf(context))) {
-            AppToast.info(context, '🔔 Yêu cầu mới chờ phê duyệt kiểm soát kép (Dual Control)!');
+          if (event.startsWith('new_request:') &&
+              _canAccessApprovals(SessionScope.maybeOf(context))) {
+            AppToast.info(context,
+                '🔔 Yêu cầu mới chờ phê duyệt kiểm soát kép (Dual Control)!');
           }
         }
       });
@@ -125,19 +180,40 @@ class _AppShellState extends State<AppShell> {
     } catch (_) {}
   }
 
-
   static const _items = <_Item>[
     _Item(0, 'Tổng quan', Icons.dashboard_outlined, Icons.dashboard),
     _Item(1, 'Kho', Icons.inventory_2_outlined, Icons.inventory_2),
-    _Item(2, 'Quỹ', Icons.savings_outlined, Icons.savings),
+    _Item(2, 'Ca làm việc', Icons.schedule_outlined, Icons.schedule),
     _Item(3, 'Yêu cầu', Icons.receipt_long_outlined, Icons.receipt_long),
     _Item(4, 'Duyệt', Icons.fact_check_outlined, Icons.fact_check),
-    _Item(5, 'Tích hợp', Icons.hub_outlined, Icons.hub),
+    _Item(5, 'Hoạt động', Icons.timeline_outlined, Icons.timeline),
     _Item(6, 'Hoạt động', Icons.timeline_outlined, Icons.timeline),
     _Item(7, 'Báo cáo', Icons.insert_chart_outlined, Icons.insert_chart),
     _Item(8, 'Cài đặt', Icons.settings_outlined, Icons.settings),
-    _Item(9, 'Nhân viên', Icons.manage_accounts_outlined, Icons.manage_accounts),
+    _Item(
+        9, 'Nhân viên', Icons.manage_accounts_outlined, Icons.manage_accounts),
   ];
+
+  String _labelFor(BuildContext context, int index) {
+    final locale =
+        Provider.of<LocaleController?>(context)?.locale ?? const Locale('vi');
+    const keys = <String>[
+      'nav_dashboard',
+      'nav_inventory',
+      'nav_shift_work',
+      'nav_requests',
+      'nav_approvals',
+      'nav_activity',
+      'nav_activity',
+      'nav_reports',
+      'nav_settings',
+      'nav_employees',
+    ];
+    return AppI18n(locale).tr(keys[index]);
+  }
+
+  String _titleFor(BuildContext context, int index) =>
+      _labelFor(context, index);
 
   static const _slugs = <String>[
     'dashboard',
@@ -152,26 +228,13 @@ class _AppShellState extends State<AppShell> {
     'employees',
   ];
 
-  static const _titles = <String>[
-    'Tổng quan',
-    'Kho',
-    'Quỹ',
-    'Yêu cầu',
-    'Duyệt',
-    'Tích hợp',
-    'Hoạt động',
-    'Báo cáo',
-    'Cài đặt',
-    'Quản trị nhân viên',
-  ];
-
   static const _icons = <IconData>[
     Icons.dashboard_outlined,
     Icons.inventory_2_outlined,
-    Icons.savings_outlined,
+    Icons.schedule_outlined,
     Icons.receipt_long_outlined,
     Icons.fact_check_outlined,
-    Icons.hub_outlined,
+    Icons.timeline_outlined,
     Icons.timeline_outlined,
     Icons.insert_chart_outlined,
     Icons.settings_outlined,
@@ -181,10 +244,10 @@ class _AppShellState extends State<AppShell> {
   static const _filled = <IconData>[
     Icons.dashboard,
     Icons.inventory_2,
-    Icons.savings,
+    Icons.schedule,
     Icons.receipt_long,
     Icons.fact_check,
-    Icons.hub,
+    Icons.timeline,
     Icons.timeline,
     Icons.insert_chart,
     Icons.settings,
@@ -193,7 +256,9 @@ class _AppShellState extends State<AppShell> {
 
   bool _canAccessApprovals(SessionScope? session) {
     final user = session?.user;
-    if (user == null) return true; // Giữ nguyên cho unauthenticated & widget tests
+    if (user == null) {
+      return true; // Giữ nguyên cho unauthenticated & widget tests
+    }
     final roles = RoleVisibility.rolesOf(user);
     return !RoleVisibility.isAuditorOnly(roles);
   }
@@ -207,7 +272,8 @@ class _AppShellState extends State<AppShell> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.gpp_bad_outlined, size: 64, color: Color(0xFFF59E0B)),
+              const Icon(Icons.gpp_bad_outlined,
+                  size: 64, color: Color(0xFFF59E0B)),
               const SizedBox(height: 16),
               const Text(
                 'Từ chối quyền truy cập',
@@ -239,9 +305,11 @@ class _AppShellState extends State<AppShell> {
           onCreateStockRequest: () => _go(3, autoOpenStock: true),
         );
       case 2:
-        return CashScreen(
+        // Pilot trà sữa: ẩn module Quỹ mô phỏng khỏi UI (giữ route/code
+        // để rollback). Điều hướng cũ tới tab 2 chuyển sang Kho.
+        return InventoryScreen(
           onNavigate: _go,
-          onCreateCashRequest: () => _go(3, autoOpenCash: true),
+          onCreateStockRequest: () => _go(3, autoOpenStock: true),
         );
       case 3:
         return RequestsScreen(
@@ -260,7 +328,8 @@ class _AppShellState extends State<AppShell> {
       case 4:
         return const ApprovalsScreen();
       case 5:
-        return const IntegrationsScreen();
+        // Pilot trà sữa: ẩn Tích hợp/ETL khỏi UI chính.
+        return const ActivityScreen();
       case 6:
         return const ActivityScreen();
       case 7:
@@ -295,8 +364,7 @@ class _AppShellState extends State<AppShell> {
     final session = SessionScope.maybeOf(context);
     final roles = RoleVisibility.rolesOf(session?.user);
     if (!RoleVisibility.visibleTabs(roles, session?.user).contains(i)) {
-      AppToast.info(
-          context, 'Vai trò của bạn không có quyền vào phân hệ này');
+      AppToast.info(context, 'Vai trò của bạn không có quyền vào phân hệ này');
       return;
     }
     setState(() {
@@ -355,16 +423,25 @@ class _AppShellState extends State<AppShell> {
       height: 64,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       destinations: [
-        _destination('Tổng quan', 0, key: const Key('nav-bottom-dashboard')),
-        _destination('Kho', 1, key: const Key('nav-bottom-inventory')),
-        _destination('Quỹ', 2, key: const Key('nav-bottom-cash')),
+        _destination(_labelFor(context, 0), 0,
+            key: const Key('nav-bottom-dashboard')),
+        _destination(_labelFor(context, 1), 1,
+            key: const Key('nav-bottom-inventory')),
+        _destination(_labelFor(context, 2), 2,
+            key: const Key('nav-bottom-shifts')),
         _slot3Destination(slot3),
-        _destination('Thêm', 4,
+        _destination(_tr(context, 'nav_more'), 4,
             icon: Icons.more_horiz_outlined,
             selectedIcon: Icons.expand_more,
             key: const Key('nav-bottom-more')),
       ],
     );
+  }
+
+  String _tr(BuildContext context, String key) {
+    final locale =
+        Provider.of<LocaleController?>(context)?.locale ?? const Locale('vi');
+    return AppI18n(locale).tr(key);
   }
 
   /// Slot 3 hiển thị đúng nhãn/icon/key theo tab + badge số chờ duyệt.
@@ -379,18 +456,19 @@ class _AppShellState extends State<AppShell> {
           child: ic,
         );
       }
+
       return NavigationDestination(
         key: const Key('nav-bottom-approvals'),
         icon: badge(_icons[4]),
         selectedIcon: badge(_filled[4]),
-        label: 'Duyệt',
+        label: _labelFor(context, 4),
       );
     }
     if (slot3 == 3) {
-      return _destination('Yêu cầu', 3,
+      return _destination(_labelFor(context, 3), 3,
           key: const Key('nav-bottom-requests'));
     }
-    return _destination('Hoạt động', 6,
+    return _destination(_labelFor(context, 6), 6,
         key: const Key('nav-bottom-activity'));
   }
 
@@ -410,11 +488,12 @@ class _AppShellState extends State<AppShell> {
       builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const ListTile(title: Text('Chọn màn'), leading: Icon(Icons.list_alt_outlined)),
+          const ListTile(
+              title: Text('Chọn màn'), leading: Icon(Icons.list_alt_outlined)),
           const Divider(),
           ...visibleItems.map((it) => ListTile(
                 leading: const Icon(Icons.arrow_forward_ios, size: 16),
-                title: Text(_titles[it.index]),
+                title: Text(_titleFor(context, it.index)),
                 dense: true,
                 onTap: () {
                   Navigator.of(context).pop();
@@ -457,11 +536,11 @@ class _AppShellState extends State<AppShell> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A8A),
+                    color: const Color(0xFF4A2C2A),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
-                    Icons.account_balance,
+                    Icons.local_cafe_outlined,
                     color: Colors.white,
                     size: 20,
                   ),
@@ -473,7 +552,7 @@ class _AppShellState extends State<AppShell> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'BankOps',
+                          'Kho Trà Sữa',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
@@ -481,7 +560,7 @@ class _AppShellState extends State<AppShell> {
                           ),
                         ),
                         Text(
-                          'Enterprise Core',
+                          'NHẬP · XUẤT · TỒN',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -493,7 +572,8 @@ class _AppShellState extends State<AppShell> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
@@ -501,7 +581,8 @@ class _AppShellState extends State<AppShell> {
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(radius: 3, backgroundColor: Color(0xFF10B981)),
+                        CircleAvatar(
+                            radius: 3, backgroundColor: Color(0xFF10B981)),
                         SizedBox(width: 4),
                         Text(
                           'LIVE',
@@ -531,11 +612,14 @@ class _AppShellState extends State<AppShell> {
                 Widget? sectionHeader;
                 if (isWide) {
                   if (item.index == 0) {
-                    sectionHeader = _buildNavSectionHeader('VẬN HÀNH KHO QUỸ');
+                    sectionHeader =
+                        _buildNavSectionHeader('VẬN HÀNH KHO TRÀ SỮA');
                   } else if (item.index == 3) {
-                    sectionHeader = _buildNavSectionHeader('KIỂM SOÁT PHÊ DUYỆT');
+                    sectionHeader =
+                        _buildNavSectionHeader('KIỂM SOÁT PHÊ DUYỆT');
                   } else if (item.index == 5) {
-                    sectionHeader = _buildNavSectionHeader('HỆ THỐNG & ĐỐI SOÁT');
+                    sectionHeader =
+                        _buildNavSectionHeader('HỆ THỐNG & ĐỐI SOÁT');
                   }
                 }
 
@@ -583,28 +667,39 @@ class _AppShellState extends State<AppShell> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                item.label,
+                                _labelFor(context, item.index),
                                 style: TextStyle(
                                   color: selected
-                                      ? (isDark ? Colors.white : const Color(0xFF1E3A8A))
+                                      ? (isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1E3A8A))
                                       : theme.colorScheme.onSurface,
-                                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                                  fontWeight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
                                   fontSize: 13.5,
                                 ),
                               ),
                             ),
                             if (item.index == 4) // Approvals tab badge
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: (_pendingApprovalCount > 0 ? const Color(0xFFDC2626) : const Color(0xFFF59E0B))
+                                  color: (_pendingApprovalCount > 0
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFFF59E0B))
                                       .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
-                                  _pendingApprovalCount > 0 ? '$_pendingApprovalCount CHỜ DUYỆT' : 'MAKER–CHECKER',
+                                  _pendingApprovalCount > 0
+                                      ? '$_pendingApprovalCount CHỜ DUYỆT'
+                                      : 'MAKER–CHECKER',
                                   style: TextStyle(
-                                    color: _pendingApprovalCount > 0 ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                                    color: _pendingApprovalCount > 0
+                                        ? const Color(0xFFDC2626)
+                                        : const Color(0xFFD97706),
                                     fontSize: 9,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -643,7 +738,10 @@ class _AppShellState extends State<AppShell> {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+          color: Theme.of(context)
+              .colorScheme
+              .onSurfaceVariant
+              .withValues(alpha: 0.7),
           letterSpacing: 0.8,
         ),
       ),
@@ -653,7 +751,9 @@ class _AppShellState extends State<AppShell> {
   PreferredSizeWidget _topBar({SessionScope? session}) {
     final theme = Theme.of(context);
     final user = session?.user;
-    final role = user?.roles.isNotEmpty == true ? user!.roles.first.toUpperCase() : 'STAFF';
+    final role = user?.roles.isNotEmpty == true
+        ? user!.roles.first.toUpperCase()
+        : 'STAFF';
 
     Color roleColor;
     if (role.contains('MAKER')) {
@@ -681,9 +781,8 @@ class _AppShellState extends State<AppShell> {
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              _titles[_index],
-              style:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              _titleFor(context, _index),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -727,7 +826,8 @@ class _AppShellState extends State<AppShell> {
                       color: Color(0xFFDC2626),
                       shape: BoxShape.circle,
                     ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    constraints:
+                        const BoxConstraints(minWidth: 16, minHeight: 16),
                     child: Text(
                       '$_pendingApprovalCount',
                       textAlign: TextAlign.center,
@@ -753,10 +853,13 @@ class _AppShellState extends State<AppShell> {
             tooltip: 'Chuyển giao diện Sáng / Tối',
             onPressed: () {
               // ignore: use_build_context_synchronously
-              final ctrl = Provider.of<ThemeModeController?>(context, listen: false);
+              final ctrl =
+                  Provider.of<ThemeModeController?>(context, listen: false);
               if (ctrl != null) {
                 ctrl.setMode(
-                  theme.brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark,
+                  theme.brightness == Brightness.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark,
                 );
               }
             },
@@ -809,7 +912,8 @@ class _AppShellState extends State<AppShell> {
                 icon: user != null
                     ? UserAvatar(name: user.displayName, size: 26)
                     : const UserAvatar(size: 26),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 tooltip: user?.displayName ?? 'Tài khoản',
                 itemBuilder: (context) => [
                   if (user != null) ...[
@@ -824,7 +928,9 @@ class _AppShellState extends State<AppShell> {
                           ),
                           Text(
                             user.username,
-                            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant),
                           ),
                         ],
                       ),
@@ -844,8 +950,10 @@ class _AppShellState extends State<AppShell> {
                     key: Key('menu-signout'),
                     value: 'signout',
                     child: ListTile(
-                      leading: Icon(Icons.logout_rounded, size: 18, color: Colors.red),
-                      title: Text('Đăng xuất', style: TextStyle(color: Colors.red)),
+                      leading: Icon(Icons.logout_rounded,
+                          size: 18, color: Colors.red),
+                      title: Text('Đăng xuất',
+                          style: TextStyle(color: Colors.red)),
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
@@ -870,16 +978,38 @@ class _AppShellState extends State<AppShell> {
 
     final body = AppScreen(
       body: KeyedSubtree(
-        key: ValueKey('screen-$_index-$_refreshTick-${session?.user?.id ?? ''}'),
+        key:
+            ValueKey('screen-$_index-$_refreshTick-${session?.user?.id ?? ''}'),
         child: _screenFor(_index, session),
       ),
       header: _index == 0 ? const _DashboardHeader() : null,
       onRefresh: _reload,
     );
 
-    if (layout.isWide) return _shortcutWrapper(_wide(session, body));
-    if (layout.isMedium) return _shortcutWrapper(_medium(session, body));
-    return _shortcutWrapper(_compact(session, body));
+    if (layout.isWide) {
+      return _shortcutWrapper(_wide(session, _withLiveTicker(body)));
+    }
+    if (layout.isMedium) {
+      return _shortcutWrapper(_medium(session, _withLiveTicker(body)));
+    }
+    return _shortcutWrapper(_compact(session, _withLiveTicker(body)));
+  }
+
+  Widget _withLiveTicker(Widget body) {
+    final isOfflineDemo =
+        context.watch<AuthService?>()?.isOfflineSession ?? false;
+    final showTicker =
+        context.watch<AppUiSettingsController?>()?.showLiveTicker ?? true;
+    if (!isOfflineDemo && !showTicker) return body;
+    return Column(
+      children: [
+        if (isOfflineDemo)
+          const _OfflineDemoBanner()
+        else if (showTicker)
+          const _TeaOpsTicker(),
+        Expanded(child: body),
+      ],
+    );
   }
 
   /// Phím tắt toàn cục: `Ctrl+K` mở tìm kiếm từ mọi màn.
@@ -894,67 +1024,94 @@ class _AppShellState extends State<AppShell> {
   }
 
   Widget _wide(SessionScope? session, Widget body) {
-    return RepositoryScope(repository: _repository!, child: Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('btn-ai-assistant'),
-        onPressed: () => AiAssistantDialog.show(context),
-        icon: const Icon(Icons.psychology_outlined),
-        label: const Text('Trợ lý AI'),
-        backgroundColor: const Color(0xFF2563EB),
-        foregroundColor: Colors.white,
-      ),
-      body: Row(
-        children: [
-          _navRail(width: 256, session: session),
-          const VerticalDivider(width: 8, thickness: 1),
-          Expanded(
-            child: Column(
-              children: [
-                _topBar(session: session),
-                Expanded(child: body),
-              ],
-            ),
+    return RepositoryScope(
+        repository: _repository!,
+        child: Scaffold(
+          floatingActionButton: FloatingActionButton.extended(
+            key: const Key('btn-ai-assistant'),
+            onPressed: () => AiAssistantDialog.show(context),
+            icon: const Icon(Icons.psychology_outlined),
+            label: const Text('Trợ lý AI'),
+            backgroundColor: const Color(0xFF2563EB),
+            foregroundColor: Colors.white,
           ),
-        ],
-      ),
-    ));
+          body: Row(
+            children: [
+              _navRail(width: 256, session: session),
+              const VerticalDivider(width: 8, thickness: 1),
+              Expanded(
+                child: Column(
+                  children: [
+                    OfflineBanner(pending: OfflineHub.instance.pending),
+                    _topBar(session: session),
+                    Expanded(child: body),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ));
   }
 
   Widget _medium(SessionScope? session, Widget body) {
-    return RepositoryScope(repository: _repository!, child: Scaffold(
-      floatingActionButton: FloatingActionButton(
-        key: const Key('btn-ai-assistant'),
-        onPressed: () => AiAssistantDialog.show(context),
-        backgroundColor: const Color(0xFF2563EB),
-        foregroundColor: Colors.white,
-        tooltip: 'Trợ lý AI',
-        child: const Icon(Icons.psychology_outlined),
-      ),
-      appBar: _topBar(session: session),
-      body: Row(
-        children: [
-          _navRail(width: 88, session: session),
-          const VerticalDivider(width: 8, thickness: 1),
-          Expanded(child: body),
-        ],
-      ),
-    ));
+    return RepositoryScope(
+        repository: _repository!,
+        child: Scaffold(
+          floatingActionButton: FloatingActionButton(
+            key: const Key('btn-ai-assistant'),
+            onPressed: () => AiAssistantDialog.show(context),
+            backgroundColor: const Color(0xFF2563EB),
+            foregroundColor: Colors.white,
+            tooltip: 'Trợ lý AI',
+            child: const Icon(Icons.psychology_outlined),
+          ),
+          appBar: _topBar(session: session),
+          body: Stack(
+            children: [
+              Row(
+                children: [
+                  _navRail(width: 88, session: session),
+                  const VerticalDivider(width: 8, thickness: 1),
+                  Expanded(child: body),
+                ],
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: OfflineBanner(pending: OfflineHub.instance.pending),
+              ),
+            ],
+          ),
+        ));
   }
 
   Widget _compact(SessionScope? session, Widget body) {
-    return RepositoryScope(repository: _repository!, child: Scaffold(
-      floatingActionButton: FloatingActionButton(
-        key: const Key('btn-ai-assistant'),
-        onPressed: () => AiAssistantDialog.show(context),
-        backgroundColor: const Color(0xFF2563EB),
-        foregroundColor: Colors.white,
-        tooltip: 'Trợ lý AI',
-        child: const Icon(Icons.psychology_outlined),
-      ),
-      appBar: _topBar(session: session),
-      body: body,
-      bottomNavigationBar: _bottomBar(session: session),
-    ));
+    return RepositoryScope(
+        repository: _repository!,
+        child: Scaffold(
+          floatingActionButton: FloatingActionButton(
+            key: const Key('btn-ai-assistant'),
+            onPressed: () => AiAssistantDialog.show(context),
+            backgroundColor: const Color(0xFF2563EB),
+            foregroundColor: Colors.white,
+            tooltip: 'Trợ lý AI',
+            child: const Icon(Icons.psychology_outlined),
+          ),
+          appBar: _topBar(session: session),
+          body: Stack(
+            children: [
+              body,
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: OfflineBanner(pending: OfflineHub.instance.pending),
+              ),
+            ],
+          ),
+          bottomNavigationBar: _bottomBar(session: session),
+        ));
   }
 }
 
@@ -967,6 +1124,86 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+/// Thanh trạng thái thao tác nhanh tại quầy. Người dùng có thể tắt trong
+/// Cài đặt; không tự nhận là dữ liệu thời gian thực khi API chưa trả cảnh báo.
+class _TeaOpsTicker extends StatelessWidget {
+  const _TeaOpsTicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final locale =
+        Provider.of<LocaleController?>(context)?.locale ?? const Locale('vi');
+    final text = AppI18n(locale).tr('quick_shift_alert');
+    return Semantics(
+      liveRegion: true,
+      label: text,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: theme.colorScheme.primaryContainer,
+        child: Row(
+          children: [
+            Icon(Icons.notifications_active_outlined,
+                size: 17, color: theme.colorScheme.onPrimaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Hiển thị rõ rằng phiên dự phòng không đọc/ghi dữ liệu cửa hàng thật.
+class _OfflineDemoBanner extends StatelessWidget {
+  const _OfflineDemoBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      label: 'Chế độ cục bộ. Dữ liệu demo chưa đồng bộ với cửa hàng.',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: scheme.tertiaryContainer,
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off_outlined,
+                size: 17, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Chế độ cục bộ · Dữ liệu demo — chưa đồng bộ với cửa hàng',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onTertiaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Item {
   const _Item(this.index, this.label, this.icon, this.filled);
   final int index;
@@ -974,4 +1211,3 @@ class _Item {
   final IconData icon;
   final IconData filled;
 }
-

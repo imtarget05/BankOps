@@ -237,7 +237,10 @@ async def list_users(
             pass
 
     if status_filter and status_filter.strip():
-        query = query.where(User.status == status_filter.strip())
+        try:
+            query = query.where(User.status == UserStatus(status_filter.strip()))
+        except ValueError:
+            pass
 
     if role and role.strip():
         query = query.join(UserRole, UserRole.user_id == User.id).where(UserRole.role_code == role.strip())
@@ -314,10 +317,11 @@ async def create_user(
         invite_token = secrets.token_hex(32)
         token_hash = hashlib.sha256(invite_token.encode("utf-8")).hexdigest()
         expires_at = now + timedelta(days=7)
-        # Placeholder unusable password until invite is accepted
+        # Placeholder unusable password until invite is accepted via /auth/accept-invite
+        # (flip inactive -> active). Test test_admin_create_user_with_invite_token phụ thuộc flow này.
         pwd_hash = get_password_hash(secrets.token_urlsafe(32))
         must_change = False
-        user_status = UserStatus.inactive  # will be active once invite is accepted
+        user_status = UserStatus.inactive
 
     new_user = User(
         id=new_user_id,

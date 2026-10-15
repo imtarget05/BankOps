@@ -7,7 +7,12 @@ import 'src/app/theme_mode_controller.dart';
 import 'src/features/auth/auth_service.dart';
 import 'src/features/auth/login_screen.dart';
 
+import 'src/core/i18n/app_i18n.dart';
+import 'src/core/i18n/locale_controller.dart';
+import 'src/core/theme/app_ui_settings_controller.dart';
+
 void main() {
+  final uiSettings = AppUiSettingsController();
   runApp(
     MultiProvider(
       providers: [
@@ -15,10 +20,16 @@ void main() {
           create: (_) => AuthService()..tryAutoLogin(),
         ),
         ChangeNotifierProvider(
-          create: (_) => ThemeModeController(),
+          create: (_) => LocaleController(),
+        ),
+        ChangeNotifierProvider<AppUiSettingsController>.value(
+          value: uiSettings,
+        ),
+        ChangeNotifierProvider<ThemeModeController>.value(
+          value: uiSettings,
         ),
       ],
-      child: const BankOpsApp(),
+      child: const TeaInventoryApp(),
     ),
   );
 }
@@ -57,18 +68,28 @@ class _AuthGate extends StatelessWidget {
   }
 }
 
-class BankOpsApp extends StatelessWidget {
-  const BankOpsApp({super.key});
+class TeaInventoryApp extends StatelessWidget {
+  const TeaInventoryApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = context.watch<ThemeModeController>().mode;
+    final uiSettings = context.watch<AppUiSettingsController>();
+    final locale = context.watch<LocaleController>().locale;
+    final i18n = AppI18n(locale);
+
     return MaterialApp(
-      title: 'BankOps',
+      title: i18n.tr('app_title'),
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: themeMode,
+      locale: locale,
+      theme: AppTheme.light(
+        preset: uiSettings.colorPreset,
+        density: uiSettings.density,
+      ),
+      darkTheme: AppTheme.dark(
+        preset: uiSettings.colorPreset,
+        density: uiSettings.density,
+      ),
+      themeMode: uiSettings.mode,
       home: const SessionBridge(child: _AuthGate()),
     );
   }

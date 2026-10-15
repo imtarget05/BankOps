@@ -1,11 +1,11 @@
 {
     "name": "Quản Lý Nhập Xuất Tồn Quán Trà Sữa",
-    "short_name": "Nhập Xuất Tồn",
+    "short_name": "Kho Trà Sữa",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0A2540",
-    "theme_color": "#0A2540",
-    "description": "Hệ thống quản lý kho ấn chỉ và quỹ tiền mặt mô phỏng ngân hàng số theo chuẩn Maker-Checker (Dual-Control).",
+    "background_color": "#4A2C2A",
+    "theme_color": "#4A2C2A",
+    "description": "Ứng dụng quản lý nhập, xuất và tồn nguyên vật liệu cho quán trà sữa.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

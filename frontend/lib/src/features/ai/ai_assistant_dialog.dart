@@ -8,7 +8,7 @@ import '../../app/app_shell.dart';
 import '../../data/repositories/http_bankops_repository.dart';
 import '../auth/auth_service.dart';
 
-/// "Khai" is the BankOps assistant's product name. The implementation model
+/// "Khai" là trợ lý cho ứng dụng Quản Lý Kho Trà Sữa.
 /// is intentionally not shown inside a user's conversation.
 class AiAssistantDialog extends StatefulWidget {
   const AiAssistantDialog({super.key});
@@ -48,6 +48,15 @@ class _ChatRequestFailure implements Exception {
   final int statusCode;
 }
 
+String _shortSourceLabel(Map source) {
+  final raw = (source['source'] ?? '').toString();
+  var name = raw.split('/').last;
+  if (name.endsWith('.md')) {
+    name = name.substring(0, name.length - 3);
+  }
+  return name.trim();
+}
+
 class _AiAssistantDialogState extends State<AiAssistantDialog> {
   static const _brand = Color(0xFF153E75);
   static const _ink = Color(0xFF10233F);
@@ -60,10 +69,10 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
   bool _disposed = false;
 
   final List<String> _quickPrompts = const [
-    'Ai được lập và duyệt phiếu?',
-    'Khi đối soát có chênh lệch cần làm gì?',
-    'Dòng dữ liệu nhập bị lỗi thì xử lý thế nào?',
-    'Quy định duyệt phiếu trên 500 triệu?',
+    'Ai được lập và duyệt phiếu kho?',
+    'Chốt ca sáng/chiều theo công thức nào?',
+    'Tồn chạm Min hoặc lệch kiểm kê thì xử lý sao?',
+    'Lô sữa tươi cận date cần làm gì?',
   ];
 
   @override
@@ -142,8 +151,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               } else if (event == 'sources' && data is List) {
                 sources.addAll(data
                     .whereType<Map>()
-                    .map((source) =>
-                        "${source['source'] ?? ''} · ${source['section'] ?? ''}")
+                    .map(_shortSourceLabel)
                     .where((source) => source.trim().isNotEmpty));
               } else if (event == 'error') {
                 throw const _ChatRequestFailure(503);
@@ -175,8 +183,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           if (data['sources'] is List) {
             sources.addAll((data['sources'] as List)
                 .whereType<Map>()
-                .map((source) =>
-                    "${source['source'] ?? ''} · ${source['section'] ?? ''}")
+                .map(_shortSourceLabel)
                 .where((source) => source.trim().isNotEmpty));
           }
         }
@@ -184,8 +191,14 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
         client.close();
       }
       if (answer.isEmpty) throw const _ChatRequestFailure(503);
-      if (sources.isNotEmpty) {
-        answer += "\n\nNguồn: ${sources.join('; ')}";
+      final briefSources = <String>[];
+      for (final source in sources) {
+        if (source.isEmpty || briefSources.contains(source)) continue;
+        briefSources.add(source);
+        if (briefSources.length == 3) break;
+      }
+      if (briefSources.isNotEmpty) {
+        answer += "\n\nNguồn: ${briefSources.join(', ')}";
       }
     } on _ChatRequestFailure catch (error) {
       if (error.statusCode == 401) {
@@ -285,7 +298,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                       fontSize: 19,
                       fontWeight: FontWeight.w800)),
               SizedBox(height: 2),
-              Text('Trợ lý nghiệp vụ BankOps',
+              Text('Trợ lý Quản Lý Kho Trà Sữa',
                   style: TextStyle(color: Color(0xFFC3D4EE), fontSize: 12)),
             ]),
           ),

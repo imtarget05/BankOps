@@ -41,8 +41,10 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
   @override
   void initState() {
     super.initState();
-    final critical = widget.stagnationItems.where((i) => i.severity == 'critical').length;
-    _selectedStatus = critical > 0 ? 'Cảnh báo rủi ro cao' : 'Vận hành đạt chuẩn';
+    final critical =
+        widget.stagnationItems.where((i) => i.severity == 'critical').length;
+    _selectedStatus =
+        critical > 0 ? 'Cảnh báo rủi ro cao' : 'Vận hành đạt chuẩn';
   }
 
   @override
@@ -69,7 +71,7 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
   void _printPdf() {
     ReportShare.printPdf(
       context,
-      filename: 'bao-cao-giao-ban-bankops.pdf',
+      filename: 'bao-cao-van-hanh-kho-tra-sua.pdf',
       build: () => MeetingReportPdf.encode(
         inventoryBuckets: widget.inventoryBuckets,
         cashflowBuckets: widget.cashflowBuckets,
@@ -88,7 +90,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
     final theme = Theme.of(context);
 
     // Phân tích dữ liệu để sinh talking points
-    final critical = widget.stagnationItems.where((i) => i.severity == 'critical').toList();
+    final critical =
+        widget.stagnationItems.where((i) => i.severity == 'critical').toList();
     double totalIn = 0;
     double totalOut = 0;
     for (final b in widget.cashflowBuckets) {
@@ -97,7 +100,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
     }
     final netCash = totalIn - totalOut;
     final totalRuns = widget.reconciliations.length;
-    final cleanRuns = widget.reconciliations.where((r) => r.exceptions.isEmpty).length;
+    final cleanRuns =
+        widget.reconciliations.where((r) => r.exceptions.isEmpty).length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -108,7 +112,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
           color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+            side: BorderSide(
+                color: theme.colorScheme.primary.withValues(alpha: 0.2)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -121,7 +126,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.meeting_room_outlined, color: theme.colorScheme.primary),
+                    Icon(Icons.meeting_room_outlined,
+                        color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
                       'Bàn Làm Việc Giao Ban & Chuẩn Bị Cuộc Họp',
@@ -183,7 +189,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                 const SizedBox(height: 8),
                 Text(
                   'Chọn nhận định đánh giá trước khi bước vào phòng họp lãnh đạo:',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -194,21 +201,27 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                       label: const Text('🟢 Vận hành đạt chuẩn (Ổn định)'),
                       selected: _selectedStatus == 'Vận hành đạt chuẩn',
                       onSelected: (val) {
-                        if (val) setState(() => _selectedStatus = 'Vận hành đạt chuẩn');
+                        if (val)
+                          setState(
+                              () => _selectedStatus = 'Vận hành đạt chuẩn');
                       },
                     ),
                     ChoiceChip(
                       label: const Text('🟡 Cần lưu ý theo dõi'),
                       selected: _selectedStatus == 'Cần lưu ý theo dõi',
                       onSelected: (val) {
-                        if (val) setState(() => _selectedStatus = 'Cần lưu ý theo dõi');
+                        if (val)
+                          setState(
+                              () => _selectedStatus = 'Cần lưu ý theo dõi');
                       },
                     ),
                     ChoiceChip(
                       label: const Text('🔴 Cảnh báo rủi ro cao'),
                       selected: _selectedStatus == 'Cảnh báo rủi ro cao',
                       onSelected: (val) {
-                        if (val) setState(() => _selectedStatus = 'Cảnh báo rủi ro cao');
+                        if (val)
+                          setState(
+                              () => _selectedStatus = 'Cảnh báo rủi ro cao');
                       },
                     ),
                   ],
@@ -233,7 +246,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.auto_awesome, size: 18, color: theme.colorScheme.primary),
+                    Icon(Icons.auto_awesome,
+                        size: 18, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
                       '2. TRỌNG TÂM PHÁT BIỂU & KIẾN NGHỊ CUỘC HỌP (TALKING POINTS)',
@@ -255,7 +269,7 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                 ),
                 _bulletItem(
                   context,
-                  title: 'Ấn chỉ & Vật tư kho:',
+                  title: 'Nguyên liệu tồn kho:',
                   content: critical.isNotEmpty
                       ? 'Phát hiện ${critical.length} mặt hàng tồn đọng >=90 ngày chưa từng xuất. Đề xuất thành lập hội đồng thanh lý hoặc luân chuyển nội bộ.'
                       : 'Vật tư luân chuyển nhịp nhàng, không có điểm nóng tồn đọng nghiêm trọng.',
@@ -297,7 +311,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                 const SizedBox(height: 8),
                 Text(
                   'Nhập thêm ý kiến cá nhân để xuất kèm báo cáo PDF hoặc sao chép vào biên bản họp:',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -305,8 +320,10 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                   controller: _notesController,
                   maxLines: 4,
                   decoration: InputDecoration(
-                    hintText: 'Ví dụ: Chi nhánh đề xuất bổ sung thêm 200 cuốn Sổ tiết kiệm loại 10 trang trước ngày 20...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    hintText:
+                        'Ví dụ: Chi nhánh đề xuất bổ sung thêm 200 cuốn Sổ tiết kiệm loại 10 trang trước ngày 20...',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
                     contentPadding: const EdgeInsets.all(12),
                   ),
                 ),
@@ -315,7 +332,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
                     onPressed: () {
-                      AppToast.info(context, 'Đã lưu ghi chú vào phiên làm việc hiện tại.');
+                      AppToast.info(context,
+                          'Đã lưu ghi chú vào phiên làm việc hiện tại.');
                     },
                     icon: const Icon(Icons.save_outlined, size: 16),
                     label: const Text('Lưu ghi chú'),
@@ -354,7 +372,9 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
               text: TextSpan(
                 style: Theme.of(context).textTheme.bodyMedium,
                 children: [
-                  TextSpan(text: '$title ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(
+                      text: '$title ',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   TextSpan(text: content),
                 ],
               ),
