@@ -211,3 +211,20 @@ environment nào) — không trigger run hỏng thêm. Deploy production bằng 
 | Production `main.dart.js` (~4.9 MB) | ✅ Có Modal `/api/v1`, 0 legacy ref |
 | CORS preflight từ production origin tới Modal | ✅ 200 + `allow-origin: bankops-web.pages.dev` + credentials |
 | Rollback | `wrangler pages deployment list --project-name=bankops-web` → rollback về deployment trước nếu cần |
+
+### Bổ sung 2026-10-15 ~00:35Z — CI đỏ (token/account mismatch) + production redeploy local
+
+- `gh secret set` đủ 4 secrets (3 tự động + `CLOUDFLARE_API_TOKEN` do owner dán qua chat —
+  **coi như lộ, phải rotate**, xem cuối).
+- CI `deploy-pages.yml` run `38660046086` + `38660373388`: secrets-check PASS, Flutter
+  analyze/test/build PASS, nhưng deploy step 7003 `Could not route to
+  /accounts/{id}/pages/projects/bankops-web` — lặp lại sau khi reset
+  `CLOUDFLARE_ACCOUNT_ID` đúng account `8788…e1b3c` ⇒ token không thuộc account này
+  hoặc thiếu scope Pages. CI còn đỏ cho tới khi token đúng.
+- Production deploy trực tiếp (OAuth local, đã verify): `flutter test +80 pass`,
+  `analyze` sạch, rebuild release, `wrangler pages deploy --branch=main` →
+  deployment `df43cb6d`. Verify production: `/` 200, `main.dart.js` có Modal URL +
+  0 legacy ref, API `/health/ready` 200.
+- ⚠️ **Hành động bắt buộc**: revoke token đã dán qua chat (Settings → API Tokens →
+  delete), tạo token mới đúng account + scope Pages:Edit, cập nhật GH secret
+  `CLOUDFLARE_API_TOKEN`, re-run workflow để CI xanh lại.
