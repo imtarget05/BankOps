@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -146,7 +147,7 @@ async def validation_exception_envelope(request: Request, exc: RequestValidation
                 "code": _ERROR_CODES[422],
                 "message": "Validation failed",
                 "request_id": rid,
-                "details": {"errors": exc.errors()},
+                "details": {"errors": jsonable_encoder(exc.errors())},
             }
         },
         headers={"X-Request-ID": rid},

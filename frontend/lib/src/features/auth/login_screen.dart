@@ -89,6 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
             msg.contains('registered origin')) {
           userFriendlyMsg =
               'Google OAuth: Nguồn gốc trang web chưa được khai báo trong Authorized JavaScript origins của Google Cloud Console.';
+        } else if (msg.contains('Validation failed')) {
+          userFriendlyMsg =
+              'Xác thực tài khoản Google không thành công. Vui lòng thử lại.';
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
