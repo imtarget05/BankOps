@@ -234,6 +234,18 @@ Chạy lại toàn chuỗi bằng `curl` + Playwright, không dựa vào ghi ch�
 (`/health` và `/api/v1/health` đều **404** — sai path, không phải dịch vụ hỏng).
 `API_BASE_URL` khi build Flutter = `https://imtarget05--bankops-api-api.us-east.modal.run/api/v1`.
 
+### Bổ sung 2026-10-15 ~01:05Z — CI XANH, nguyên nhân gốc các lần đỏ trước
+
+- Run `38663566964`: **success** — secrets-check, analyze, test, build, Pages deploy,
+  smoke test đều qua. Production phục vụ bundle do CI build (Modal API, 0 legacy ref).
+- **Root cause 4 lần đỏ trước**: `gh secret set NAME --body -` KHÔNG đọc stdin như
+  tưởng — `--body -` nạp đúng chuỗi `"-"` (1 ký tự) vào cả 4 secrets (chứng minh bằng
+  sha256(`-`) trùng hash CI in ra). Verify `-z` vẫn pass vì `"-"` non-empty; deploy
+  7003 vì account `"-"` không route được. Đã nạp lại cả 4 bằng pipe stdin đúng cách
+  (`printf … | gh secret set NAME`, không dùng `--body -`).
+- Workflow cũng đã cứng hóa: step diag lengths/hashes (không in giá trị), deploy bằng
+  `npx --yes wrangler@4` trực tiếp thay wrangler-action (kẹt 3.90.0).
+
 ### Bổ sung 2026-10-15 ~00:35Z — CI đỏ (token/account mismatch) + production redeploy local
 
 - `gh secret set` đủ 4 secrets (3 tự động + `CLOUDFLARE_API_TOKEN` do owner dán qua chat —
