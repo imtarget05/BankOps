@@ -195,3 +195,19 @@ flutter RadioGroup, `90a6327` snapshot). Không động production.
 | `flutter build web --dart-define=API_BASE_URL=<modal>/api/v1` | ✅ Built |
 | `wrangler pages deploy --project-name=bankops-web` (branch alias) | ✅ `https://qa-validation-20261014.bankops-web.pages.dev` 200, title đúng |
 | Production `bankops-web.pages.dev` | ✅ Không đụng (giữ bản production của track deploy) |
+
+### Bổ sung tối 2026-10-14 — production redeploy trực tiếp (user lệnh "làm ngay")
+
+CI `deploy-pages.yml` vẫn đỏ vì repo **0 secret** (`gh secret list` trống; không có
+environment nào) — không trigger run hỏng thêm. Deploy production bằng local build
+đã verify + `wrangler pages deploy --branch=main` (wrangler OAuth đã login).
+
+| Check | Result |
+|-------|--------|
+| `flutter build web --release --dart-define=API_BASE_URL=https://imtarget05--bankops-api-api.us-east.modal.run/api/v1 --dart-define=APP_ENV=production` | ✅ Built 33s |
+| Bundle kiểm tra trước deploy | ✅ Có Modal URL, 0 tham chiếu `bankops-api.tanmainguyenbinh.*` |
+| `wrangler pages deploy --project-name=bankops-web --branch=main` | ✅ Deployment `f432a664` |
+| Production `GET /` | ✅ 200, title đúng |
+| Production `main.dart.js` (~4.9 MB) | ✅ Có Modal `/api/v1`, 0 legacy ref |
+| CORS preflight từ production origin tới Modal | ✅ 200 + `allow-origin: bankops-web.pages.dev` + credentials |
+| Rollback | `wrangler pages deployment list --project-name=bankops-web` → rollback về deployment trước nếu cần |
