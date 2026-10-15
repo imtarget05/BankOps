@@ -83,6 +83,7 @@ image = (
     .pip_install(*REQUIREMENTS)
     .add_local_dir("backend/app", remote_path="/root/bankops/app", copy=True)
     .add_local_dir("backend/alembic", remote_path="/root/bankops/alembic", copy=True)
+    .add_local_file("backend/alembic.ini", remote_path="/root/bankops/alembic.ini", copy=True)
     .add_local_dir("sample-data", remote_path="/root/bankops/sample-data", copy=True)
     .add_local_dir("docs", remote_path="/root/bankops/docs", copy=True)
     .env(
@@ -101,6 +102,18 @@ image = (
 )
 
 app = modal.App("bankops-api", image=image)
+
+
+@app.function(secrets=[modal.Secret.from_name("bankops-api")], timeout=10 * 60)
+def migrate_database() -> None:
+    """Apply the versioned schema before a compatible API release is served."""
+    import subprocess
+
+    subprocess.run(
+        ["python", "-m", "alembic", "upgrade", "head"],
+        cwd="/root/bankops",
+        check=True,
+    )
 
 
 @app.function(
