@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.cash_sim import CashBalance, CashBox
 from app.models.iam import Capability, Role, RoleCapability, User, UserRole
-from app.models.inventory import Asset, Balance, Item, Location
+from app.models.inventory import Asset, Balance, Item, Location, StockLevel
 
 # Demo password - used for all seeded demo users.
 DEMO_PASSWORD = "DemoPass123!"
@@ -94,8 +94,13 @@ async def seed_demo():
         mappings = [
             RoleCapability(role_code="staff", capability_code="inventory:create_request"),
             RoleCapability(role_code="approver", capability_code="inventory:approve_request"),
+            RoleCapability(role_code="inventory_manager", capability_code="inventory:approve_request"),
+            RoleCapability(role_code="admin", capability_code="inventory:approve_request"),
             RoleCapability(role_code="inventory_manager", capability_code="inventory:manage_catalog"),
             RoleCapability(role_code="inventory_manager", capability_code="inventory:view_balances"),
+            # Quản lý cửa hàng là checker của ca/phiếu điều chỉnh theo SRS.
+            RoleCapability(role_code="inventory_manager", capability_code="inventory:create_request"),
+            RoleCapability(role_code="inventory_manager", capability_code="approval:view_inbox"),
             RoleCapability(role_code="staff", capability_code="cash:create_request"),
             RoleCapability(role_code="approver", capability_code="cash:approve_request"),
             RoleCapability(role_code="cash_sim_operator", capability_code="cash:reconcile"),
@@ -149,6 +154,13 @@ async def seed_demo():
             },
         ]
         all_users_spec = users_data + qa_extra_users
+        role_map = {
+            "staff": "staff",
+            "approver": "approver",
+            "auditor": "auditor",
+            "admin": "admin",
+            "inventory_manager": "inventory_manager",
+        }
         existing_usernames = set(
             (await db.execute(select(User.username))).scalars().all()
         )
@@ -160,12 +172,6 @@ async def seed_demo():
             default_pin_hash = get_password_hash("123456")
             users = []
             user_roles = []
-            role_map = {
-                "staff": "staff",
-                "approver": "approver",
-                "auditor": "auditor",
-                "admin": "admin",
-            }
             for u in missing_specs:
                 user = User(
                     id=uuid.UUID(u["id"]),
@@ -188,40 +194,78 @@ async def seed_demo():
             await db.commit()
             print(f"Seeded {len(users)} users")
 
+        # Sync any newly added roles for existing users (e.g. approver for manager_demo)
+        existing_user_roles = set(
+            (
+                await db.execute(select(UserRole.user_id, UserRole.role_code))
+            ).all()
+        )
+        extra_user_roles = []
+        for u in users_data:
+            uid = uuid.UUID(u["id"])
+            for role_key in u.get("roles", []):
+                rc = role_map.get(role_key, role_key)
+                if (uid, rc) not in existing_user_roles:
+                    extra_user_roles.append(UserRole(user_id=uid, role_code=rc))
+                    existing_user_roles.add((uid, rc))
+        if extra_user_roles:
+            db.add_all(extra_user_roles)
+            await db.commit()
+
         # --- Inventory: Locations ---
         inv_data = _load_sample_data("inventory.json")
-        existing_locs = await db.execute(select(Location.id))
-        if not existing_locs.first():
-            locations = [
-                Location(
+        # --- Inventory: Locations (upsert theo id hoặc code — idempotent) ---
+        loc_rows = (await db.execute(select(Location))).scalars().all()
+        loc_by_code = {loc.code: loc for loc in loc_rows}
+        loc_by_id = {str(loc.id): loc for loc in loc_rows}
+        new_locations = []
+        for loc in inv_data["locations"]:
+            existing = loc_by_code.get(loc["code"]) or loc_by_id.get(loc["id"])
+            if existing is None:
+                new_locations.append(Location(
                     id=uuid.UUID(loc["id"]),
                     code=loc["code"],
                     name=loc["name"],
                     active=True,
-                )
-                for loc in inv_data["locations"]
-            ]
-            db.add_all(locations)
-            await db.commit()
-            print(f"Seeded {len(locations)} locations")
+                ))
+            else:
+                existing.code = loc["code"]
+                existing.name = loc["name"]
+                existing.active = True
+        if new_locations:
+            db.add_all(new_locations)
+        await db.commit()
+        print(f"Locations upserted (+{len(new_locations)} mới)")
 
-        # --- Inventory: Items ---
-        existing_items = await db.execute(select(Item.id))
-        if not existing_items.first():
-            items = [
-                Item(
+        # --- Inventory: Items (upsert theo id hoặc sku — idempotent) ---
+        item_rows = (await db.execute(select(Item))).scalars().all()
+        item_by_sku = {item.sku: item for item in item_rows}
+        item_by_id = {str(item.id): item for item in item_rows}
+        new_items = []
+        for item in inv_data["items"]:
+            existing = item_by_sku.get(item["sku"]) or item_by_id.get(item["id"])
+            if existing is None:
+                new_items.append(Item(
                     id=uuid.UUID(item["id"]),
                     sku=item["sku"],
                     name=item["name"],
                     unit=item["unit"],
+                    category=item.get("category"),
+                    packaging=item.get("packaging"),
                     tracked_serial=item.get("tracked_serial", False),
                     active=True,
-                )
-                for item in inv_data["items"]
-            ]
-            db.add_all(items)
-            await db.commit()
-            print(f"Seeded {len(items)} items")
+                ))
+            else:
+                existing.sku = item["sku"]
+                existing.name = item["name"]
+                existing.unit = item["unit"]
+                existing.category = item.get("category")
+                existing.packaging = item.get("packaging")
+                existing.active = True
+        if new_items:
+            db.add_all(new_items)
+        await db.commit()
+        print(f"Items upserted (+{len(new_items)} mới)")
 
         # --- Inventory: Assets ---
         existing_assets = await db.execute(select(Asset.id))
@@ -265,6 +309,33 @@ async def seed_demo():
             db.add_all(balances)
             await db.commit()
             print(f"Seeded {len(balances)} initial balances")
+
+        # --- Inventory: Safety Stock Levels ---
+        existing_stock_levels = await db.execute(select(StockLevel.id).limit(1))
+        if not existing_stock_levels.first():
+            loc_result = await db.execute(select(Location.code, Location.id))
+            loc_map = {row.code: row.id for row in loc_result.all()}
+            item_result = await db.execute(select(Item.sku, Item.id))
+            item_map = {row.sku: row.id for row in item_result.all()}
+
+            stock_levels = []
+            for item in inv_data["items"]:
+                if "min_qty" in item:
+                    # Pilot trà sữa: Min/Max phủ cả quầy + kho mát/khô + kho trung tâm.
+                    for loc_code in ("BAR-MAIN", "STORAGE-COOL", "STORAGE-DRY", "KHO-TT"):
+                        if loc_code not in loc_map or item["sku"] not in item_map:
+                            continue
+                        stock_levels.append(StockLevel(
+                            id=uuid.uuid4(),
+                            location_id=loc_map[loc_code],
+                            item_id=item_map[item["sku"]],
+                            min_qty=item["min_qty"],
+                            max_qty=item.get("max_qty"),
+                        ))
+            if stock_levels:
+                db.add_all(stock_levels)
+                await db.commit()
+                print(f"Seeded {len(stock_levels)} safety stock levels")
 
         # --- Cash Simulation ---
         cash_data = _load_sample_data("cash-sim.json")

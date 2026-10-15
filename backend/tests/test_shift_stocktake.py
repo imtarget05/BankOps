@@ -24,13 +24,15 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
     locations = client.get("/inventory/locations", headers=headers).json()["locations"]
     items = client.get("/inventory/items", headers=headers).json()["items"]
 
+    # Use unique business date so repeated test runs don't conflict on unique shift/date
+    unique_date = f"2026-11-{(int(uuid.uuid4().hex[:4], 16) % 28) + 1:02d}"
     opened = client.post(
         "/inventory/stocktakes",
         headers=_idempotent(headers),
         json={
             "location_id": locations[0]["id"],
             "shift_code": "morning",
-            "business_date": "2026-10-15",
+            "business_date": unique_date,
         },
     )
     assert opened.status_code == 201, opened.text
@@ -52,6 +54,6 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
         },
     )
     assert updated.status_code == 200, updated.text
-    line = updated.json()["lines"][0]
+    line = next(line for line in updated.json()["lines"] if line["item_id"] == items[0]["id"])
     assert line["theoretical_qty"] == "45"
     assert line["variance"] == "-2"
