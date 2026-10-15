@@ -2,7 +2,10 @@
 
 **Vai trò:** QA reviewer độc lập — chỉ viết test, **không sửa tệp tính năng**.
 **Phạm vi:** B01–B15 (`docs/13-backlog.md`), ca bắt buộc A1–A4 / I1–I3 / C1–C3 / R1 / G1–G2 / E1 / S1 (`docs/10-qa.md`), hợp đồng `docs/04`, `docs/06`, `docs/08`.
-**Snapshot cuối:** 13/10/2026 · **Vòng 9**: Nghiệm thu toàn diện — 136 tests backend passed, ruff 0, Flutter 28/28 passed (analyze 0 issues), worker tsc 0, Docker 4/4 healthy, live E2E 100% OK.
+**Snapshot cuối:** 15/10/2026 · **Live re-verify**: API Modal + Pages + Neon healthy —
+live/ready 200, login JWT 948, 6 endpoint nghiệp vụ 200, OpenAPI 101 paths, CORS đúng,
+bundle đúng Modal host 0 ref legacy, Flutter 80/80 + analyze 0, secret guard pass
+(chi tiết `docs/qa/06-deployment-validation.md`) · Trước đó **Vòng 9** (13/10): 136 tests backend passed, ruff 0, Flutter 28/28, worker tsc 0, Docker 4/4 healthy, live E2E 100% OK.
 
 > ⚠️ AI coding agent sửa mã song song trong suốt 9 giờ (15:39 → 22:50). Trạng thái đổi **7 lần**. Mọi khẳng định gắn với timestamp.
 >

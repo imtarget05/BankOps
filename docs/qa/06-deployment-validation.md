@@ -261,3 +261,23 @@ Chạy lại toàn chuỗi bằng `curl` + Playwright, không dựa vào ghi ch�
 - ⚠️ **Hành động bắt buộc**: revoke token đã dán qua chat (Settings → API Tokens →
   delete), tạo token mới đúng account + scope Pages:Edit, cập nhật GH secret
   `CLOUDFLARE_API_TOKEN`, re-run workflow để CI xanh lại.
+
+### Bổ sung 2026-10-15 ~00:40Z — re-verify live độc lập (round todo "làm cho xong")
+
+Không redeploy (deployment hiện tại healthy): Modal app `bankops-api` (`ap-eFDvT08q5Ghwyf3bPa57Q7`,
+deployed 14/10), secret `bankops-api` last-used 15/10, bundle `main.dart.js` production
+(~4.9 MB) có đúng 1 ref Modal host, 0 `workers.dev`, 0 legacy `tanmainguyenbinh`.
+
+| Mắt xích | Kết quả |
+|---|---|
+| `GET /api/v1/health/live` | ✅ 200 `{"status":"alive","version":"0.1.0"}` |
+| `GET /api/v1/health/ready` | ✅ 200 `database: ready` |
+| `POST /api/v1/auth/login` (`demo_admin`) | ✅ 200, JWT 948 ký tự |
+| `auth/me` · `inventory/items` · `inventory/balances` · `approvals/inbox` · `reports/inventory-daily` · `audit-events` (Bearer) | ✅ 6× 200 (items có SKU `DEMO-PAPER-A4`) |
+| `GET /api/v1/openapi.json` | ✅ 200, **101 paths** |
+| CORS preflight Origin `https://bankops-web.pages.dev` | ✅ 200 + `allow-origin` đúng origin + credentials |
+| `GET https://bankops-web.pages.dev/` | ✅ 200, security headers Pages (`DENY`, `nosniff`, `no-cache` entrypoint) |
+| `GET .../main.dart.js` | ✅ 200, `no-store` entrypoint |
+| `flutter analyze` | ✅ No issues found |
+| `flutter test --no-pub` | ✅ **80/80 passed** |
+| `scripts/check_no_secrets.py` | ✅ Secret guard passed |
