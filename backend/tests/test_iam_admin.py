@@ -130,6 +130,53 @@ class TestIamAdmin:
         login_res = client.post("/auth/login", data={"username": username, "password": init_pass})
         assert login_res.status_code == 200
 
+    def test_invite_email_requires_real_email(self, client):
+        """Invite qua email BẮT BUỘC email thật có format hợp lệ (yêu cầu khách hàng)."""
+        admin_auth = _login(client, "demo_admin")
+
+        # Thiếu email -> 422 EMAIL_REQUIRED
+        r = client.post(
+            "/admin/users",
+            headers=_idem(admin_auth),
+            json={
+                "username": f"emp_noemail_{uuid.uuid4().hex[:6]}",
+                "display_name": "Nhân Viên Không Email",
+                "onboarding_method": "invite_email",
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "EMAIL_REQUIRED" in str(r.json())
+
+        # Email sai format -> 422 EMAIL_INVALID
+        r = client.post(
+            "/admin/users",
+            headers=_idem(admin_auth),
+            json={
+                "username": f"emp_bademail_{uuid.uuid4().hex[:6]}",
+                "email": "khong-phai-email",
+                "display_name": "Nhân Viên Email Sai",
+                "onboarding_method": "invite_email",
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "EMAIL_INVALID" in str(r.json())
+
+    def test_resend_invite_requires_valid_email(self, client):
+        """Gửi lại lời mời cho user chưa có email thật -> 422 (không gửi invite mò)."""
+        admin_auth = _login(client, "demo_admin")
+        username = f"emp_nores_{uuid.uuid4().hex[:6]}"
+        r = client.post(
+            "/admin/users",
+            headers=_idem(admin_auth),
+            json={"username": username, "display_name": "Nhân Viên Không Email 2"},
+        )
+        assert r.status_code == 201, r.text
+        user_id = r.json()["user"]["id"]
+
+        r = client.post(f"/admin/users/{user_id}/invite", headers=_idem(admin_auth))
+        assert r.status_code == 422, r.text
+        assert "EMAIL_REQUIRED" in str(r.json())
+
     def test_admin_cannot_self_lock(self, client):
         admin_auth = _login(client, "demo_admin")
         me = client.get("/me", headers=admin_auth).json()

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
 
     idempotency_key_retention_hours: int = Field(default=24)
 
+    # Origin của frontend để tạo link absolute trong email mời (invite) / OTP.
+    # Local mặc định; production bắt buộc set FRONTEND_BASE_URL=https://domain-cua-ban.
+    frontend_base_url: str = Field(default="http://localhost:3000")
+
     server_host: str = Field(default="0.0.0.0")
     server_port: int = Field(default=8000)
     server_reload: bool = Field(default=True)

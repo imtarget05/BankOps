@@ -26,6 +26,7 @@ from app.api.routes.auth_utils import (
     get_user_scope_grants,
     require_any_capability,
 )
+from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.iam import (
@@ -37,6 +38,7 @@ from app.models.iam import (
     UserRole,
     UserStatus,
 )
+from app.services.email_service import is_valid_email, send_invite_email
 
 router = APIRouter(prefix="/admin", tags=["Admin IAM"])
 
@@ -278,6 +280,21 @@ async def create_user(
     clean_username = body.username.strip().lower()
     clean_email = body.email.strip().lower() if body.email and body.email.strip() else None
 
+    # Invite qua email BẮT BUỘC email thật có format hợp lệ (không cho placeholder).
+    if body.onboarding_method == "invite_email":
+        if not clean_email:
+            raise AppError(
+                422,
+                "EMAIL_REQUIRED",
+                "Onboarding 'invite_email' bắt buộc email thật của nhân viên để nhận thư mời.",
+            )
+        if not is_valid_email(clean_email):
+            raise AppError(
+                422,
+                "EMAIL_INVALID",
+                f"Email '{clean_email}' không đúng định dạng email thật (vd: nhanvien@congty.com).",
+            )
+
     # Verify unique username
     existing_u = (await db.execute(select(User).where(func.lower(User.username) == clean_username))).scalar_one_or_none()
     if existing_u:
@@ -387,12 +404,30 @@ async def create_user(
     await db.commit()
     await db.refresh(new_user)
 
+    # Gửi thư mời tới email thật (best-effort): SMTP chưa cấu hình thì log demo
+    # mode, không làm hỏng việc tạo tài khoản; admin vẫn nhận invite_link để chia sẻ.
+    invite_email_sent = False
+    if invite_token and clean_email:
+        try:
+            invite_email_sent = await send_invite_email(
+                to_email=clean_email,
+                username=clean_username,
+                invite_link=(
+                    f"{settings.frontend_base_url.rstrip('/')}"
+                    f"/accept-invite?token={invite_token}"
+                ),
+                expires_at=new_user.invite_expires_at,
+            )
+        except Exception:  # noqa: BLE001 - email không bao giờ làm fail provisioning
+            invite_email_sent = False
+
     user_data = await _user_to_dict(db, new_user)
     return {
         "user": user_data,
         "temporary_password": temp_password,
         "invite_token": invite_token,
         "invite_link": f"/accept-invite?token={invite_token}" if invite_token else None,
+        "invite_email_sent": invite_email_sent,
         "message": f"Tài khoản '{clean_username}' đã được khởi tạo thành công.",
     }
 
@@ -638,6 +673,15 @@ async def resend_invite(
     if not user:
         raise AppError(404, "USER_NOT_FOUND", "Không tìm thấy người dùng.")
 
+    # Invite đi qua email thật — chặn khi user chưa có email hợp lệ.
+    clean_email = (user.email or "").strip().lower()
+    if not is_valid_email(clean_email):
+        raise AppError(
+            422,
+            "EMAIL_REQUIRED",
+            "Người dùng chưa có email hợp lệ. Hãy cập nhật email thật trước khi gửi lời mời.",
+        )
+
     invite_token = secrets.token_hex(32)
     token_hash = hashlib.sha256(invite_token.encode("utf-8")).hexdigest()
     now = _now()
@@ -654,9 +698,25 @@ async def resend_invite(
 
     await db.commit()
 
+    # Gửi thư mời best-effort (SMTP chưa cấu hình thì log demo mode, không fail API).
+    invite_email_sent = False
+    try:
+        invite_email_sent = await send_invite_email(
+            to_email=clean_email,
+            username=user.username,
+            invite_link=(
+                f"{settings.frontend_base_url.rstrip('/')}"
+                f"/accept-invite?token={invite_token}"
+            ),
+            expires_at=user.invite_expires_at,
+        )
+    except Exception:  # noqa: BLE001 - email không bao giờ làm fail resend
+        invite_email_sent = False
+
     return {
         "invite_token": invite_token,
         "invite_link": f"/accept-invite?token={invite_token}",
+        "invite_email_sent": invite_email_sent,
         "expires_at": user.invite_expires_at.isoformat(),
         "message": "Đã tạo mã mời mới (hạn sử dụng 7 ngày).",
     }

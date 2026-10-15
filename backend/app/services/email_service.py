@@ -1,6 +1,7 @@
 """Email notification service for Quản Lý Kho Trà Sữa."""
 import asyncio
 import logging
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -8,6 +9,14 @@ from email.mime.text import MIMEText
 from app.config import settings
 
 logger = logging.getLogger("khotrasua.email")
+
+# Regex email thực dụng: local@domain.tld (≥2 ký tự TLD), không chứa space.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+
+
+def is_valid_email(value: str | None) -> bool:
+    """Chỉ chấp nhận email thật có format hợp lệ (dùng cho invite & reset)."""
+    return bool(value) and bool(_EMAIL_RE.match(value.strip().lower()))
 
 
 def _build_otp_html(username: str, otp: str) -> str:
@@ -159,3 +168,91 @@ async def send_password_reset_email(to_email: str, username: str, otp: str) -> b
         html_content=html_body,
         from_name=settings.smtp_from_name,
     )
+
+
+def _build_invite_html(username: str, invite_link: str, expires_label: str) -> str:
+    """HTML nội dung email mời kích hoạt tài khoản nhân viên."""
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#2563eb,#0891b2);padding:28px 32px;">
+            <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">Mời kích hoạt tài khoản</p>
+            <p style="margin:6px 0 0;font-size:13px;color:#dbeafe;">{settings.smtp_from_name}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px;">
+            <p style="margin:0 0 12px;font-size:14px;color:#334155;">Xin chào <strong>{username}</strong>,</p>
+            <p style="margin:0 0 20px;font-size:14px;color:#334155;line-height:1.6;">
+              Quản trị viên đã mời bạn tham gia hệ thống. Bấm nút bên dưới để đặt mật khẩu và kích hoạt tài khoản
+              (hạn sử dụng: <strong>{expires_label}</strong>).
+            </p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+              <tr>
+                <td style="background-color:#2563eb;border-radius:10px;">
+                  <a href="{invite_link}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Kích hoạt tài khoản</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;font-size:12.5px;color:#92400e;background-color:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;line-height:1.5;">
+              <strong>Lưu ý bảo mật:</strong> Không chuyển tiếp email này cho người khác. Nếu bạn không được mời,
+              vui lòng bỏ qua email và báo ngay cho quản lý cửa hàng.
+            </p>
+            <p style="margin:20px 0 0;font-size:13px;color:#64748b;">Trân trọng,<br><strong>Ban Vận Hành Quản Lý Kho Trà Sữa</strong></p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 32px;text-align:center;">
+            <p style="margin:0;font-size:11.5px;color:#94a3b8;">Đây là email tự động từ hệ thống {settings.smtp_from_name}. Vui lòng không trả lời trực tiếp email này.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+
+async def send_invite_email(to_email: str, username: str, invite_link: str, expires_at) -> bool:
+    """Gửi email mời kích hoạt tài khoản (onboarding `invite_email`).
+
+    Yêu cầu email thật (format hợp lệ). Nếu SMTP chưa cấu hình thì log cảnh báo
+    và trả False (không raise) — caller vẫn trả invite_link trong response.
+    """
+    clean_email = (to_email or "").strip().lower()
+    if not is_valid_email(clean_email):
+        logger.warning("Invite skipped: email không hợp lệ cho user '%s': %s", username, to_email)
+        return False
+
+    smtp_user = settings.smtp_user.strip()
+    smtp_pass = settings.smtp_password.strip()
+    if not smtp_user or not smtp_pass:
+        logger.info(
+            "[EmailService (Demo mode)] SMTP not configured. Invite for user '%s' (%s) link: %s",
+            username, clean_email, invite_link,
+        )
+        return False
+
+    expires_label = (
+        expires_at.strftime("%d/%m/%Y %H:%M") if getattr(expires_at, "year", None) else "7 ngày"
+    )
+    subject = f"[{settings.smtp_from_name}] Lời mời kích hoạt tài khoản cho {username}"
+    html_body = _build_invite_html(username=username, invite_link=invite_link, expires_label=expires_label)
+
+    return await asyncio.to_thread(
+        _send_smtp_sync,
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        user=smtp_user,
+        password=smtp_pass,
+        to_email=clean_email,
+        subject=subject,
+        html_content=html_body,
+        from_name=settings.smtp_from_name,
+    )
+
