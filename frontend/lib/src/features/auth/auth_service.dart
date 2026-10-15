@@ -61,8 +61,8 @@ class AuthService extends ChangeNotifier {
   @visibleForTesting
   static set mockTokenAllowedOverride(bool? value) {
     if (!kDebugMode) {
-      assert(false,
-          'mockTokenAllowedOverride is debug-only; ignored in release.');
+      assert(
+          false, 'mockTokenAllowedOverride is debug-only; ignored in release.');
       return;
     }
     _mockTokenAllowedOverride = value;
@@ -87,17 +87,17 @@ class AuthService extends ChangeNotifier {
   /// Overridable (and REQUIRED for release web) via `--dart-define=API_BASE_URL=...`.
   ///
   /// Không còn fallback host cứng cho production web: host cũ
-  /// (`bankops-api.tanmainguyenbinh.pages.dev`) đã chết (DNS không phân giải),
-  /// nên release web KHÔNG có API_BASE_URL sẽ nhận chuỗi rỗng + log cảnh báo
-  /// thay vì trỏ vào một URL sai.
+  /// (`bankops-api.tanmainguyenbinh.pages.dev`) và Modal
+  /// (`imtarget05--quan-ly-kho-tra-sua-api...modal.run`) đều đã chết/nghỉ —
+  /// release web KHÔNG có API_BASE_URL sẽ nhận chuỗi rỗng và app tự chạy
+  /// chế độ demo/offline thay vì trỏ vào một URL sai.
   static String get defaultBaseUrl {
     const env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (env.isNotEmpty) return env;
     if (kIsWeb) {
-      if (!kDebugMode) {
-        return 'https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run/api/v1';
-      }
-      return 'http://localhost:8000/api/v1';
+      // Release web: không đoán URL backend — để trống, caller tự quyết
+      // (AuthService sẽ chuyển sang offline demo khi không cấu hình).
+      return '';
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -256,12 +256,10 @@ class AuthService extends ChangeNotifier {
   Future<bool> _isBackendReachable() async {
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        final resp = await _http
-            .get(
-              Uri.parse('$_baseUrl/auth/me'),
-              headers: const {'Content-Type': 'application/json'},
-            )
-            .timeout(const Duration(milliseconds: 1500));
+        final resp = await _http.get(
+          Uri.parse('$_baseUrl/auth/me'),
+          headers: const {'Content-Type': 'application/json'},
+        ).timeout(const Duration(milliseconds: 1500));
         if (resp.statusCode == 200 || resp.statusCode == 401) return true;
         if (attempt == 1) return false;
       } catch (_) {
@@ -773,9 +771,16 @@ class AuthService extends ChangeNotifier {
         if (user.phoneNumber != null) 'phone_number': user.phoneNumber,
         if (user.branch != null) 'branch': user.branch,
         if (user.employeeCode != null) 'employee_code': user.employeeCode,
+        if (user.avatarUrl != null) 'avatar_url': user.avatarUrl,
       };
 
   String _serverMessage(String body) {
+    // Nếu public static Worker trả lại index.html cho đường dẫn /auth/login,
+    // đây là dấu hiệu API nghiệp vụ chưa được deploy, không phải sai mật khẩu.
+    final trimmed = body.trimLeft().toLowerCase();
+    if (trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html')) {
+      return 'Dịch vụ xác thực chưa được triển khai. Vui lòng khôi phục API và cơ sở dữ liệu trước khi đăng nhập tài khoản Root.';
+    }
     try {
       final decoded = json.decode(body);
       if (decoded is Map) {
@@ -788,7 +793,7 @@ class AuthService extends ChangeNotifier {
       }
     } catch (_) {}
     if (body.contains('Method Not Allowed') || body.contains('405')) {
-      return 'Cổng API máy chủ từ chối yêu cầu (405). Vui lòng thử lại hoặc đăng nhập bằng tài khoản ca trực.';
+      return 'Dịch vụ xác thực chưa được triển khai (API trả 405). Tài khoản, Google Sign-In và Root đều cần API cùng cơ sở dữ liệu để hoạt động.';
     }
     return 'Máy chủ từ chối đăng nhập. Vui lòng kiểm tra lại thông tin hoặc đăng nhập bằng tài khoản ca trực.';
   }
@@ -799,6 +804,7 @@ class AuthService extends ChangeNotifier {
     String? email,
     String? phoneNumber,
     String? branch,
+    String? avatarUrl,
   }) async {
     _lastError = null;
     final trimmedName = displayName.trim();
@@ -814,6 +820,7 @@ class AuthService extends ChangeNotifier {
             email: email?.trim(),
             phoneNumber: phoneNumber?.trim(),
             branch: branch?.trim(),
+            avatarUrl: avatarUrl?.trim(),
           ) ??
           AppUser(
             id: _user?.id ?? 'u_me',
@@ -823,6 +830,7 @@ class AuthService extends ChangeNotifier {
             email: email?.trim(),
             phoneNumber: phoneNumber?.trim(),
             branch: branch?.trim(),
+            avatarUrl: avatarUrl?.trim(),
           );
       notifyListeners();
       return true;
@@ -838,6 +846,7 @@ class AuthService extends ChangeNotifier {
           if (email != null) 'email': email.trim(),
           if (phoneNumber != null) 'phone_number': phoneNumber.trim(),
           if (branch != null) 'branch': branch.trim(),
+          if (avatarUrl != null) 'avatar_url': avatarUrl.trim(),
         }),
       );
 
@@ -849,6 +858,7 @@ class AuthService extends ChangeNotifier {
               phoneNumber:
                   data['phone_number']?.toString() ?? phoneNumber?.trim(),
               branch: data['branch']?.toString() ?? branch?.trim(),
+              avatarUrl: data['avatar_url']?.toString() ?? avatarUrl?.trim(),
             ) ??
             AppUser(
               id: data['id']?.toString() ?? 'u_me',
@@ -858,6 +868,7 @@ class AuthService extends ChangeNotifier {
               email: email?.trim(),
               phoneNumber: phoneNumber?.trim(),
               branch: branch?.trim(),
+              avatarUrl: avatarUrl?.trim(),
             );
         notifyListeners();
         return true;
@@ -905,5 +916,6 @@ class AuthService extends ChangeNotifier {
         phoneNumber: json['phone_number'] as String?,
         branch: json['branch'] as String?,
         employeeCode: json['employee_code'] as String?,
+        avatarUrl: json['avatar_url'] as String?,
       );
 }

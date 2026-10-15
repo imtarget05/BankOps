@@ -13,10 +13,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Canonical API = FastAPI (ADR-0001), host trên Modal (scale-to-zero, free tier).
-  # Đây là URL công khai, KHÔNG phải secret. Đổi giá trị này nếu app Modal được
-  # đổi tên (modal app `quan-ly-kho-tra-sua`, function `api`).
-  API_BASE_URL: "https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
+  # Backend FastAPI tạm NGHỈ trên Modal (workspace vượt spend limit → app bị xoá).
+  # Khi redeploy backend thì điền lại URL tại đây (vd. https://<workspace>--quan-ly-kho-tra-sua-api.<region>.modal.run
+  # hoặc host mới) — build sẽ nhận qua --dart-define=API_BASE_URL.
+  # Để trống → release web chạy chế độ demo/offline (KHÔNG trỏ vào URL chết).
+  API_BASE_URL: ""
 
 jobs:
   build-and-deploy:
@@ -90,6 +91,11 @@ jobs:
 
       - name: Smoke test (API health from deployed bundle)
         run: |
+          # Backend tạm nghỉ (Modal) → API_BASE_URL rỗng thì bỏ qua smoke test.
+          if [ -z "${{ env.API_BASE_URL }}" ]; then
+            echo "API_BASE_URL chưa cấu hình — bỏ qua smoke test backend."
+            exit 0
+          fi
           curl -fsS -m 90 "${{ env.API_BASE_URL }}/api/v1/health/live" | grep -q '"status":"alive"'
           echo "Backend health OK: ${{ env.API_BASE_URL }}"
 
