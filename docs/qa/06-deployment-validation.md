@@ -212,6 +212,28 @@ environment nào) — không trigger run hỏng thêm. Deploy production bằng 
 | CORS preflight từ production origin tới Modal | ✅ 200 + `allow-origin: bankops-web.pages.dev` + credentials |
 | Rollback | `wrangler pages deployment list --project-name=bankops-web` → rollback về deployment trước nếu cần |
 
+### Verify lại production 15/10/2026 — bằng chứng sống (độc lập, chỉ đọc)
+
+Chạy lại toàn chuỗi bằng `curl` + Playwright, không dựa vào ghi chép cũ.
+
+| Mắt xích | Lệnh / URL | Kết quả |
+|---|---|---|
+| Neon project | `BankOps` `divine-meadow-83331783`, PG16, ap-southeast-1 | ✅ ADMIN |
+| API liveness | `GET https://imtarget05--bankops-api-api.us-east.modal.run/api/v1/health/live` | ✅ 200 `{"status":"alive"}` |
+| API readiness (DB) | `GET …/api/v1/health/ready` | ✅ 200 `{"status":"ready",…}` |
+| Login | `POST …/api/v1/auth/login` (`demo_admin`/`DemoPass123!`) | ✅ 200, JWT 948 ký tự |
+| Identity | `GET …/api/v1/auth/me` | ✅ 200 — roles `[admin, staff, approver]` |
+| Data | `GET …/api/v1/inventory/items` | ✅ 200, 5 dòng |
+| Business | `inventory/balances` · `approvals/inbox` · `reports/inventory-daily` · `audit-events` | ✅ 4× 200 |
+| AI | `POST …/api/v1/ai/chat` `{"message":"…"}` | ✅ 200 — abstain, `sources: []`, `simulation: true` |
+| CORS | `OPTIONS` Origin `https://bankops-web.pages.dev` | ✅ 200 + `allow-origin` + credentials |
+| Pages | `GET https://bankops-web.pages.dev/` · `main.dart.js` | ✅ 200, có Modal host, 0 ref `workers.dev` |
+| OpenAPI | `GET …/api/v1/openapi.json` | ✅ 200, **101** path |
+
+**Lưu ý đường dẫn:** API mount dưới `/api/v1`. Health = `/api/v1/health/live` · `/api/v1/health/ready`
+(`/health` và `/api/v1/health` đều **404** — sai path, không phải dịch vụ hỏng).
+`API_BASE_URL` khi build Flutter = `https://imtarget05--bankops-api-api.us-east.modal.run/api/v1`.
+
 ### Bổ sung 2026-10-15 ~00:35Z — CI đỏ (token/account mismatch) + production redeploy local
 
 - `gh secret set` đủ 4 secrets (3 tự động + `CLOUDFLARE_API_TOKEN` do owner dán qua chat —

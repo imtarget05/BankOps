@@ -548,3 +548,69 @@ backend/tests/test_acceptance_qa.py     ca bắt buộc docs/10 A1–E1, S1 (c�
 Từ góc độ QA: **toàn bộ cổng bắt buộc đều xanh**, acceptance A1–A4/I1–I3/C1–C3/R1/G1–G2/E1/S1 pass, cloud deployment
 đã verify end-to-end. Không còn mục P0 nào mở. Nợ còn lại chỉ là mypy strict (xfail có chủ đích) và việc archive Worker
 (đã quyết định hoãn).
+
+## 11. Vòng 11 — Verify lại production end-to-end + fix CSV injection (15/10/2026)
+
+**Bối cảnh:** verify lại toàn bộ chuỗi deploy cloud bằng **bằng chứng sống** (không dựa vào ghi chép cũ), đồng thời chạy
+Phase 3 UI QA còn mở trong `docs/12`.
+
+### Chuỗi production (verify sống 15/10)
+
+| Mắt xích | Kiểm tra | Kết quả |
+|---|---|---|
+| Neon | project `BankOps` (`divine-meadow-83331783`), PG16, `aws-ap-southeast-1` | ✅ tồn tại, permission ADMIN |
+| Modal FastAPI | `GET /api/v1/health/live` | ✅ 200 `{"status":"alive"}` |
+| Modal → Neon | `GET /api/v1/health/ready` | ✅ 200 `{"status":"ready",…,"version":"0.1…"}` |
+| Auth | `POST /api/v1/auth/login` (`demo_admin`) | ✅ 200, JWT **948** ký tự |
+| Identity | `GET /api/v1/auth/me` | ✅ 200 — `demo_admin`, roles `[admin, staff, approver]` |
+| Dữ liệu | `GET /api/v1/inventory/items` | ✅ 200, **5 dòng** |
+| Nghiệp vụ | `inventory/balances` · `approvals/inbox` · `reports/inventory-daily` · `audit-events` | ✅ **4× 200** |
+| AI | `POST /api/v1/ai/chat` | ✅ 200 — **abstain** (`sources: []`, `simulation: true`) |
+| CORS | `OPTIONS` từ `https://bankops-web.pages.dev` | ✅ 200 + `allow-origin` + credentials |
+| Pages | `GET /` + `main.dart.js` | ✅ 200, chứa Modal host, **0** ref `workers.dev` |
+
+⚠️ Đường dẫn thật: API mount dưới `/api/v1`; health ở `/api/v1/health/live` và `/api/v1/health/ready`
+(**không phải** `/health` — gọi sai path sẽ ra 404, không phải lỗi dịch vụ).
+
+### Phase 3 UI QA — 4 breakpoint (Playwright + Chrome headless, chỉ đọc)
+
+| Breakpoint | console errors | failed requests | overflow ngang | Kết quả |
+|---|---|---|---|---|
+| 320px | 0 | 0 | không | ✅ |
+| 768px | 0 | 0 | không | ✅ |
+| 1024px | 0 | 0 | không | ✅ |
+| 1440px | 0 | 0 | không | ✅ |
+
+Responsive đúng: **320px ẩn panel marketing** (chỉ form đăng nhập), **1440px hiện 2 cột** (hero + form).
+Tiếng Việt render đủ dấu (không tofu). Giới hạn: không có ảnh baseline ⇒ đánh giá *thị giác* là **INCONCLUSIVE**;
+kết luận trên dựa vào cây accessibility + số đo layout, không phải so ảnh.
+
+### Phát hiện + đã sửa: CSV formula injection (CWE-1236)
+
+`docs/12` mục "CSV/Excel export — no formula injection" **TRƯỢT**. `CsvExport._cell`
+(`frontend/lib/src/core/util/csv_export.dart`) có quote RFC-4180 nhưng **không** chặn ô bắt đầu bằng `= + - @ TAB CR`
+→ dán vào Excel/Sheets là **thực thi công thức** (payload `=cmd|'/c calc'!A1`). Backend `etl.py` error-report CSV
+cũng vậy (cột `err_msg`, `raw_data` do người dùng kiểm soát).
+
+Đã sửa theo TDD (RED→GREEN):
+- `frontend/lib/src/core/util/csv_export.dart` — thêm `_formulaLead` + `_numeric` (số âm giữ nguyên, không bị mangle).
+- `backend/app/api/routes/etl.py` — thêm `_csv_safe()` áp cho cả 4 cột.
+- Test: `frontend/test/csv_export_formula_injection_test.dart` (11 ca) · `backend/tests/test_csv_export_injection.py` (13 ca).
+
+### Cổng kiểm tra (chạy lại 15/10, **sau** khi sửa)
+
+| Gate | Kết quả |
+|---|---|
+| `pytest -q` (DB QA `:5433`, `APP_ENV=test`) | **245 passed, 2 skipped, 0 failed** (+13 test mới) |
+| `ruff check backend/` | **All checks passed!** |
+| `flutter test` | **80/80 passed** (+11 test mới) |
+| `flutter analyze` | **No issues found!** |
+| `scripts/check_no_secrets.py` | **passed** |
+
+Skip (cả hai ở `test_b01_foundation.py`): `:225` mypy chưa cài (dev dependency) · `:359` seed đọc `sample-data`.
+
+### Kết luận vòng 11
+
+Chuỗi production **verified end-to-end bằng bằng chứng sống** — không chỉ ghi chép. Một lỗ thực đã được bịt (CSV
+injection) kèm test hồi quy cả hai phía. **Không cổng nào đỏ.** Còn mở có chủ đích: watermark demo + loading/error/empty
+states (cần đăng nhập UI trực quan) và AI "with data → citation" (provider đang `disabled`).
