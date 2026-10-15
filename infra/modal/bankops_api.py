@@ -84,12 +84,17 @@ image = (
     .add_local_dir("backend/app", remote_path="/root/bankops/app", copy=True)
     .add_local_dir("backend/alembic", remote_path="/root/bankops/alembic", copy=True)
     .add_local_dir("sample-data", remote_path="/root/bankops/sample-data", copy=True)
+    .add_local_dir("docs", remote_path="/root/bankops/docs", copy=True)
     .env(
         {
             "PYTHONPATH": "/root/bankops",
             # seed_demo đọc sample-data/*.json NGAY khi khởi động (database.py
             # gọi seed) — thiếu file này là container chết ngay khi lên.
             "SAMPLE_DATA_DIR": "/root/bankops/sample-data",
+            "DOCS_DIR": "/root/bankops/docs",
+            "AI_PROVIDER": "modal_llm",
+            "MODAL_LLM_URL": "https://imtarget05--bankops-llm-serve.us-east.modal.run/v1/chat/completions",
+            "MODAL_LLM_MODEL": "Qwen2.5-1.5B-Instruct.Q4_K_M",
             "SERVER_RELOAD": "false",
         }
     )
@@ -99,7 +104,10 @@ app = modal.App("bankops-api", image=image)
 
 
 @app.function(
-    secrets=[modal.Secret.from_name("bankops-api")],
+    secrets=[
+        modal.Secret.from_name("bankops-api"),
+        modal.Secret.from_dict({"AI_PROVIDER": "modal_llm"}),
+    ],
     # 5 phút không traffic -> container ngủ (tiết kiệm credit $30/tháng).
     scaledown_window=5 * 60,
     # request tối đa 15 phút (bao gồm cold start ~10-30s lần đầu).
@@ -107,10 +115,14 @@ app = modal.App("bankops-api", image=image)
 )
 @modal.asgi_app()
 def api():
+    import os
     import sys
 
     if "/root/bankops" not in sys.path:
         sys.path.insert(0, "/root/bankops")
+
+    os.environ["AI_PROVIDER"] = "modal_llm"
+    os.environ["DOCS_DIR"] = "/root/bankops/docs"
 
     from app.main import app as fastapi_app
 

@@ -4,7 +4,7 @@
 
 `connection` có type, tên, status, secret_ref, config đã validate, scope dữ liệu demo, owner. Adapter chung: `test_connection`, `discover_schema`, `preview`, `run_import`, `run_export`; mỗi adapter trả kết quả typed, không gọi trực tiếp module ledger. MVP: Google Sheets sandbox, CSV/Excel upload; Apps Script qua webhook signed/allowlisted. Generic outbound webhook chỉ gửi event demo đã lọc. Không kéo dữ liệu khách hàng thật.
 
-## Import pipeline
+## Quy trình nhập dữ liệu (Import pipeline)
 
 ```mermaid
 flowchart LR
@@ -17,7 +17,7 @@ flowchart LR
   APPROVAL --> POST[Ledger/movement]
 ```
 
-Sheet ID, tab, header mapping và source row key phải cấu hình. Dedup theo `(connection, source_fingerprint, source_row_key, mapping_version)`. Row lỗi không chặn mọi row nếu mode partial staging; báo số hợp lệ/lỗi và tải được error report. Import chỉ tạo draft khi admin xác nhận; draft vẫn qua approval. Export là snapshot dữ liệu demo với timestamp và schema version; không chứa secret.
+Sheet ID, tab, header mapping và source row key phải cấu hình. Dedup theo `(connection, source_fingerprint, source_row_key, mapping_version)`. Dòng dữ liệu nhập (row) bị lỗi không chặn mọi dòng khác nếu bật chế độ partial staging; hệ thống báo cáo số lượng dòng hợp lệ/lỗi và cho phép tải error report để xử lý. Tiến trình import chỉ tạo draft khi Quản trị viên (admin) xác nhận; phiếu draft vẫn phải qua quy trình phê duyệt (approval) riêng biệt. Export là snapshot dữ liệu demo với timestamp và schema version; không chứa secret.
 
 ## Apps Script và webhook
 

@@ -193,9 +193,12 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
     provider = settings.ai_provider
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': message}]
     headers = {}
-    if provider == 'cloudflare':
-        if not settings.cloudflare_account_id or not settings.cloudflare_api_token.get_secret_value():
+    if provider == 'cloudflare' and (not settings.cloudflare_account_id or not settings.cloudflare_api_token.get_secret_value()):
+        if settings.modal_llm_url:
+            provider = 'modal_llm'
+        else:
             raise HTTPException(503, UNAVAILABLE)
+    if provider == 'cloudflare':
         model = settings.cloudflare_model
         url = f'https://api.cloudflare.com/client/v4/accounts/{settings.cloudflare_account_id}/ai/run/{model}'
         headers['Authorization'] = f'Bearer {settings.cloudflare_api_token.get_secret_value()}'
@@ -209,6 +212,16 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
             'stream': False,
             'options': {'temperature': 0.2, 'num_predict': 512, 'num_ctx': 2048, 'num_gpu': 0},
         }
+    elif provider == 'modal_llm':
+        model = settings.modal_llm_model
+        url = settings.modal_llm_url
+        payload = {
+            'model': model,
+            'messages': messages,
+            'max_tokens': 512,
+            'temperature': 0.2,
+            'stream': False,
+        }
     else:
         raise HTTPException(503, UNAVAILABLE)
     try:
@@ -219,6 +232,11 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
             if body.get('success') is not True:
                 raise ValueError('Provider rejected request')
             answer = body['result']['response']
+        elif provider == 'modal_llm':
+            choices = body.get('choices')
+            if not choices or not isinstance(choices, list):
+                raise ValueError('Provider rejected request')
+            answer = choices[0]['message']['content']
         else:
             answer = body['message']['content']
         if not isinstance(answer, str) or not answer.strip():

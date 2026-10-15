@@ -44,12 +44,18 @@ Mỗi phôi thẻ chip EMV, sổ séc, chứng chỉ tiền gửi được đị
 
 Mỗi mặt hàng tại từng kho đều có định mức tối thiểu (`min_level`) và tối đa (`max_level`). Khi số lượng khả dụng chạm hoặc dưới ngưỡng tối thiểu, hệ thống tự động sinh cảnh báo và gợi ý lập phiếu điều chuyển/nhập kho bổ sung.
 
+## Quy định kiểm soát kép và hạn mức duyệt (Dual Control & Limits)
+
+- **Nguyên tắc Maker - Checker (Ai được lập và duyệt phiếu)**: Người lập phiếu (`created_by` / Maker) và người duyệt phiếu (`approved_by` / Checker) bắt buộc phải là hai người dùng khác nhau (`created_by != approved_by`). Người tạo không thể tự duyệt phiếu của chính mình, kể cả tài khoản Quản trị viên (`admin`). Giao dịch viên (GDV / role `staff`) lập phiếu, Kiểm soát viên (KSV / role `approver`) kiểm tra và phê duyệt.
+- **Quy định duyệt phiếu trên 500 triệu (≥ 500.000.000 VND)**: Giao dịch quỹ tiền mặt mô phỏng có giá trị từ 500 triệu đồng trở lên thuộc diện rủi ro cao (High Risk), bắt buộc thực hiện kiểm soát kép đặc biệt: yêu cầu xác thực mã PIN Kiểm soát viên (Supervisor PIN), hệ thống sinh mã băm Audit Stamp SHA-256 để đảm bảo tính toàn vẹn, kiểm đếm tiền mặt thực tế tại két và lập biên bản bàn giao có đủ 2 chữ ký của Maker và Checker.
+- **Hạn mức ấn chỉ bảo mật**: Phiếu xuất/nhập từ 50 đơn vị ấn chỉ/phôi thẻ (thẻ chip EMV, sổ séc trắng) trở lên thuộc diện kiểm soát nghiêm ngặt, bắt buộc kiểm đếm dải số serial và niêm phong hộp phôi trước khi ký duyệt.
+
 ## Đối soát
 
 - Hàng ngày hoặc chạy tay: so tổng movements với `inv_balances`; so tổng journal entries với `cash_balances`.
 - So danh sách asset active với vị trí/serial; kiểm tra double assignment.
-- Kết quả gồm `matched`, `exception`, `running`, `failed`; exception có expected, actual, source IDs, người xử lý, thời điểm.
-- Không tự động vá sai lệch. Auditor xem; operator tạo adjustment/reversal có hai người duyệt. Chạy lại sau xử lý và lưu cả hai run.
+- Kết quả gồm `matched`, `exception` (chênh lệch/sai lệch), `running`, `failed`; exception có expected, actual, source IDs, người xử lý, thời điểm.
+- Khi đối soát có chênh lệch hoặc sai lệch: Không tự động vá sai lệch. Kiểm toán nội bộ (Auditor) kiểm tra, người vận hành (Operator) tạo phiếu điều chỉnh (adjustment) hoặc đảo bút toán (reversal) có hai người duyệt (Maker-Checker). Chạy lại đối soát sau khi xử lý và lưu vết cả hai lần chạy.
 
 ## Mẫu lỗi nghiệp vụ
 

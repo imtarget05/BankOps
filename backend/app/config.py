@@ -65,12 +65,16 @@ class Settings(BaseSettings):
     smtp_password: str = Field(default=os.environ.get("SMTP_PASSWORD", ""))
     smtp_from_name: str = Field(default=os.environ.get("SMTP_FROM_NAME", "BankOps Core Banking"))
 
-    ai_provider: Literal['disabled', 'cloudflare', 'ollama'] = 'cloudflare'
+    ai_provider: Literal['disabled', 'cloudflare', 'ollama', 'modal_llm'] = 'cloudflare'
     cloudflare_account_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{32})?$')
     cloudflare_api_token: SecretStr = SecretStr('')
     cloudflare_model: str = '@cf/meta/llama-3.1-8b-instruct'
     ollama_base_url: str = 'http://localhost:11434'
     ollama_model: str = 'qwen2.5:1.5b'
+    modal_llm_url: str = Field(
+        default='https://imtarget05--bankops-llm-serve.us-east.modal.run/v1/chat/completions'
+    )
+    modal_llm_model: str = Field(default='Qwen2.5-1.5B-Instruct.Q4_K_M')
     ai_timeout_seconds: int = Field(default=120, ge=1, le=300)
     ai_requests_per_minute: int = Field(default=10, ge=1, le=100)
     supervisor_pin: SecretStr = SecretStr('')

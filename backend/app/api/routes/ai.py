@@ -62,8 +62,13 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
     sources = retrieve(body.message)
     if not sources:
         return {'answer': 'Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.', 'sources': [], 'simulation': True}
-    async with httpx.AsyncClient() as client:
-        result = await generate(grounded_prompt(body.message, sources), settings, client)
+    try:
+        async with httpx.AsyncClient() as client:
+            result = await generate(grounded_prompt(body.message, sources), settings, client)
+    except HTTPException:
+        top = sources[0]
+        answer = f"Theo tài liệu nghiệp vụ ({top['source']} · {top['section']}):\n{top['content']}"
+        result = {'answer': answer, 'provider': 'grounded_fallback', 'model': 'docs_extract', 'simulation': True}
     return {**result, 'sources': [{k: v for k, v in source.items() if k != 'content'} for source in sources]}
 
 
@@ -91,8 +96,8 @@ async def chat_stream(body: ChatRequest, user: User = Depends(get_current_user))
                     result = await generate(prompt, settings, client)
                     answer = result['answer']
             except HTTPException:
-                yield 'event: error\ndata: {"message":"Trợ lý AI chưa sẵn sàng. Vui lòng thử lại sau."}\n\n'
-                return
+                top = sources[0]
+                answer = f"Theo tài liệu nghiệp vụ ({top['source']} · {top['section']}):\n{top['content']}"
         for offset in range(0, len(answer), 80):
             yield f"event: delta\ndata: {json.dumps({'text': answer[offset:offset + 80]}, ensure_ascii=False)}\n\n"
         yield 'event: done\ndata: {}\n\n'

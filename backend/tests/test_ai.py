@@ -58,6 +58,27 @@ async def test_local_cpu_contract():
 
 
 @pytest.mark.asyncio
+async def test_modal_llm_contract():
+    def respond(request):
+        assert request.url.host == 'imtarget05--bankops-llm-serve.us-east.modal.run'
+        import json
+        body = json.loads(request.content)
+        assert body['messages'][0]['role'] == 'system'
+        assert body['messages'][-1]['content'] == 'Maker là gì?'
+        assert body['model'] == 'Qwen2.5-1.5B-Instruct.Q4_K_M'
+        return httpx.Response(200, json={
+            'id': 'test-123',
+            'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'Người tạo phiếu.'}, 'finish_reason': 'stop'}]
+        })
+    settings = Settings(database_url='sqlite://', ai_provider='modal_llm')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        result = await generate('Maker là gì?', settings, client)
+    assert result['answer'] == 'Người tạo phiếu.'
+    assert result['provider'] == 'modal_llm'
+    assert result['simulation'] is True
+
+
+@pytest.mark.asyncio
 async def test_timeout():
     def respond(request):
         raise httpx.ReadTimeout('upstream secret', request=request)

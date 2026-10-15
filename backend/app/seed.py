@@ -121,12 +121,11 @@ async def seed_demo():
             RoleCapability(role_code="admin", capability_code="integration:manage"),
             RoleCapability(role_code="system_admin", capability_code="admin:user_management"),
         ]
-        existing_pairs = {
-            (rc, cc)
-            for (rc, cc) in (
+        existing_pairs = set(
+            (
                 await db.execute(select(RoleCapability.role_code, RoleCapability.capability_code))
             ).all()
-        }
+        )
         new_mappings = [m for m in mappings if (m.role_code, m.capability_code) not in existing_pairs]
         if new_mappings:
             db.add_all(new_mappings)
