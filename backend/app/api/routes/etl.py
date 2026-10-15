@@ -14,6 +14,7 @@ Provides the 4-layer ETL API:
 import csv
 import io
 import json
+import re
 import uuid
 from typing import Any
 
@@ -53,6 +54,24 @@ _CAP_DESIGN = "etl:design"
 _CAP_RUN = "etl:run"
 _CAP_REVIEW = "etl:review"
 _CAP_POST_BALANCE = "etl:post_balance"
+
+# CWE-1236: Excel/Sheets treat a cell starting with these as a formula.
+_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+_NUMERIC_RE = re.compile(r"^-?\d+(\.\d+)?$")
+
+
+def _csv_safe(value: object) -> str:
+    """Neutralise spreadsheet formula injection in an exported CSV cell.
+
+    A value beginning with ``=`` ``+`` ``-`` ``@`` TAB or CR is executed as a
+    formula by Excel / Google Sheets. Prefixing an apostrophe forces text.
+    Plain numbers (including negatives) are left untouched so numeric columns
+    stay numeric.
+    """
+    text = "" if value is None else str(value)
+    if text[:1] in _FORMULA_LEAD and not _NUMERIC_RE.match(text):
+        return "'" + text
+    return text
 
 
 # --------------------------------------------------------------------------
@@ -896,7 +915,12 @@ async def get_error_report(
     for r in invalid_rows:
         err_msg = "; ".join(r.errors_json or [])
         raw_str = json.dumps(r.raw_data_json, ensure_ascii=False)
-        writer.writerow([r.row_number, r.source_row_key or "", err_msg, raw_str])
+        writer.writerow([
+            _csv_safe(r.row_number),
+            _csv_safe(r.source_row_key or ""),
+            _csv_safe(err_msg),
+            _csv_safe(raw_str),
+        ])
 
     csv_content = output.getvalue()
     return PlainTextResponse(

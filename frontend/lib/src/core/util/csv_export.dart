@@ -21,9 +21,20 @@ class CsvExport {
     return buffer.toString();
   }
 
+  /// Ký tự mở đầu khiến Excel/Sheets hiểu ô là công thức (CWE-1236).
+  static final RegExp _formulaLead = RegExp(r'^[=+\-@\t\r]');
+
+  /// Số hợp lệ (kể cả âm) — giữ nguyên để "-1234" vẫn là số, không bị escape.
+  static final RegExp _numeric = RegExp(r'^-?\d+(\.\d+)?$');
+
   static String _cell(Object? value) {
     if (value == null) return '';
-    final text = value.toString();
+    var text = value.toString();
+    // Chống CSV/formula injection: ô bắt đầu bằng = + - @ TAB CR (và không phải
+    // số thuần) được thêm tiền tố ' để Excel/Sheets coi là text, không thực thi.
+    if (_formulaLead.hasMatch(text) && !_numeric.hasMatch(text)) {
+      text = "'$text";
+    }
     if (text.contains(RegExp(r'[",\n\r]'))) {
       return '"${text.replaceAll('"', '""')}"';
     }
