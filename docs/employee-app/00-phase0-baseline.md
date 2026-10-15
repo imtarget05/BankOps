@@ -23,7 +23,7 @@
 
 #### Deployment (2026-10-14) — chi tiết ở `docs/qa/06-deployment-validation.md`
 - **Neon**: dùng lại project `BankOps`, branch `br-quiet-surf-b34t5lwu`, migrate `009`→`014` (39 tables), seed; snapshot rollback `snap-aged-sun-b38mjspm`
-- **FastAPI**: deploy lên Modal — `https://imtarget05--bankops-api-api.us-east.modal.run` (`infra/modal/bankops_api.py`)
+- **FastAPI**: deploy lên Modal — `https://imtarget05--bankops-api-api.us-east.modal.run` (`infra/modal/tea_inventory_api.py`, alias backward-compat: `infra/modal/bankops_api.py`)
 - **Flutter Web**: build với API base Modal, deploy Cloudflare Pages `bankops-web` (production branch `main`)
 - **CI**: `deploy-pages.yml` / `deploy.yml` đã trỏ về URL Modal; bỏ bước deploy Worker
 
