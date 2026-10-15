@@ -308,158 +308,353 @@ class _RequestsScreenState extends State<RequestsScreen> {
     }
   }
 
-  Future<void> _openCreateStockDialog(_RequestsData data) async {
+  Future<void> _openCreateStockDialog(
+    _RequestsData data, {
+    RequestKind defaultKind = RequestKind.receipt,
+    bool isSpoilage = false,
+  }) async {
     if (data.locations.isEmpty || data.items.isEmpty) return;
     final repo = RepositoryScope.of(context);
-    RequestKind kind = RequestKind.receipt;
+    RequestKind kind = defaultKind;
     String locationId = data.locations.first.id;
     final nonSerialItems = data.items.where((i) => !i.trackedSerial).toList();
     String itemId =
         (nonSerialItems.isNotEmpty ? nonSerialItems.first : data.items.first)
             .id;
-    final qtyCtrl = TextEditingController(text: '25');
-    final reasonCtrl = TextEditingController(text: 'Bổ sung vật tư định kỳ');
+    final qtyCtrl = TextEditingController(text: isSpoilage ? '1' : '25');
+    final reasonCtrl = TextEditingController(
+      text: isSpoilage
+          ? '[Báo cáo hư hỏng] Nguyên liệu bị hư hỏng/đổ vỡ trong ca'
+          : (kind == RequestKind.receipt
+              ? 'Nhập hàng từ nhà cung cấp'
+              : 'Bổ sung vật tư định kỳ'),
+    );
+    final supplierCtrl = TextEditingController(
+        text: 'Công ty Cung ứng Nguyên liệu Trà Sữa Phúc Long');
+    final priceCtrl = TextEditingController(text: '65000');
+    final lotCtrl = TextEditingController(
+      text:
+          'LOT-${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}-01',
+    );
+    DateTime expiryDate = DateTime.now().add(const Duration(days: 60));
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Tạo Phiếu Kho Mới'),
-          content: SizedBox(
-            width: 440,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<RequestKind>(
-                    key: const Key('stock-kind-dropdown'),
-                    initialValue: kind,
-                    decoration: const InputDecoration(
-                      labelText: 'Loại phiếu',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: RequestKind.receipt,
-                        child: Text('Nhập kho (receipt)'),
-                      ),
-                      DropdownMenuItem(
-                        value: RequestKind.payment,
-                        child: Text('Xuất kho (issue)'),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => kind = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: const Key('stock-location-dropdown'),
-                    isExpanded: true,
-                    initialValue: locationId,
-                    decoration: const InputDecoration(
-                      labelText: 'Kho vật lý',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final loc in data.locations)
-                        DropdownMenuItem(
-                          value: loc.id,
-                          child: Text('${loc.code} — ${loc.name}'),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => locationId = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: const Key('stock-item-dropdown'),
-                    isExpanded: true,
-                    initialValue: itemId,
-                    decoration: const InputDecoration(
-                      labelText: 'Chủng loại nguyên liệu',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final item in data.items)
-                        DropdownMenuItem(
-                          value: item.id,
-                          child:
-                              Text('${item.sku} — ${item.name} (${item.unit})'),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => itemId = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('stock-qty-input'),
-                    controller: qtyCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Số lượng phôi',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  Autocomplete<String>(
-                    key: const Key('stock-reason-autocomplete'),
-                    optionsBuilder: (TextEditingValue text) {
-                      final query = text.text.trim();
-                      if (query.isEmpty) return _stockReasonSuggestions;
-                      return _stockReasonSuggestions.where(
-                          (s) => s.toLowerCase().contains(query.toLowerCase()));
-                    },
-                    onSelected: (value) => reasonCtrl.text = value,
-                    fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
-                      return TextField(
-                        key: const Key('stock-reason-input'),
-                        controller: ctrl,
-                        focusNode: focus,
+        builder: (ctx, setDialogState) {
+          final currentItem = data.items.cast<InventoryItem?>().firstWhere(
+                (it) => it?.id == itemId,
+                orElse: () => null,
+              );
+          final qtyVal = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
+          final priceVal = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+          final totalVal = qtyVal * priceVal;
+
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(
+                  isSpoilage
+                      ? Icons.report_problem_outlined
+                      : (kind == RequestKind.receipt
+                          ? Icons.add_business_outlined
+                          : Icons.outbox_outlined),
+                  color: isSpoilage
+                      ? const Color(0xFFD97706)
+                      : (kind == RequestKind.receipt
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFF059669)),
+                ),
+                const SizedBox(width: 8),
+                Text(isSpoilage
+                    ? 'Báo Cáo Hư Hỏng Nguyên Liệu'
+                    : (kind == RequestKind.receipt
+                        ? 'Tạo Phiếu Nhập Kho Nguyên Liệu'
+                        : 'Tạo Phiếu Xuất Kho')),
+              ],
+            ),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!isSpoilage) ...[
+                      DropdownButtonFormField<RequestKind>(
+                        key: const Key('stock-kind-dropdown'),
+                        initialValue: kind,
                         decoration: const InputDecoration(
-                          labelText: 'Diễn giải / Lý do lập phiếu',
-                          hintText: 'Gõ hoặc chọn gợi ý...',
+                          labelText: 'Loại phiếu',
                           border: OutlineInputBorder(),
                         ),
-                      );
-                    },
-                  ),
-                ],
+                        items: const [
+                          DropdownMenuItem(
+                            value: RequestKind.receipt,
+                            child: Text('Nhập kho (receipt) — Nhà cung cấp / Kho trung tâm'),
+                          ),
+                          DropdownMenuItem(
+                            value: RequestKind.payment,
+                            child: Text('Xuất kho (issue) — Sử dụng / Tiêu hao'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            setDialogState(() {
+                              kind = v;
+                              if (kind == RequestKind.receipt) {
+                                reasonCtrl.text = 'Nhập hàng từ nhà cung cấp';
+                              } else {
+                                reasonCtrl.text = 'Xuất nguyên liệu sử dụng tại quầy';
+                              }
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (kind == RequestKind.receipt) ...[
+                      TextField(
+                        key: const Key('stock-supplier-input'),
+                        controller: supplierCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nhà cung cấp / Nguồn giao hàng *',
+                          hintText: 'VD: NCC Trà Phúc Long, Sữa Barista Milk...',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.business_outlined, size: 20),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    DropdownButtonFormField<String>(
+                      key: const Key('stock-location-dropdown'),
+                      isExpanded: true,
+                      initialValue: locationId,
+                      decoration: InputDecoration(
+                        labelText: kind == RequestKind.receipt
+                            ? 'Kho nhập đến (Quầy / Kho trung tâm) *'
+                            : 'Kho xuất từ (Quầy / Kho trung tâm) *',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.warehouse_outlined, size: 20),
+                      ),
+                      items: [
+                        for (final loc in data.locations)
+                          DropdownMenuItem(
+                            value: loc.id,
+                            child: Text('${loc.code} — ${loc.name}'),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => locationId = v);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: const Key('stock-item-dropdown'),
+                      isExpanded: true,
+                      initialValue: itemId,
+                      decoration: const InputDecoration(
+                        labelText: 'Nguyên vật liệu *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.local_cafe_outlined, size: 20),
+                      ),
+                      items: [
+                        for (final item in data.items)
+                          DropdownMenuItem(
+                            value: item.id,
+                            child: Text(
+                                '${item.name} (${item.sku} · ${item.unit})'),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => itemId = v);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            key: const Key('stock-qty-input'),
+                            controller: qtyCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Số lượng (${currentItem?.unit ?? "đơn vị"}) *',
+                              border: const OutlineInputBorder(),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (_) => setDialogState(() {}),
+                          ),
+                        ),
+                        if (kind == RequestKind.receipt) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              key: const Key('stock-price-input'),
+                              controller: priceCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Đơn giá nhập (VND) *',
+                                border: OutlineInputBorder(),
+                                suffixText: 'đ',
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (kind == RequestKind.receipt) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: const Color(0xFF2563EB)
+                                  .withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Thành tiền tạm tính:',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                            Text(
+                              AppFormat.money(totalVal.toStringAsFixed(0),
+                                  currency: 'VND'),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: const Key('stock-lot-input'),
+                              controller: lotCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Số lô sản xuất (Lot No) *',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final now = DateTime.now();
+                                final picked = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: expiryDate.isBefore(now)
+                                      ? now.add(const Duration(days: 30))
+                                      : expiryDate,
+                                  firstDate: now,
+                                  lastDate: now.add(const Duration(days: 730)),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() => expiryDate = picked);
+                                }
+                              },
+                              child: InputDecorator(
+                                decoration: const InputDecoration(
+                                  labelText: 'Hạn sử dụng (Expiry) *',
+                                  border: OutlineInputBorder(),
+                                  suffixIcon: Icon(Icons.calendar_month, size: 18),
+                                ),
+                                child: Text(
+                                  '${expiryDate.day.toString().padLeft(2, '0')}/${expiryDate.month.toString().padLeft(2, '0')}/${expiryDate.year}',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Autocomplete<String>(
+                      key: const Key('stock-reason-autocomplete'),
+                      optionsBuilder: (TextEditingValue text) {
+                        final query = text.text.trim();
+                        if (query.isEmpty) return _stockReasonSuggestions;
+                        return _stockReasonSuggestions.where((s) =>
+                            s.toLowerCase().contains(query.toLowerCase()));
+                      },
+                      onSelected: (value) => reasonCtrl.text = value,
+                      fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
+                        return TextField(
+                          key: const Key('stock-reason-input'),
+                          controller: ctrl,
+                          focusNode: focus,
+                          decoration: const InputDecoration(
+                            labelText: 'Diễn giải / Lý do lập phiếu *',
+                            hintText: 'Gõ hoặc chọn gợi ý...',
+                            border: OutlineInputBorder(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Huỷ'),
-            ),
-            FilledButton(
-              key: const Key('stock-dialog-save-btn'),
-              style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB)),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Lưu phiếu nháp'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Huỷ'),
+              ),
+              FilledButton(
+                key: const Key('stock-dialog-save-btn'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: isSpoilage
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF2563EB),
+                ),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(isSpoilage ? 'Gửi báo cáo hư hỏng' : 'Lưu phiếu nháp'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
+      final qty = double.tryParse(qtyCtrl.text.trim()) ?? 1.0;
+      final price = double.tryParse(priceCtrl.text.trim());
+      final total = price != null ? (qty * price).toStringAsFixed(0) : null;
+      final expiryIso =
+          '${expiryDate.year}-${expiryDate.month.toString().padLeft(2, '0')}-${expiryDate.day.toString().padLeft(2, '0')}';
+
       final created = await repo.createStockRequest(
         kind: kind,
         sourceLocationId: kind == RequestKind.payment ? locationId : null,
         destLocationId: kind == RequestKind.receipt ? locationId : null,
+        supplier: kind == RequestKind.receipt ? supplierCtrl.text.trim() : null,
         lines: [
           StockRequestLine(
             itemId: itemId,
             quantity: qtyCtrl.text.trim().isEmpty ? '1' : qtyCtrl.text.trim(),
+            unitPrice: kind == RequestKind.receipt ? priceCtrl.text.trim() : null,
+            lineTotal: kind == RequestKind.receipt ? total : null,
+            lotNo: kind == RequestKind.receipt ? lotCtrl.text.trim() : null,
+            expiryDate: kind == RequestKind.receipt ? expiryIso : null,
           ),
         ],
         reason: reasonCtrl.text.trim(),
@@ -469,7 +664,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFF059669),
           behavior: SnackBarBehavior.floating,
-          content: Text('Đã tạo thành công phiếu kho ${created.id}'),
+          content: Text(isSpoilage
+              ? 'Đã ghi nhận báo cáo hư hỏng #${created.id} chờ quản lý xác nhận!'
+              : 'Đã tạo thành công phiếu kho ${created.id}'),
         ),
       );
       _reload();
@@ -749,9 +946,26 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         onPressed:
                             _busy ? null : () => _openCreateStockDialog(data),
                         icon: const Icon(Icons.add_box_outlined, size: 18),
-                        label: const Text('Tạo phiếu kho'),
+                        label: const Text('Nhập/Xuất kho'),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF2563EB),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      FilledButton.icon(
+                        key: const Key('btn-create-spoilage-request'),
+                        onPressed: _busy
+                            ? null
+                            : () => _openCreateStockDialog(
+                                  data,
+                                  defaultKind: RequestKind.payment,
+                                  isSpoilage: true,
+                                ),
+                        icon: const Icon(Icons.broken_image_outlined, size: 18),
+                        label: const Text('Báo cáo hư hỏng'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFD97706),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
