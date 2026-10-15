@@ -1,0 +1,6 @@
+name = "quan-ly-kho-tra-sua"
+compatibility_date = "2026-10-15"
+
+[assets]
+directory = "../../frontend/build/worker-assets"
+not_found_handling = "single-page-application"
