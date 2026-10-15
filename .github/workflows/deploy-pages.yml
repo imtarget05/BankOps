@@ -75,15 +75,27 @@ jobs:
             --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
             --dart-define=APP_ENV=production
 
+      - name: Diagnose deploy inputs (lengths only, never values)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "len(CLOUDFLARE_API_TOKEN)=${#CLOUDFLARE_API_TOKEN}"
+          echo "len(CLOUDFLARE_ACCOUNT_ID)=${#CLOUDFLARE_ACCOUNT_ID}"
+          if [ ${#CLOUDFLARE_ACCOUNT_ID} -ne 32 ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID must be 32 hex chars"
+            exit 1
+          fi
+
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # --branch=main: ép đây là deployment PRODUCTION. Thiếu cờ này wrangler
-          # lấy branch hiện tại của checkout và tạo bản preview (alias), khiến
-          # bankops-web.pages.dev vẫn phục vụ bản cũ.
-          command: pages deploy frontend/build/web --project-name=bankops-web --branch=main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # --branch=main: ép deployment PRODUCTION (thiếu cờ này wrangler tạo
+          # bản preview theo branch checkout, bankops-web.pages.dev vẫn bản cũ).
+          # Dùng wrangler@4 trực tiếp thay wrangler-action (action kẹt 3.90.0).
+          npx --yes wrangler@4 pages deploy frontend/build/web --project-name=bankops-web --branch=main --commit-dirty=true
 
       - name: Smoke test (API health from deployed bundle)
         run: |
