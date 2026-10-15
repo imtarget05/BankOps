@@ -1,8 +1,4 @@
-"""BankOps API Application.
-
-A modular FastAPI monolith for inventory management and cash simulation.
-All data is simulated - no real banking integration.
-"""
+"""Quản Lý Kho Trà Sữa API Application."""
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -35,6 +31,8 @@ from app.api.routes import (
 from app.config import settings
 from app.database import init_db
 
+PUBLIC_WEB_ORIGIN = "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -44,8 +42,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="BankOps API",
-    description="Inventory and Cash Simulation System (Demo)",
+    title="Quản Lý Kho Trà Sữa API",
+    description="API quản lý nhập, xuất và tồn nguyên vật liệu quán trà sữa.",
     version="0.1.0",
     openapi_url="/api/v1/openapi.json",
     docs_url="/docs",
@@ -64,10 +62,20 @@ async def redirect_openapi_json():
 app.openapi = lambda: custom_openapi(app)
 
 # Không echo wildcard origin kèm credentials (docs/08: CORS cụ thể).
-_allow_credentials = bool(settings.allowed_origins) and settings.allowed_origins != ["*"]
+_allowed_origins = list(
+    dict.fromkeys(
+        [
+            *settings.allowed_origins,
+            PUBLIC_WEB_ORIGIN,
+            "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev",
+        ]
+    )
+)
+_allow_credentials = bool(_allowed_origins) and _allowed_origins != ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"^https://.*\.tanmainguyenbinh\.workers\.dev$|^https://.*\.pages\.dev$",
     allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],

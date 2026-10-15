@@ -97,6 +97,7 @@ image = (
             "MODAL_LLM_URL": "https://imtarget05--bankops-llm-serve.us-east.modal.run/v1/chat/completions",
             "MODAL_LLM_MODEL": "Qwen2.5-1.5B-Instruct.Q4_K_M",
             "SERVER_RELOAD": "false",
+            "ALLOWED_ORIGINS": '["http://localhost:3000","http://localhost:8080","http://localhost:5000","https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"]',
         }
     )
 )
@@ -120,6 +121,28 @@ def migrate_database() -> None:
     secrets=[
         modal.Secret.from_name("bankops-api"),
         modal.Secret.from_dict({"AI_PROVIDER": "modal_llm"}),
+    ]
+)
+def debug_origins():
+    import os
+    import sys
+    sys.path.insert(0, "/root/bankops")
+    print("ENV ALLOWED_ORIGINS:", os.environ.get("ALLOWED_ORIGINS"))
+    from app.config import settings
+    print("settings.allowed_origins:", repr(settings.allowed_origins))
+    from app.main import _allowed_origins
+    print("main._allowed_origins:", repr(_allowed_origins))
+    return {
+        "env": os.environ.get("ALLOWED_ORIGINS"),
+        "settings": str(settings.allowed_origins),
+        "main": str(_allowed_origins),
+    }
+
+
+@app.function(
+    secrets=[
+        modal.Secret.from_name("bankops-api"),
+        modal.Secret.from_dict({"AI_PROVIDER": "modal_llm"}),
     ],
     # 5 phút không traffic -> container ngủ (tiết kiệm credit $30/tháng).
     scaledown_window=5 * 60,
@@ -136,6 +159,9 @@ def api():
 
     os.environ["AI_PROVIDER"] = "modal_llm"
     os.environ["DOCS_DIR"] = "/root/bankops/docs"
+    os.environ["ALLOWED_ORIGINS"] = (
+        '["http://localhost:3000","http://localhost:8080","http://localhost:5000","https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"]'
+    )
 
     from app.main import app as fastapi_app
 
