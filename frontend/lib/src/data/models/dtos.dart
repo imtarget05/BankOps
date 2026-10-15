@@ -190,6 +190,10 @@ class StocktakeLineItem {
     required this.bookQty,
     required this.countedQty,
     required this.variance,
+    this.openingQty = '0',
+    this.receivedQty = '0',
+    this.usedQty = '0',
+    this.theoreticalQty = '0',
     this.reason,
   });
 
@@ -198,6 +202,10 @@ class StocktakeLineItem {
   final String bookQty;
   final String countedQty;
   final String variance;
+  final String openingQty;
+  final String receivedQty;
+  final String usedQty;
+  final String theoreticalQty;
   final String? reason;
 }
 
@@ -214,6 +222,8 @@ class StocktakeItem {
     required this.createdAt,
     this.completedAt,
     this.lines = const [],
+    this.shiftCode,
+    this.businessDate,
   });
 
   final String id;
@@ -226,6 +236,8 @@ class StocktakeItem {
   final DateTime createdAt;
   final DateTime? completedAt;
   final List<StocktakeLineItem> lines;
+  final String? shiftCode;
+  final String? businessDate;
 }
 
 /// Tài sản theo serial.

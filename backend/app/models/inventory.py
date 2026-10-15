@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -194,6 +195,9 @@ class Stocktake(Base, TimestampMixin):
     maker_id: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=False)
     approver_id: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=True)
     note: str = Column(String(512), nullable=True)
+    business_date = Column(Date, nullable=True)
+    # morning 07:30–15:00, afternoon 15:00–23:00, split 07:30–18:00
+    shift_code: str | None = Column(String(16), nullable=True)
     adjustment_request_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_requests.id", ondelete="SET NULL"), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -211,6 +215,10 @@ class StocktakeLine(Base):
     stocktake_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_stocktakes.id", ondelete="CASCADE"), nullable=False)
     item_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_items.id"), nullable=False)
     book_qty = Column(Numeric(20, 3), nullable=False, default=0)
+    opening_qty = Column(Numeric(20, 3), nullable=False, default=0)
+    received_qty = Column(Numeric(20, 3), nullable=False, default=0)
+    used_qty = Column(Numeric(20, 3), nullable=False, default=0)
+    theoretical_qty = Column(Numeric(20, 3), nullable=False, default=0)
     counted_qty = Column(Numeric(20, 3), nullable=False, default=0)
     variance = Column(Numeric(20, 3), nullable=False, default=0)
     reason: str = Column(String(512), nullable=True)

@@ -685,6 +685,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
               bookQty: _str(l, 'book_qty', '0'),
               countedQty: _str(l, 'counted_qty', '0'),
               variance: _str(l, 'variance', '0'),
+              openingQty: _str(l, 'opening_qty', '0'),
+              receivedQty: _str(l, 'received_qty', '0'),
+              usedQty: _str(l, 'used_qty', '0'),
+              theoreticalQty: _str(l, 'theoretical_qty', '0'),
               reason: l['reason']?.toString(),
             ))
         .toList();
@@ -699,6 +703,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
       createdAt: _date(m, 'created_at'),
       completedAt: m['completed_at'] != null ? _date(m, 'completed_at') : null,
       lines: lines,
+      shiftCode: _nullableStr(m, 'shift_code'),
+      businessDate: _nullableStr(m, 'business_date'),
     );
   }
 
@@ -721,13 +727,19 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StocktakeItem> createStocktake(
-      {required String locationId, String? note}) async {
+  Future<StocktakeItem> createStocktake({
+    required String locationId,
+    String? note,
+    String? shiftCode,
+    String? businessDate,
+  }) async {
     final res = await _post(
       '/inventory/stocktakes',
       {
         'location_id': locationId,
         if (note != null && note.isNotEmpty) 'note': note,
+        if (shiftCode != null) 'shift_code': shiftCode,
+        if (businessDate != null) 'business_date': businessDate,
       },
       extraHeaders: {'Idempotency-Key': _idemKey()},
     );

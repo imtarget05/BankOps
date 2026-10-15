@@ -862,7 +862,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
       return;
     }
     String selectedLocId = locations.first.id;
-    final noteCtrl = TextEditingController(text: 'Kiểm kê định kỳ');
+    String selectedShift = 'morning';
+    final noteCtrl = TextEditingController(text: 'Chốt tồn theo ca');
 
     final ok = await showDialog<bool>(
       context: context,
@@ -899,11 +900,28 @@ class _InventoryScreenState extends State<InventoryScreen> {
               },
             ),
             const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: selectedShift,
+              decoration: const InputDecoration(
+                labelText: 'Ca làm việc',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                    value: 'morning', child: Text('Ca Sáng 07:30 – 15:00')),
+                DropdownMenuItem(
+                    value: 'afternoon', child: Text('Ca Chiều 15:00 – 23:00')),
+                DropdownMenuItem(
+                    value: 'split', child: Text('Ca Lỡ ngày 07:30 – 18:00')),
+              ],
+              onChanged: (value) => selectedShift = value ?? 'morning',
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: noteCtrl,
               decoration: const InputDecoration(
-                labelText: 'Ghi chú / Căn cứ kiểm kê',
-                hintText: 'VD: Quyết định kiểm kê số 89/QĐ-NH...',
+                labelText: 'Ghi chú chốt ca',
+                hintText: 'VD: Chốt tồn cuối Ca Sáng',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -929,11 +947,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
         await repo.createStocktake(
           locationId: selectedLocId,
           note: noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
+          shiftCode: selectedShift,
+          businessDate: DateTime.now().toIso8601String().substring(0, 10),
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Đã mở đợt kiểm kê mới thành công!'),
+                content: Text('Đã mở phiên chốt tồn theo ca!'),
                 behavior: SnackBarBehavior.floating),
           );
           _refresh();
@@ -998,7 +1018,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Kiểm Kê Kho: $locName',
+                        '${stocktake.shiftCode == 'morning' ? 'Ca Sáng 07:30 – 15:00' : stocktake.shiftCode == 'afternoon' ? 'Ca Chiều 15:00 – 23:00' : stocktake.shiftCode == 'split' ? 'Ca Lỡ ngày 07:30 – 18:00' : 'Kiểm kê kho'}: $locName',
                         style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
@@ -1032,6 +1052,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         child: Text('Ghi chú: ${stocktake.note}',
                             style:
                                 const TextStyle(fontStyle: FontStyle.italic)),
+                      ),
+                    if (stocktake.shiftCode != null)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'Còn lại cuối ca = (Tồn đầu ca + Nhập hàng) − Sử dụng. Độ lệch = Kiểm kê thực tế − Còn lại cuối ca.',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     if (stocktake.adjustmentRequestId != null)
                       Container(

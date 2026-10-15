@@ -8,7 +8,7 @@ Bất biến docs/00:
 5. mọi write đều audit + outbox trong cùng transaction.
 """
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Request
@@ -150,6 +150,21 @@ def _item_out(item: Item) -> dict:
         "packaging": item.packaging,
         "tracked_serial": item.tracked_serial,
         "active": item.active,
+    }
+
+
+def _stocktake_line_out(line: StocktakeLine) -> dict:
+    return {
+        "id": str(line.id),
+        "item_id": str(line.item_id),
+        "book_qty": _format_qty(line.book_qty),
+        "opening_qty": _format_qty(line.opening_qty),
+        "received_qty": _format_qty(line.received_qty),
+        "used_qty": _format_qty(line.used_qty),
+        "theoretical_qty": _format_qty(line.theoretical_qty),
+        "counted_qty": _format_qty(line.counted_qty),
+        "variance": _format_qty(line.variance),
+        "reason": line.reason,
     }
 
 
@@ -1755,13 +1770,24 @@ async def create_stocktake(
     if not loc:
         raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho kiểm kê")
 
-    note = str(payload.get("note") or payload.get("title") or "Kiểm kê định kỳ").strip()
+    note = str(payload.get("note") or payload.get("title") or "Kiểm kê theo ca").strip()
+    shift_code = str(payload.get("shift_code") or "").strip().lower() or None
+    if shift_code not in (None, "morning", "afternoon", "split"):
+        raise AppError(422, "INVALID_SHIFT", "shift_code phải là morning, afternoon hoặc split")
+    business_date = None
+    if payload.get("business_date"):
+        try:
+            business_date = date.fromisoformat(str(payload["business_date"]))
+        except ValueError:
+            raise AppError(422, "INVALID_DATE", "business_date phải theo định dạng YYYY-MM-DD") from None
     st = Stocktake(
         id=uuid.uuid4(),
         location_id=location_id,
         status="open",
         maker_id=user.id,
         note=note,
+        shift_code=shift_code,
+        business_date=business_date,
     )
     db.add(st)
     await db.commit()
@@ -1773,6 +1799,8 @@ async def create_stocktake(
         "status": st.status,
         "note": st.note,
         "maker_id": str(st.maker_id),
+        "shift_code": st.shift_code,
+        "business_date": st.business_date.isoformat() if st.business_date else None,
         "created_at": st.created_at.isoformat() if st.created_at else None,
     }
     if key:
@@ -1802,6 +1830,8 @@ async def list_stocktakes(
                 "status": r.status,
                 "note": r.note,
                 "maker_id": str(r.maker_id),
+                "shift_code": r.shift_code,
+                "business_date": r.business_date.isoformat() if r.business_date else None,
                 "approver_id": str(r.approver_id) if r.approver_id else None,
                 "adjustment_request_id": str(r.adjustment_request_id) if r.adjustment_request_id else None,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -1832,21 +1862,13 @@ async def get_stocktake(
         "status": st.status,
         "note": st.note,
         "maker_id": str(st.maker_id),
+        "shift_code": st.shift_code,
+        "business_date": st.business_date.isoformat() if st.business_date else None,
         "approver_id": str(st.approver_id) if st.approver_id else None,
         "adjustment_request_id": str(st.adjustment_request_id) if st.adjustment_request_id else None,
         "created_at": st.created_at.isoformat() if st.created_at else None,
         "completed_at": st.completed_at.isoformat() if st.completed_at else None,
-        "lines": [
-            {
-                "id": str(line.id),
-                "item_id": str(line.item_id),
-                "book_qty": _format_qty(line.book_qty),
-                "counted_qty": _format_qty(line.counted_qty),
-                "variance": _format_qty(line.variance),
-                "reason": line.reason,
-            }
-            for line in lines
-        ],
+        "lines": [_stocktake_line_out(line) for line in lines],
     }
 
 
@@ -1890,7 +1912,6 @@ async def update_stocktake_lines(
             )
         ).scalars().first()
         book_qty = Decimal(str(bal.quantity)) if bal else Decimal("0")
-        variance = counted_qty - book_qty
 
         existing_line = (
             await db.execute(
@@ -1902,20 +1923,37 @@ async def update_stocktake_lines(
         ).scalars().first()
 
         if existing_line:
-            existing_line.book_qty = book_qty
+            opening_qty = _qty(row.get("opening_qty", existing_line.opening_qty))
+            received_qty = _qty(row.get("received_qty", existing_line.received_qty))
+            used_qty = _qty(row.get("used_qty", existing_line.used_qty))
+            theoretical_qty = opening_qty + received_qty - used_qty
+            existing_line.book_qty = theoretical_qty if st.shift_code else book_qty
+            existing_line.opening_qty = opening_qty
+            existing_line.received_qty = received_qty
+            existing_line.used_qty = used_qty
+            existing_line.theoretical_qty = theoretical_qty
             existing_line.counted_qty = counted_qty
-            existing_line.variance = variance
+            existing_line.variance = counted_qty - existing_line.book_qty
             if "reason" in row:
                 existing_line.reason = str(row["reason"])
         else:
+            opening_qty = _qty(row.get("opening_qty", book_qty))
+            received_qty = _qty(row.get("received_qty", 0))
+            used_qty = _qty(row.get("used_qty", 0))
+            theoretical_qty = opening_qty + received_qty - used_qty
+            expected_qty = theoretical_qty if st.shift_code else book_qty
             db.add(
                 StocktakeLine(
                     id=uuid.uuid4(),
                     stocktake_id=sid,
                     item_id=item_id,
-                    book_qty=book_qty,
+                    book_qty=expected_qty,
+                    opening_qty=opening_qty,
+                    received_qty=received_qty,
+                    used_qty=used_qty,
+                    theoretical_qty=theoretical_qty,
                     counted_qty=counted_qty,
-                    variance=variance,
+                    variance=counted_qty - expected_qty,
                     reason=str(row.get("reason", "")),
                 )
             )
@@ -1929,17 +1967,7 @@ async def update_stocktake_lines(
         "location_id": str(st.location_id),
         "status": st.status,
         "note": st.note,
-        "lines": [
-            {
-                "id": str(line.id),
-                "item_id": str(line.item_id),
-                "book_qty": str(line.book_qty),
-                "counted_qty": str(line.counted_qty),
-                "variance": str(line.variance),
-                "reason": line.reason,
-            }
-            for line in lines
-        ],
+        "lines": [_stocktake_line_out(line) for line in lines],
     }
 
 

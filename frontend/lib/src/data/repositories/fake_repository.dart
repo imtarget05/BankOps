@@ -453,8 +453,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<StocktakeItem> createStocktake(
-      {required String locationId, String? note}) async {
+  Future<StocktakeItem> createStocktake({
+    required String locationId,
+    String? note,
+    String? shiftCode,
+    String? businessDate,
+  }) async {
     final st = StocktakeItem(
       id: 'st-${_stocktakes.length + 1}',
       locationId: locationId,
@@ -463,6 +467,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       makerId: 'u_maker',
       createdAt: DateTime.now().toUtc(),
       lines: const [],
+      shiftCode: shiftCode,
+      businessDate: businessDate,
     );
     _stocktakes.insert(0, st);
     return _delay(st);
@@ -484,15 +490,26 @@ class FakeBankOpsRepository implements BankOpsRepository {
           orElse: () => StockBalance(
               locationId: st.locationId, itemId: itemId, quantity: '0'));
       final book = double.tryParse(bal.quantity) ?? 0.0;
+      final opening =
+          double.tryParse(l['opening_qty']?.toString() ?? '$book') ?? book;
+      final received =
+          double.tryParse(l['received_qty']?.toString() ?? '0') ?? 0.0;
+      final used = double.tryParse(l['used_qty']?.toString() ?? '0') ?? 0.0;
+      final theoretical = opening + received - used;
       final counted =
           double.tryParse(l['counted_qty']?.toString() ?? '0') ?? 0.0;
-      final diff = counted - book;
+      final expected = st.shiftCode == null ? book : theoretical;
+      final diff = counted - expected;
       lineItems.add(StocktakeLineItem(
         id: 'stl-$i',
         itemId: itemId,
-        bookQty: book.toStringAsFixed(0),
+        bookQty: expected.toStringAsFixed(0),
         countedQty: counted.toStringAsFixed(0),
         variance: diff.toStringAsFixed(0),
+        openingQty: opening.toStringAsFixed(0),
+        receivedQty: received.toStringAsFixed(0),
+        usedQty: used.toStringAsFixed(0),
+        theoreticalQty: theoretical.toStringAsFixed(0),
         reason: l['reason']?.toString(),
       ));
     }
@@ -507,6 +524,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       createdAt: st.createdAt,
       completedAt: st.completedAt,
       lines: lineItems,
+      shiftCode: st.shiftCode,
+      businessDate: st.businessDate,
     );
     _stocktakes[idx] = updated;
     return _delay(updated);
@@ -528,6 +547,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       createdAt: st.createdAt,
       completedAt: st.completedAt,
       lines: st.lines,
+      shiftCode: st.shiftCode,
+      businessDate: st.businessDate,
     );
     _stocktakes[idx] = updated;
     return _delay(updated);

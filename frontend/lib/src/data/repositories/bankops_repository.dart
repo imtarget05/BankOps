@@ -132,8 +132,12 @@ abstract class BankOpsRepository {
   // Stocktakes (Kiểm kê định kỳ & đối soát)
   Future<List<StocktakeItem>> getStocktakes({String? locationId});
   Future<StocktakeItem> getStocktake(String id);
-  Future<StocktakeItem> createStocktake(
-      {required String locationId, String? note});
+  Future<StocktakeItem> createStocktake({
+    required String locationId,
+    String? note,
+    String? shiftCode,
+    String? businessDate,
+  });
   Future<StocktakeItem> updateStocktakeLines(
       String id, List<Map<String, dynamic>> lines);
   Future<StocktakeItem> submitStocktake(String id);
