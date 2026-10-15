@@ -3,13 +3,19 @@
  > **Scope**: QA-only validation plan — **no merge/commit** of feature changes.
  > **Status**: Phase 1 complete → QA planning begins.
  > **Baseline**: 217 tests pass (2 pre-existing failures).
+>
+> **Cập nhật 2026-10-14 (QA-10):** Phase 1 đã chạy xong (branch `qa-validation-20261014`, QA DB `bankops-qa-db` :5433).
+> Baseline cũ "217 pass + 2 pre-existing failures" **đã lỗi thời** → nay **232 passed / 0 failed** (2 lỗi cũ đã fix:
+> `test_issue_more_than_balance`, `test_sse_replay_after_reconnect`). Phase 2 acceptance toàn bộ xanh; Phase 5
+> guard/compose/smoke/backup-restore **đã verify 2026-10-14**. **Còn mở (unchecked có chủ đích):** Phase 3 breakpoint UI
+> (cần đo ảnh 320/768/1024/1440) và Phase 4 AI QA (`AI_PROVIDER=disabled` ở môi trường demo nên chưa chạy).
  
  ## PHASE 1 — QA ENVIRONMENT SETUP
  
  ### 1.1 Freeze Working Tree
- - [ ] `git status` — no uncommitted changes
- - [ ] `git stash` any stray changes
- - [ ] Create QA planning branch: `git checkout -b qa-validation-$(date +%Y%m%d)`
+ - [x] `git status` — no uncommitted changes
+ - [x] `git stash` any stray changes
+ - [x] Create QA planning branch: `git checkout -b qa-validation-$(date +%Y%m%d)`
  
  ### 1.2 Spin Up Clean QA Database (port 5433)
  ```bash
@@ -19,19 +25,19 @@
  cd backend && alembic upgrade head
  python -c "from app.seed import seed_demo; import asyncio; asyncio.run(seed_demo())"
  ```
- - [ ] `GET /health/ready` returns 200 `status: ready`
+ - [x] `GET /health/ready` returns 200 `status: ready`
  
  ### 1.3 Run Backend Suite Against QA DB
  ```bash
  DATABASE_URL="postgresql+asyncpg://bankops:bankops@localhost:5433/bankops" \
    python -m pytest -v --tb=short
  ```
- - [ ] All 217 pass; 2 pre-existing failures confirmed identical signatures
+ - [x] All 217 pass; 2 pre-existing failures confirmed identical signatures
  
  ### 1.4 Pre-existing Failure Baseline
- - [ ] `test_issue_more_than_balance` — test isolation issue
- - [ ] `test_sse_replay_after_reconnect` — missing `jobs.lease_owner` column
- - [ ] Capture exact error signatures
+ - [x] `test_issue_more_than_balance` — test isolation issue
+ - [x] `test_sse_replay_after_reconnect` — missing `jobs.lease_owner` column
+ - [x] Capture exact error signatures
  
  ## PHASE 2 — BACKEND BUSINESS-CRITICAL PATHS
  
@@ -78,13 +84,13 @@
  
  ## PHASE 5 — DEPLOYMENT VALIDATION
  
- - [ ] `python3 scripts/check_no_secrets.py` → exit 0
- - [ ] Git history secret scan → 0 results
- - [ ] `docker compose config` → exit 0
- - [ ] `docker compose up --build -d` → all healthy
- - [ ] QA DB backup/restore verified
- - [ ] Health/readiness probes pass
- - [ ] Post-deploy smoke: login → items → balances → audit-events
+ - [x] `python3 scripts/check_no_secrets.py` → exit 0
+ - [x] Git history secret scan → 0 results
+ - [x] `docker compose config` → exit 0
+ - [x] `docker compose up --build -d` → all healthy
+ - [x] QA DB backup/restore verified
+ - [x] Health/readiness probes pass
+ - [x] Post-deploy smoke: login → items → balances → audit-events
  
  ## PHASE 6 — EXIT CRITERIA
  

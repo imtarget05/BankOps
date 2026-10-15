@@ -3,6 +3,10 @@
  ## AI Provider
  - **Configuration**: Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct`)
  - **Fallback**: Hugging Face LLM via Modal
+>
+> **⚠️ CHƯA THỰC THI 2026-10-14.** Bản deploy demo đặt `AI_PROVIDER=disabled` (Modal secret `bankops-api`), nên **toàn bộ ô
+> AI QA dưới đây chưa chạy** — cố ý để trống. Endpoint `/api/v1/ai/chat` vẫn tồn tại và trả heuristic/abstain, nhưng chưa có
+> bằng chứng live. Khi bật provider (Cloudflare Workers AI hoặc Modal LLM), chạy lại theo "Test Commands" bên dưới.
  
  ## Test Cases
  

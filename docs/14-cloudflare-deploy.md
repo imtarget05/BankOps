@@ -28,10 +28,10 @@ Cloudflare Pages không làm Cloudflare Worker trở thành backend. Chỉ cấu
 
 ## Yêu cầu
 
-- [ ] Tài khoản [Cloudflare](https://dash.cloudflare.com) (free)
-- [ ] Tài khoản [Neon](https://console.neon.tech) (free)
-- [ ] Tài khoản [GitHub](https://github.com) (để CI/CD)
-- [ ] Node.js 20+, Flutter 3.24+, Python 3.11+, Poetry
+- [x] Tài khoản [Cloudflare](https://dash.cloudflare.com) (free)
+- [x] Tài khoản [Neon](https://console.neon.tech) (free)
+- [x] Tài khoản [GitHub](https://github.com) (để CI/CD)
+- [x] Node.js 20+, Flutter 3.24+, Python 3.11+, Poetry
 
 ---
 

@@ -81,7 +81,7 @@ Làm thêm ngoài plan: topbar responsive (ẩn refresh/theme/settings + tên/ro
 - Consumes: `RoleVisibility.visibleTabs/isAuditorOnly` (`core/util/role_visibility.dart`), `_pendingApprovalCount` (đã có trong AppShell)
 - Produces: bottom-bar chỉ hiện slot được phép + badge số chờ duyệt
 
-- [ ] **Step 1: Viết failing test (compact auditor)**
+- [x] **Step 1: Viết failing test (compact auditor)**
 ```dart
 testWidgets('Compact auditor bottom bar hides requests slot', (tester) async {
   tester.view.physicalSize = const Size(390, 844);
@@ -94,14 +94,14 @@ testWidgets('Compact auditor bottom bar hides requests slot', (tester) async {
   expect(find.byKey(const Key('nav-bottom-more')), findsOneWidget);
 });
 ```
-- [ ] **Step 2: Chạy, xác nhận FAIL**
+- [x] **Step 2: Chạy, xác nhận FAIL**
 Run: `flutter test test/dashboard_roles_test.dart`
 Expected: FAIL ở case mới (`nav-bottom-requests` vẫn thấy).
-- [ ] **Step 3: Implement tối thiểu** — trong `_bottomBar({session})`: dựng slot3 = Duyệt nếu `canApprove`, = Yêu cầu nếu `canCreate`, else = Hoạt động; gắn badge `_pendingApprovalCount` cho slot Duyệt. Giữ nguyên key các slot còn lại.
-- [ ] **Step 4: Verify**
+- [x] **Step 3: Implement tối thiểu** — trong `_bottomBar({session})`: dựng slot3 = Duyệt nếu `canApprove`, = Yêu cầu nếu `canCreate`, else = Hoạt động; gắn badge `_pendingApprovalCount` cho slot Duyệt. Giữ nguyên key các slot còn lại.
+- [x] **Step 4: Verify**
 Run: `flutter test test/dashboard_roles_test.dart && flutter analyze`
 Expected: PASS + 0 error.
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add BankOps/frontend/lib/src/app/app_shell.dart BankOps/frontend/test/dashboard_roles_test.dart
 git commit -m "feat: role-aware compact bottom bar with approval badge"
@@ -124,17 +124,17 @@ Lưu ý: font PDF built-in thiếu glyph TV → text PDF qua `VnAscii.strip` (kh
 - Consumes: `CsvExport.encode` (giữ làm fallback), DTOs `report_dtos.dart`
 - Produces: file `.xlsx` tải về (Web) / share (mobile) qua `file_saver`? KHÔNG thêm file_saver — dùng `printing` share có sẵn ở Task C2. Task này chỉ xong phần tạo bytes + test.
 
-- [ ] **Step 1: Viết failing test**
+- [x] **Step 1: Viết failing test**
 ```dart
 test('ReportExcel.encodeInventory produces non-empty xlsx bytes', () {
   final bytes = ReportExcel.encodeInventory([InventoryBucket(bucket: '2026-10-01', inboundQty: '10', outboundQty: '4', netQty: '6', receiptCount: 1, issueCount: 1)]);
   expect(bytes.isNotEmpty, true);
 });
 ```
-- [ ] **Step 2: Chạy, xác nhận FAIL** (`ReportExcel` chưa tồn tại)
-- [ ] **Step 3: Tạo `lib/src/core/util/report_excel.dart`** (pure-Dart, dùng package `excel`; headers khớp CSV hiện tại)
-- [ ] **Step 4: Verify** `flutter test test/report_export_test.dart`
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Chạy, xác nhận FAIL** (`ReportExcel` chưa tồn tại)
+- [x] **Step 3: Tạo `lib/src/core/util/report_excel.dart`** (pure-Dart, dùng package `excel`; headers khớp CSV hiện tại)
+- [x] **Step 4: Verify** `flutter test test/report_export_test.dart`
+- [x] **Step 5: Commit**
 
 ### Task C2: Share/print qua package printing + nút In phiếu
 
@@ -146,7 +146,7 @@ test('ReportExcel.encodeInventory produces non-empty xlsx bytes', () {
 - Consumes: `ReportExcel` (Task C1)
 - Produces: nút `export-*-xlsx-btn`, `print-approval-*-btn`
 
-- [ ] **Step 1–5:** TDD như Task C1 (test → fail → code → pass → commit). Verify: `flutter test test/report_export_test.dart && flutter analyze`.
+- [x] **Step 1–5:** TDD như Task C1 (test → fail → code → pass → commit). Verify: `flutter test test/report_export_test.dart && flutter analyze`.
 
 ---
 
@@ -165,12 +165,12 @@ Khác plan: không có detail sheet sẵn → gắn nút lịch sử trên mỗi
 - Consumes: `BankOpsRepository.getActivity()` (lọc client-side theo `subjectId == requestId`), `ActivityEvent` DTO
 - Produces: widget `RequestTimeline(requestId)` hiển thị created → submitted → approved/rejected theo thời gian
 
-- [ ] **Step 1: Viết failing test** — pump `RequestTimeline(requestId: 'sr-0002')` với Fake repo, expect thấy 2+ mốc (created/submitted).
-- [ ] **Step 2: Chạy, xác nhận FAIL**
-- [ ] **Step 3: Tạo `request_timeline.dart`** — FutureBuilder `getActivity()`, lọc `subjectId`, sort `occurredAt`, render TimelineTile tự vẽ (không thêm dep): dot + line + label + relative time.
-- [ ] **Step 4: Gắn vào detail sheet màn Requests** (nút/section "Lịch sử", key `request-timeline-sr-0002`).
-- [ ] **Step 5: Verify** `flutter test test/request_timeline_test.dart && flutter analyze`
-- [ ] **Step 6: Commit**
+- [x] **Step 1: Viết failing test** — pump `RequestTimeline(requestId: 'sr-0002')` với Fake repo, expect thấy 2+ mốc (created/submitted).
+- [x] **Step 2: Chạy, xác nhận FAIL**
+- [x] **Step 3: Tạo `request_timeline.dart`** — FutureBuilder `getActivity()`, lọc `subjectId`, sort `occurredAt`, render TimelineTile tự vẽ (không thêm dep): dot + line + label + relative time.
+- [x] **Step 4: Gắn vào detail sheet màn Requests** (nút/section "Lịch sử", key `request-timeline-sr-0002`).
+- [x] **Step 5: Verify** `flutter test test/request_timeline_test.dart && flutter analyze`
+- [x] **Step 6: Commit**
 
 ---
 

@@ -3,6 +3,11 @@
 > **Purpose**: Step-by-step guide to migrate from `.env` files to Cloudflare Wrangler secrets, handle transitions, rotate secrets, and respond to leaks.
 >
 > **Last reviewed**: 2026-10-13
+>
+> **⚠️ SUPERSEDED 2026-10-14.** Hướng dẫn này migrate secrets sang **Cloudflare Wrangler** — không còn là đích deploy
+> (ADR-0001: API chạy trên Modal). Secrets production hiện nằm trong **Modal secret `bankops-api`**
+> (`DATABASE_URL`, `BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `ALLOWED_ORIGINS`, `SUPERVISOR_PIN`, `APP_ENV`, `AI_PROVIDER`).
+> Các checkbox pre-migration dưới đây chỉ còn giá trị tham khảo — cố ý để trống vì luồng wrangler-secrets không được thực thi.
 
 ---
 

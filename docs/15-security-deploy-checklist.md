@@ -3,6 +3,18 @@
 > **Purpose**: Block public deploy until every item is checked. Do NOT deploy to production until all phases are complete.
 >
 > **Last reviewed**: 2026-10-13
+>
+> **⚠️ CẬP NHẬT 2026-10-14 — phần lớn checklist ĐÃ BỊ SUPERSEDED.** Kiến trúc đích đã đổi (ADR-0001): API nghiệp vụ chạy
+> trên **Modal FastAPI + Neon**, Worker đã **archive (không deploy)**. Do đó **Phases 2–6** (wrangler secrets, DNS→worker,
+> staging deploy bằng `wrangler deploy`) **không còn áp dụng** — xem `docs/qa/06-deployment-validation.md` §"Cloud Deployment".
+> Các ô đó cố ý để trống.
+>
+> **Phase 1 (token rotation)** — trạng thái đã kiểm chứng 2026-10-14:
+> - ✅ Guard tracked-file: PASS (`scripts/check_no_secrets.py`).
+> - ✅ Git history: **không còn token dùng được** — chỉ có prefix bị cắt `cfut_WtI4hAp3…` (ví dụ trong docs) và một
+>   placeholder dạng `cfut_YOUR_...` (chuỗi giả, không phải credential).
+> - ⚠️ **USER ACTION (không verify được từ repo):** xác nhận token `cfut_WtI4hAp3…` đã bị **revoke/rotate** trên dashboard
+>   Cloudflare, tạo token mới least-privilege và lưu vào password manager. Các ô này để trống có chủ đích.
 
 ---
 
@@ -34,19 +46,19 @@ the replacement only in the deployment secret manager or an ignored local env fi
   - Never store in `.env` files that could be committed
   - Never share in chat/Slack/email
 
-- [ ] **Verify git history has been scrubbed**:
+- [x] **Verify git history has been scrubbed**:
   ```bash
   git log --all -p | grep cfut_
   ```
   Expected: **0 results**. If results appear, the token is still in history — use `git filter-repo` or BFG Repo-Cleaner to purge it, then force-push and have all collaborators re-clone.
 
-- [ ] **Verify no other secrets in git history**:
+- [x] **Verify no other secrets in git history**:
   ```bash
   git log --all -p | grep -iE '(api[_-]?key|secret|password|token|BEGIN.*PRIVATE)'
   ```
   Expected: **0 results** (excluding false positives from dependency files)
 
-- [ ] **Run the tracked-file guard before every push**:
+- [x] **Run the tracked-file guard before every push**:
   ```bash
   python3 scripts/check_no_secrets.py
   ```

@@ -10,6 +10,10 @@
 > **Modal** (miễn phí $30 credit/tháng, scale-to-zero) — xem `infra/modal/README.md`
 > và `infra/scripts/upload-model-to-modal.sh`. Các mục dưới đây vẫn đúng khi bạn
 > có HF PRO; Worker chỉ khác giá trị `HF_LLM_BASE_URL`.
+>
+> **⚠️ SUPERSEDED 2026-10-14.** Phương án HF Space **không được dùng** (HF yêu cầu PRO cho Space Docker/Gradio; đã chọn
+> **Modal** — `infra/modal/`). 6 ô checklist cuối (build Space, `/v1/chat/completions`, upload GGUF, Worker deploy,
+> fallback, token) **cố ý để trống** — không thực thi theo hướng này. Giữ tài liệu làm tham chiếu nếu sau này có HF PRO.
 
 ## 0. Vì sao phương án này
 

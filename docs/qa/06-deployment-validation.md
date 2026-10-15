@@ -54,9 +54,9 @@
  **Result**: ✅ PASS — Backup completed successfully
  
  ### Restore Verification
- - [ ] Restore to fresh container
- - [ ] Re-run acceptance tests
- - [ ] Verify data integrity
+- [x] Restore to fresh container — container tạm `bankops-restore-verify` (`postgres:16-alpine`, :5434), nạp từ `pg_dump` 731 KB
+- [x] Re-run acceptance tests — **19 passed** trên DB vừa restore (`tests/test_acceptance_qa.py`, :5434)
+- [x] Verify data integrity — **0 mismatch** trên 11 bảng chính (iam_users 22, inv_items 9, inv_requests 202, audit_events 500, cash_journals 60…); 39/39 bảng; alembic rev `014_etl_pipeline_models` khớp
  
  ## Health & Readiness Probes
  
@@ -76,9 +76,9 @@
  
  ## CI/CD
  
- - [ ] GitHub Actions workflow verified (CI runs)
- - [ ] Lint check: `ruff check backend/` = All checks passed
- - [ ] Type check: `mypy backend/` = No errors
+ - [x] GitHub Actions workflow verified (CI runs)
+ - [x] Lint check: `ruff check backend/` = All checks passed
+ - [ ] Type check: `mypy backend/` = No errors — ⚠️ **CHƯA CHẠY 2026-10-14**: `mypy` không có trong môi trường verify; theo dõi qua xfail `test_mypy_strict_passes` (~481 lỗi annotate, 27 file). Cố ý để trống.
  
  ## Summary
  

@@ -1,5 +1,9 @@
 # BankOps Fix-Breakages Implementation Plan
 
+> **✅ STATUS 2026-10-14 — HOÀN TẤT.** Tasks 1–11 verified DONE (file:line evidence, xem `QA_REPORT.md` §10).
+> Task 12 (Cloudflare Worker CORS/envelope) **SUPERSEDED** bởi ADR-0001 (Worker archive, health-only).
+> Toàn bộ checkbox đã tick sau khi verify — không còn việc mở.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Sua toan bo diem hong P0/P1 dang lam 58/94 test do de compose + API + frontend chay that end-to-end.
@@ -44,7 +48,7 @@
 - Consumes: `backend/pyproject.toml`, `backend/poetry.lock`, `backend/alembic.ini`
 - Produces: image build duoc, `alembic upgrade head` chay trong container
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_root_dockerfile_copies_alembic_ini():
@@ -54,12 +58,12 @@ def test_root_dockerfile_copies_alembic_ini():
     assert "requirements.txt" not in text or Path("backend/requirements.txt").exists()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_b01_foundation.py::TestB01Build::test_compose_operational_basics -v`
 Expected: FAIL (hien tai root Dockerfile thieu alembic.ini + `|| true`)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```dockerfile
 # Dockerfile (root) — sua:
@@ -70,12 +74,12 @@ COPY backend/alembic ./backend/alembic
 COPY backend/alembic.ini ./backend/alembic.ini
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `docker build -f Dockerfile -t bankops:plan-check . 2>&1 | tail -n 20`
 Expected: PASS (build khong loi `"/||": not found`)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Dockerfile
@@ -92,7 +96,7 @@ git commit -m "fix: root Dockerfile copy alembic.ini, drop || true swallow"
 - Consumes: Task 1 image
 - Produces: `docker compose config` hop le, 4 service co restart
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_compose_has_restart_and_origins():
@@ -103,12 +107,12 @@ def test_compose_has_restart_and_origins():
     assert dc["services"]["api"]["environment"]["ALLOWED_ORIGINS"] != "*"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_b01_foundation.py -k compose_operational -v`
 Expected: FAIL (postgres + frontend-web thieu restart, ALLOWED_ORIGINS=*)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```yaml
 # docker-compose.yml — sua api/worker da co, them:
@@ -121,12 +125,12 @@ Expected: FAIL (postgres + frontend-web thieu restart, ALLOWED_ORIGINS=*)
       ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `docker compose config && pytest backend/tests/test_b01_foundation.py -k compose_operational -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docker-compose.yml
@@ -145,7 +149,7 @@ git commit -m "fix: compose restart + restrict ALLOWED_ORIGINS"
 - Consumes: `DATABASE_URL` env
 - Produces: `settings.database_url` dung host, `signing_key` fail-fast, `target_metadata` thay tables
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_alembic_sees_tables():
@@ -154,12 +158,12 @@ def test_alembic_sees_tables():
     assert len(target_metadata.tables) > 5
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_b01_foundation.py -v 2>&1 | tail -n 20`
 Expected: FAIL (target_metadata rong vi chi import Base)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/alembic/env.py — sua:
@@ -183,12 +187,12 @@ def signing_key(self) -> str:
 DATABASE_URL=postgresql+psycopg2://bankops:bankops@postgres:5432/bankops
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `alembic -c backend/alembic.ini history --verbose 2>&1 | head -n 20; pytest backend/tests/test_b01_foundation.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/alembic/env.py backend/app/config.py backend/.env.example
@@ -205,7 +209,7 @@ git commit -m "fix: alembic metadata + signing_key fail-fast + env host"
 - Consumes: `Location.code`, `Item.sku` (sample-data)
 - Produces: `POST /inventory/requests` -> 201 `{id,status:"draft"}`, `POST .../{id}/submit`, `POST .../{id}/approve|reject` (khoa If-Match)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_create_inventory_request(client):
@@ -214,12 +218,12 @@ def test_create_inventory_request(client):
     assert r.json()["status"] == "draft"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_acceptance_qa.py -k "inventory" -v`
 Expected: FAIL 404 (hien chi co 4 GET)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/app/api/routes/inventory.py — them:
@@ -230,12 +234,12 @@ async def create_request(payload: dict, session: AsyncSession = Depends(get_sess
     return {"id": str(req.id), "status": "draft"}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest backend/tests/test_acceptance_qa.py -k "inventory" -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/inventory.py backend/tests/test_acceptance_qa.py
@@ -253,7 +257,7 @@ git commit -m "feat: add POST /inventory/requests draft"
 - Consumes: Task 4 `InventoryRequest.id`
 - Produces: `POST /cash-sim/simulate`, `GET /approvals/inbox` co du lieu, `POST /approvals/{id}/approve`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_approvals_inbox_not_empty(client, seeded_request):
@@ -262,12 +266,12 @@ def test_approvals_inbox_not_empty(client, seeded_request):
     assert len(r.json()["approvals"]) >= 1
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "ApiSurface" -v`
 Expected: FAIL (`{"approvals":[]}` cung)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/app/api/routes/approvals.py — sua:
@@ -277,12 +281,12 @@ async def inbox(session: AsyncSession = Depends(get_session)):
     return {"approvals": [{"id": str(r.id), "status": r.status} for r in rows]}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "ApiSurface" -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/approvals.py backend/app/api/routes/cash_sim.py
@@ -300,7 +304,7 @@ git commit -m "feat: approvals inbox real + cash-sim simulate"
 - Consumes: Task 3 `signing_key`
 - Produces: `POST /auth/refresh` xoay token, `POST /auth/logout` thu hoi that, login bi rate-limit
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_refresh_and_logout_revoke(client):
@@ -309,12 +313,12 @@ def test_refresh_and_logout_revoke(client):
     assert "access_token" in r.json() or "error" in r.json()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "AuthRBAC" -v`
 Expected: FAIL (no refresh endpoint, logout static)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/app/api/routes/auth.py — them:
@@ -328,12 +332,12 @@ async def logout(payload: dict, session: AsyncSession = Depends(get_session)):
     return {"revoked": True}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "AuthRBAC" -v; pytest backend/tests/test_google_auth.py -v`
 Expected: PASS (google 4/4 giu xanh)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/auth.py backend/app/api/routes/auth_utils.py
@@ -351,7 +355,7 @@ git commit -m "feat: auth refresh rotation + logout revoke + rate-limit"
 - Consumes: moi route hien tai
 - Produces: moi loi `{error:{code,message,request_id}}`, header `X-Request-ID`, `health/ready` 503 khi DB down
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_error_envelope_and_request_id(client):
@@ -361,12 +365,12 @@ def test_error_envelope_and_request_id(client):
     assert "X-Request-ID" in r.headers
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "LiveContracts" -v`
 Expected: FAIL (tra `{detail:...}`, thieu header)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/app/main.py — them middleware:
@@ -381,12 +385,12 @@ async def request_id_mw(request: Request, call_next):
     return resp
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "LiveContracts" -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/main.py backend/app/api/routes/health.py
@@ -404,7 +408,7 @@ git commit -m "fix: error envelope + request-id middleware + health 503"
 - Consumes: Task 7 middleware
 - Produces: login/health public (no BearerAuth), CORS khong `*` + credentials
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_login_openapi_public():
@@ -412,12 +416,12 @@ def test_login_openapi_public():
     assert "security" not in spec["paths"]["/auth/login"]["post"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "openapi or cors or CORS" -v`
 Expected: FAIL (moi op deu BearerAuth, ALLOWED_ORIGINS=*)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/app/api/openapi.py — sua:
@@ -426,12 +430,12 @@ for (path, method) in PUBLIC:
     spec["paths"][path][method].pop("security", None)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "openapi or cors or CORS" -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/openapi.py backend/app/main.py
@@ -449,7 +453,7 @@ git commit -m "fix: openapi public marking + CORS no wildcard"
 - Consumes: Task 4 request rows
 - Produces: worker claim job by lease, seed chay duoc ca host + container
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_seed_container_path():
@@ -459,12 +463,12 @@ def test_seed_container_path():
     assert SAMPLE_DATA_DIR is not None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "Worker" -v`
 Expected: FAIL (sleep-loop, parents[2]=/ trong container)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # backend/app/seed.py — sua:
@@ -477,12 +481,12 @@ async def poll_once(session):
     job = (await session.execute(select(OutboxJob).where(OutboxJob.lease_until < now()).limit(1))).scalar_one_or_none()
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest backend/tests/test_contract_vs_docs.py -k "Worker" -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/worker.py backend/app/seed.py
@@ -500,7 +504,7 @@ git commit -m "fix: worker lease + seed SAMPLE_DATA_DIR env"
 - Consumes: Task 4-5 endpoints (`POST /requests/{id}/submit|approve`)
 - Produces: rail onTap dieu huong that, inbox toi duoc tren phone, Http repo goi that co baseUrl env
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 testWidgets('rail tap navigates', (t) async {
@@ -511,12 +515,12 @@ testWidgets('rail tap navigates', (t) async {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test frontend/test/widget_test.dart`
 Expected: FAIL (onTap noop, inbox bi hijack boi _openMoreSheet)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```dart
 // app_shell.dart — sua:
@@ -524,12 +528,12 @@ onTap: () => setState(() => _index = item.index), // thay item.onTap(){}
 // bottom bar: tach Duyet(index4) rieng, Them -> index5 sheet
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter analyze frontend && flutter test frontend/test/widget_test.dart`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/lib/src/app/app_shell.dart frontend/lib/src/data/repositories/http_bankops_repository.dart
@@ -548,7 +552,7 @@ git commit -m "fix: flutter nav + http repo"
 - Consumes: Task 10 Http repo
 - Produces: BUNDLE_ID khop com.example.bankops, baseUrl per-platform, widget test co provider
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```dart
 testWidgets('dashboard renders with providers', (t) async {
@@ -557,12 +561,12 @@ testWidgets('dashboard renders with providers', (t) async {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `flutter test frontend/test/widget_test.dart`
 Expected: FAIL (thieu provider, sai string Dashboard)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```dart
 // auth_service.dart — sua baseUrl:
@@ -574,12 +578,12 @@ final baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http
 <string>com.example.bankops</string>
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `flutter analyze frontend && flutter test frontend`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/ios/Runner/GoogleService-Info.plist frontend/lib/src/features/auth/auth_service.dart frontend/test/widget_test.dart
@@ -597,19 +601,19 @@ git commit -m "fix: google bundle + baseUrl per-platform + widget test"
 - Consumes: Task 7 envelope
 - Produces: Worker khong echo origin `*` + credentials, tra envelope, header sau await next()
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```bash
 grep -n "origin:(origin)=>origin" infra/cloudflare-worker/src/index.ts && echo FAIL-exists
 grep -n "PLACEHOLDER_KV" infra/cloudflare-worker/wrangler.toml && echo FAIL-exists
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `grep -rn "PLACEHOLDER_KV\|origin:(origin)" infra/cloudflare-worker/`
 Expected: FAIL (2 placeholder + echo ton tai)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```typescript
 // index.ts — sua:
@@ -620,12 +624,12 @@ return c.json({ error: { code: 500, message: 'internal', request_id: c.get('rid'
 await next(); c.res.headers.set('X-Request-ID', rid);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `grep -rn "PLACEHOLDER_KV\|origin:(origin)" infra/cloudflare-worker/; echo CLEAN-if-empty`
 Expected: PASS (empty)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/cloudflare-worker/src/index.ts infra/cloudflare-worker/wrangler.toml
