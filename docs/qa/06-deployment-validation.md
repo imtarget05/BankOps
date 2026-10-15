@@ -293,3 +293,17 @@ deployed 14/10), secret `bankops-api` last-used 15/10, bundle `main.dart.js` pro
 | `flutter analyze` | ✅ No issues found |
 | `flutter test --no-pub` | ✅ **80/80 passed** |
 | `scripts/check_no_secrets.py` | ✅ Secret guard passed |
+
+### Bổ sung 2026-10-15 ~01:19Z — CI xanh sau gọn workflow + fix leak lỗi UI
+
+- Commit `d937e92`: 48 điểm `': $e'`/`': $error'` trong toast/SnackBar/`_lastError`
+  (15 file: cash, inventory, requests, approvals, integrations×2, etl×3, admin,
+  auth×2, reports, csv_export, report_share) → `${friendlyError(...)}`; thêm test
+  `frontend/test/error_text_test.dart` (3 ca: giữ message server, che URI/modal.run,
+  che null/lạ).
+- Xóa step `Diagnose deploy inputs` (sha256/len vào log) khỏi `deploy-pages.yml`;
+  giữ step `Verify required secrets` (fail rõ tên secret thiếu).
+- Verify local: `flutter analyze` No issues · `flutter test` **91/91** · secret guard pass.
+- CI run `38664748367` (workflow_dispatch, ref `qa-validation-20261014`): ✅ success —
+  analyze/test/build/deploy/smoke xanh, deployment `85015b13`,
+  production `GET /` 200, bundle `main.dart.js` (~4.9 MB) 1 ref Modal + 0 legacy.
