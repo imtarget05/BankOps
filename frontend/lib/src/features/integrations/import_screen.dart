@@ -170,7 +170,7 @@ class _ImportScreenState extends State<ImportScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Không tải được file mẫu: $e');
+      AppToast.error(context, 'Không tải được file mẫu: ${friendlyError(e)}');
     }
   }
 
@@ -205,7 +205,7 @@ class _ImportScreenState extends State<ImportScreen> {
       setState(() {
         _error = friendlyError(e);
       });
-      AppToast.error(context, 'Xác nhận thất bại: $e');
+      AppToast.error(context, 'Xác nhận thất bại: ${friendlyError(e)}');
     } finally {
       if (mounted) {
         setState(() {

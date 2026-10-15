@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
@@ -97,7 +98,7 @@ class _EtlReviewScreenState extends State<EtlReviewScreen> {
       AppToast.success(context, 'Đã sao chép nội dung báo cáo lỗi CSV vào bộ nhớ tạm');
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Lỗi tải báo cáo lỗi: $e');
+        AppToast.error(context, 'Lỗi tải báo cáo lỗi: ${friendlyError(e)}');
       }
     }
   }
@@ -171,7 +172,7 @@ class _EtlReviewScreenState extends State<EtlReviewScreen> {
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi thẩm tra: $e');
+          AppToast.error(context, 'Lỗi thẩm tra: ${friendlyError(e)}');
         }
       }
     }
@@ -261,7 +262,7 @@ class _EtlReviewScreenState extends State<EtlReviewScreen> {
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi post sổ cái: $e');
+          AppToast.error(context, 'Lỗi post sổ cái: ${friendlyError(e)}');
         }
       }
     }

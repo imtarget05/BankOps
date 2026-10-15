@@ -5,6 +5,7 @@ import '../../core/util/approval_pdf.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/report_share.dart';
 import '../../core/widgets/app_toast.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
@@ -189,7 +190,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFFB42318),
           behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi gửi duyệt: $e'),
+          content: Text('Lỗi gửi duyệt: ${friendlyError(e)}'),
         ),
       );
     } finally {
@@ -217,7 +218,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFFB42318),
           behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi gửi duyệt: $e'),
+          content: Text('Lỗi gửi duyệt: ${friendlyError(e)}'),
         ),
       );
     } finally {
@@ -245,7 +246,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFFB42318),
           behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi xoá phiếu: $e'),
+          content: Text('Lỗi xoá phiếu: ${friendlyError(e)}'),
         ),
       );
     } finally {
@@ -295,7 +296,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFFB42318),
           behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi xoá phiếu: $e'),
+          content: Text('Lỗi xoá phiếu: ${friendlyError(e)}'),
         ),
       );
     } finally {
@@ -474,7 +475,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFFB42318),
           behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi tạo phiếu kho: $e'),
+          content: Text('Lỗi tạo phiếu kho: ${friendlyError(e)}'),
         ),
       );
     } finally {
@@ -675,7 +676,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
         SnackBar(
           backgroundColor: const Color(0xFFB42318),
           behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi tạo phiếu quỹ: $e'),
+          content: Text('Lỗi tạo phiếu quỹ: ${friendlyError(e)}'),
         ),
       );
     } finally {

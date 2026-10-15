@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../data/models/dtos.dart';
+import '../../core/util/error_text.dart';
 
 /// Trạng thái đăng nhập dùng chung cho app.
 ///
@@ -325,7 +326,7 @@ class AuthService extends ChangeNotifier {
           }
         }
       } catch (e) {
-        _lastError = 'Google Sign-In lỗi: $e';
+        _lastError = 'Google Sign-In lỗi: ${friendlyError(e)}';
         notifyListeners();
         return false;
       }
@@ -374,7 +375,7 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _lastError = 'Đăng nhập thất bại: $e';
+      _lastError = 'Đăng nhập thất bại: ${friendlyError(e)}';
       notifyListeners();
       return false;
     }

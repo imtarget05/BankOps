@@ -6,6 +6,7 @@ import '../../app/app_shell.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/state_views.dart';
@@ -141,7 +142,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       _reload();
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Không thể duyệt: $e');
+      AppToast.error(context, 'Không thể duyệt: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -205,7 +206,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       _reload();
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Không thể từ chối: $e');
+      AppToast.error(context, 'Không thể từ chối: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -277,7 +278,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       _reload();
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Không thể trả về phiếu: $e');
+      AppToast.error(context, 'Không thể trả về phiếu: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

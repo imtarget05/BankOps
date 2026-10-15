@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
@@ -158,7 +159,7 @@ class _EtlRunScreenState extends State<EtlRunScreen> {
         return;
       }
     } catch (e) {
-      AppToast.error(context, 'Cú pháp JSON không hợp lệ: $e');
+      AppToast.error(context, 'Cú pháp JSON không hợp lệ: ${friendlyError(e)}');
       return;
     }
 
@@ -189,7 +190,7 @@ class _EtlRunScreenState extends State<EtlRunScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
-        AppToast.error(context, 'Lỗi kích hoạt ETL: $e');
+        AppToast.error(context, 'Lỗi kích hoạt ETL: ${friendlyError(e)}');
       }
     }
   }

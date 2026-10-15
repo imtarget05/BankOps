@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/google_logo.dart';
 import '../../data/repositories/bankops_repository.dart';
 import 'auth_service.dart';
@@ -127,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Lỗi xác thực Google: $e',
+                  'Lỗi xác thực Google: ${friendlyError(e)}',
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),

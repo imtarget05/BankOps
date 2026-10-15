@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
@@ -69,7 +70,7 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: const Color(0xFFB42318),
-          content: Text('Lỗi kiểm tra kết nối: $e'),
+          content: Text('Lỗi kiểm tra kết nối: ${friendlyError(e)}'),
         ),
       );
     }
@@ -175,7 +176,7 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
           SnackBar(
             behavior: SnackBarBehavior.floating,
             backgroundColor: const Color(0xFFB42318),
-            content: Text('Lỗi tạo kết nối: $e'),
+            content: Text('Lỗi tạo kết nối: ${friendlyError(e)}'),
           ),
         );
       }
@@ -267,7 +268,7 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
           SnackBar(
             behavior: SnackBarBehavior.floating,
             backgroundColor: const Color(0xFFB42318),
-            content: Text('Lỗi cập nhật: $e'),
+            content: Text('Lỗi cập nhật: ${friendlyError(e)}'),
           ),
         );
       }
@@ -310,7 +311,7 @@ class _IntegrationsScreenState extends State<IntegrationsScreen> {
           SnackBar(
             behavior: SnackBarBehavior.floating,
             backgroundColor: const Color(0xFFB42318),
-            content: Text('Lỗi xóa kết nối: $e'),
+            content: Text('Lỗi xóa kết nối: ${friendlyError(e)}'),
           ),
         );
       }

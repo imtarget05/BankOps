@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/app_toast.dart';
+import 'error_text.dart';
 
 /// Xuất CSV không cần thêm package: dựng chuỗi CSV chuẩn (quote + escape)
 /// rồi sao chép vào clipboard để dán sang Sheets/Excel.
@@ -58,7 +59,7 @@ class CsvExport {
       );
     } catch (e) {
       if (!context.mounted) return;
-      AppToast.error(context, 'Không xuất được CSV: $e');
+      AppToast.error(context, 'Không xuất được CSV: ${friendlyError(e)}');
     }
   }
 }

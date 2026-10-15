@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/util/error_text.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
@@ -355,7 +356,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         _loadData();
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi tạo nhân viên: $e');
+          AppToast.error(context, 'Lỗi tạo nhân viên: ${friendlyError(e)}');
         }
       }
     }
@@ -444,7 +445,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi cập nhật trạng thái: $e');
+          AppToast.error(context, 'Lỗi cập nhật trạng thái: ${friendlyError(e)}');
         }
       }
     }
@@ -553,7 +554,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi cập nhật: $e');
+          AppToast.error(context, 'Lỗi cập nhật: ${friendlyError(e)}');
         }
       }
     }
@@ -598,7 +599,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi thu hồi phiên: $e');
+          AppToast.error(context, 'Lỗi thu hồi phiên: ${friendlyError(e)}');
         }
       }
     }
@@ -700,7 +701,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         _loadData();
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi cấp lại mật khẩu: $e');
+          AppToast.error(context, 'Lỗi cấp lại mật khẩu: ${friendlyError(e)}');
         }
       }
     }
@@ -770,7 +771,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
       _loadData();
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Lỗi gửi lại thư mời: $e');
+        AppToast.error(context, 'Lỗi gửi lại thư mời: ${friendlyError(e)}');
       }
     }
   }

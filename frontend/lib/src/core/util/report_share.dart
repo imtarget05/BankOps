@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../widgets/app_toast.dart';
+import 'error_text.dart';
 
 /// Chia sẻ/in file báo cáo ra ngoài app.
 ///
@@ -34,7 +35,7 @@ class ReportShare {
       AppToast.success(context, 'Đã chia sẻ file $filename');
     } catch (e) {
       if (!context.mounted) return;
-      AppToast.error(context, 'Không chia sẻ được file: $e');
+      AppToast.error(context, 'Không chia sẻ được file: ${friendlyError(e)}');
     }
   }
 
@@ -50,7 +51,7 @@ class ReportShare {
       );
     } catch (e) {
       if (!context.mounted) return;
-      AppToast.error(context, 'Không in được phiếu: $e');
+      AppToast.error(context, 'Không in được phiếu: ${friendlyError(e)}');
     }
   }
 }

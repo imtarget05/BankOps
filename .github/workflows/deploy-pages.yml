@@ -28,20 +28,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Diagnose deploy inputs (lengths/hashes only, never values)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          echo "len(API_BASE_URL)=${#API_BASE_URL}"
-          echo "len(CLOUDFLARE_API_TOKEN)=${#CLOUDFLARE_API_TOKEN}"
-          echo "len(CLOUDFLARE_ACCOUNT_ID)=${#CLOUDFLARE_ACCOUNT_ID}"
-          printf '%s' "$API_BASE_URL" | wc -c
-          printf '%s' "$CLOUDFLARE_API_TOKEN" | wc -c
-          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | wc -c
-          printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1
-          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | sha256sum | cut -d' ' -f1
-
       - name: Verify required secrets are configured
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}

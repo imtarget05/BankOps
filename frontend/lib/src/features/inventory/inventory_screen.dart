@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
@@ -138,7 +139,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -210,7 +211,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -257,7 +258,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -564,7 +565,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     AppToast.success(context, 'Bàn giao ấn chỉ thành công!');
                   }
                 } catch (e) {
-                  if (mounted) AppToast.error(context, 'Lỗi bàn giao: $e');
+                  if (mounted) AppToast.error(context, 'Lỗi bàn giao: ${friendlyError(e)}');
                 }
               },
               child: const Text('Xác nhận bàn giao'),
@@ -699,7 +700,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -782,7 +783,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -946,7 +947,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     } catch (e) {
                       if (mounted) {
                         messenger.showSnackBar(
-                          SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                          SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
                         );
                       }
                     }
@@ -977,7 +978,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     } catch (e) {
                       if (mounted) {
                         messenger.showSnackBar(
-                          SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                          SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
                         );
                       }
                     }
@@ -1008,7 +1009,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     } catch (e) {
                       if (mounted) {
                         messenger.showSnackBar(
-                          SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                          SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
                         );
                       }
                     }

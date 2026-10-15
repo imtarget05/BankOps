@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/util/error_text.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
@@ -214,7 +215,7 @@ class _EtlStudioScreenState extends State<EtlStudioScreen>
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi tạo kết nối: $e');
+          AppToast.error(context, 'Lỗi tạo kết nối: ${friendlyError(e)}');
         }
       }
     }
@@ -351,7 +352,7 @@ class _EtlStudioScreenState extends State<EtlStudioScreen>
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi tạo Pipeline: $e');
+          AppToast.error(context, 'Lỗi tạo Pipeline: ${friendlyError(e)}');
         }
       }
     }
@@ -501,7 +502,7 @@ class _EtlStudioScreenState extends State<EtlStudioScreen>
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Lỗi tạo mapping version: $e');
+          AppToast.error(context, 'Lỗi tạo mapping version: ${friendlyError(e)}');
         }
       }
     }

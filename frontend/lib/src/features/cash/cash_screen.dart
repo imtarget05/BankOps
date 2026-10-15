@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
@@ -118,7 +119,7 @@ class _CashScreenState extends State<CashScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -170,7 +171,7 @@ class _CashScreenState extends State<CashScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }
@@ -214,7 +215,7 @@ class _CashScreenState extends State<CashScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Lỗi: ${friendlyError(e)}'), backgroundColor: Colors.red),
           );
         }
       }

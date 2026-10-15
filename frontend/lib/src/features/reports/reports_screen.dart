@@ -7,6 +7,7 @@ import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/demo_banner.dart';
+import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
@@ -55,7 +56,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await RepositoryScope.of(context).runReconciliation(scope: scope);
       _reload();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không thể chạy đối soát: $error')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không thể chạy đối soát: ${friendlyError(error)}')));
     } finally {
       if (mounted) setState(() => _reconciling = false);
     }
