@@ -149,6 +149,7 @@ abstract class BankOpsRepository {
     required RequestKind kind,
     String? sourceLocationId,
     String? destLocationId,
+    String? supplier,
     required List<StockRequestLine> lines,
     String? reason,
   });
@@ -251,6 +252,19 @@ abstract class BankOpsRepository {
     int watchDays = 30,
     int stagnantDays = 60,
     int criticalDays = 90,
+  });
+
+  // --- SRS Trà Sữa (Cảnh báo & Báo cáo F&B) ---
+  Future<List<ExpiryAlertItem>> getExpiryAlerts({int days = 7});
+  Future<List<ConsumptionTopItem>> getConsumptionTop({
+    String? dateFrom,
+    String? dateTo,
+    int limit = 10,
+  });
+  Future<List<ShiftHistoryItem>> getShiftHistory({
+    String? dateFrom,
+    String? dateTo,
+    String? shiftCode,
   });
 
   // --- Admin IAM (Phase 1) ---

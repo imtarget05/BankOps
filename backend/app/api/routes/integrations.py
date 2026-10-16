@@ -293,7 +293,7 @@ async def get_connection(
         )
     ).scalar_one_or_none()
     if conn is None:
-        raise AppError(404, "NOT_FOUND", "connection không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Kết nối không tồn tại.")
     return _conn_out(conn)
 
 
@@ -314,7 +314,7 @@ async def update_connection(
         )
     ).scalar_one_or_none()
     if conn is None:
-        raise AppError(404, "NOT_FOUND", "connection không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Kết nối không tồn tại.")
     if "name" in payload and payload["name"]:
         conn.name = str(payload["name"]).strip()
     if "status" in payload and payload["status"]:
@@ -346,7 +346,7 @@ async def delete_connection(
         )
     ).scalar_one_or_none()
     if conn is None:
-        raise AppError(404, "NOT_FOUND", "connection không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Kết nối không tồn tại.")
     await db.delete(conn)
     await db.commit()
     return {"status": "deleted", "id": str(cid)}
@@ -377,7 +377,7 @@ async def test_connection(
         )
     ).scalar_one_or_none()
     if conn is None:
-        raise AppError(404, "NOT_FOUND", "connection không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Kết nối không tồn tại.")
     cfg = payload or conn.config_json or {}
     now = _now()
     now_iso = now.isoformat()
@@ -479,7 +479,7 @@ async def connection_schema(
         )
     ).scalar_one_or_none()
     if conn is None:
-        raise AppError(404, "NOT_FOUND", "connection không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Kết nối không tồn tại.")
     cfg = payload or conn.config_json or {}
     columns: list[dict] = []
     now = _now()
@@ -517,7 +517,7 @@ async def connection_schema(
                 {"name": str(k), "index": i} for i, k in enumerate(sample.keys())
             ]
         else:
-            raise AppError(400, "UNSUPPORTED_TYPE", f"connection type {conn.type} chưa hỗ trợ schema scan")
+            raise AppError(400, "UNSUPPORTED_TYPE", f"Loại kết nối {conn.type} chưa được hỗ trợ quét schema.")
         conn.schema_json = columns
         conn.updated_at = now
         await db.commit()
@@ -603,7 +603,7 @@ async def preview_run(
         await db.execute(select(IntegrationRun).where(IntegrationRun.id == rid))
     ).scalar_one_or_none()
     if run is None:
-        raise AppError(404, "NOT_FOUND", "run không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Tiến trình không tồn tại.")
     rows = (
         (
             await db.execute(
@@ -668,9 +668,9 @@ async def confirm_run(
         await db.execute(select(IntegrationRun).where(IntegrationRun.id == rid))
     ).scalar_one_or_none()
     if run is None:
-        raise AppError(404, "NOT_FOUND", "run không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Tiến trình không tồn tại.")
     if run.status == "confirmed":
-        raise AppError(409, "STATE_CONFLICT", "run đã được confirm trước đó")
+        raise AppError(409, "STATE_CONFLICT", "Tiến trình đã được xác nhận trước đó.")
     if run.invalid_count > 0:
         raise AppError(
             409,
@@ -690,7 +690,7 @@ async def confirm_run(
         .all()
     )
     if not rows:
-        raise AppError(409, "CONFIRM_EMPTY", "run không có dòng hợp lệ")
+        raise AppError(409, "CONFIRM_EMPTY", "Tiến trình không có dòng dữ liệu hợp lệ.")
     items = {i.sku: i for i in (await db.execute(select(Item))).scalars().all()}
     locs = {
         loc.code: loc for loc in (await db.execute(select(Location))).scalars().all()
@@ -877,15 +877,15 @@ async def apps_script_webhook(
     try:
         ts_int = int(ts)
     except ValueError:
-        raise AppError(401, "WEBHOOK_BAD_SIGNATURE", "thiếu/sai timestamp") from None
+        raise AppError(401, "WEBHOOK_BAD_SIGNATURE", "Thiếu hoặc sai timestamp của webhook.") from None
     if abs(time.time() - ts_int) > 300:
-        raise AppError(401, "WEBHOOK_REPLAY", "timestamp lệch quá 5 phút")
+        raise AppError(401, "WEBHOOK_REPLAY", "Webhook đã hết hiệu lực (lệch hơn 5 phút).")
     raw = await request.body()
     expected = hmac_mod.new(
         secret.encode(), f"{ts}.".encode() + raw, hashlib.sha256
     ).hexdigest()
     if not hmac_mod.compare_digest(expected, sig):
-        raise AppError(401, "WEBHOOK_BAD_SIGNATURE", "HMAC không khớp")
+        raise AppError(401, "WEBHOOK_BAD_SIGNATURE", "Chữ ký webhook không hợp lệ.")
     try:
         data = json.loads(raw.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -902,7 +902,7 @@ async def apps_script_webhook(
         )
     ).scalar_one_or_none()
     if conn is None:
-        raise AppError(404, "NOT_FOUND", "connection không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Kết nối không tồn tại.")
     preview = await _stage_run(db, conn.id, "webhook", rows, event_id)
     preview["status"] = "staged"
     return preview
@@ -928,7 +928,7 @@ async def get_run(
         await db.execute(select(IntegrationRun).where(IntegrationRun.id == rid))
     ).scalar_one_or_none()
     if run is None:
-        raise AppError(404, "NOT_FOUND", "run không tồn tại")
+        raise AppError(404, "NOT_FOUND", "Tiến trình không tồn tại.")
     rows = (
         (
             await db.execute(

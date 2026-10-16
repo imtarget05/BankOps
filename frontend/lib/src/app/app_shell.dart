@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -81,6 +82,7 @@ class _AppShellState extends State<AppShell> {
   int _requestsNavId = 0;
   bool _autoOpenStockRequest = false;
   bool _autoOpenCashRequest = false;
+  bool _aiUnavailable = false;
   Timer? _offlinePingTimer;
 
   @override
@@ -128,6 +130,21 @@ class _AppShellState extends State<AppShell> {
           .timeout(const Duration(seconds: 8));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         OfflineHub.instance.markOnline();
+        _aiUnavailable = false;
+      } else if (res.statusCode == 503) {
+        // Gateway trả 503 khi upstream chưa được cấu hình (ví dụ Render DB
+        // chưa sẵn sàng), hoặc backend đã tắt AI. Lúc này AI không thể dùng
+        // được từ mọi màn hình, nên ẩn FAB thay vì hiển thị 'Offline'.
+        try {
+          final decoded = json.decode(utf8.decode(res.bodyBytes));
+          final code = (decoded as Map)['error']['code'] as String?;
+          if (code == 'UPSTREAM_NOT_CONFIGURED' || code == 'AI_UNAVAILABLE') {
+            _aiUnavailable = true;
+          }
+        } catch (_) {
+          // Không thể đọc body 503 -> giữ Idle.
+        }
+        OfflineHub.instance.markOffline();
       } else {
         OfflineHub.instance.markOffline();
       }
@@ -1027,7 +1044,9 @@ class _AppShellState extends State<AppShell> {
     return RepositoryScope(
         repository: _repository!,
         child: Scaffold(
-          floatingActionButton: FloatingActionButton.extended(
+          floatingActionButton: _aiUnavailable
+              ? null
+              : FloatingActionButton.extended(
             key: const Key('btn-ai-assistant'),
             onPressed: () => AiAssistantDialog.show(context),
             icon: const Icon(Icons.psychology_outlined),
@@ -1057,7 +1076,9 @@ class _AppShellState extends State<AppShell> {
     return RepositoryScope(
         repository: _repository!,
         child: Scaffold(
-          floatingActionButton: FloatingActionButton(
+          floatingActionButton: _aiUnavailable
+              ? null
+              : FloatingActionButton(
             key: const Key('btn-ai-assistant'),
             onPressed: () => AiAssistantDialog.show(context),
             backgroundColor: const Color(0xFF2563EB),
@@ -1090,7 +1111,9 @@ class _AppShellState extends State<AppShell> {
     return RepositoryScope(
         repository: _repository!,
         child: Scaffold(
-          floatingActionButton: FloatingActionButton(
+          floatingActionButton: _aiUnavailable
+              ? null
+              : FloatingActionButton(
             key: const Key('btn-ai-assistant'),
             onPressed: () => AiAssistantDialog.show(context),
             backgroundColor: const Color(0xFF2563EB),

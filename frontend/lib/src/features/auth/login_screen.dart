@@ -121,7 +121,8 @@ class _LoginScreenState extends State<LoginScreen> {
             msg.contains('registered origin')) {
           userFriendlyMsg =
               'Google OAuth: Domain Cloudflare chưa được đăng ký trong Authorized JavaScript origins của Google Cloud Console.';
-        } else if (msg.contains('Validation failed')) {
+        } else if (msg.contains('Validation failed') ||
+            msg.contains('chưa hợp lệ')) {
           userFriendlyMsg =
               'Xác thực tài khoản Google không thành công. Vui lòng thử lại.';
         }

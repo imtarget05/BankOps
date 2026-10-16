@@ -975,8 +975,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Future<void> _showStocktakeDetailDialog(
     StocktakeItem stocktake,
     List<InventoryItem> items,
-    List<InventoryLocation> locations,
-  ) async {
+    List<InventoryLocation> locations, {
+    List<StockLevelItem>? stockLevels,
+  }) async {
     final loc = locations.cast<InventoryLocation?>().firstWhere(
           (l) => l?.id == stocktake.locationId,
           orElse: () => null,
@@ -988,6 +989,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     // Map existing counted lines or initialize
     final countCtrls = <String, TextEditingController>{};
+    final usedCtrls = <String, TextEditingController>{};
     final reasonCtrls = <String, TextEditingController>{};
 
     for (final it in items) {
@@ -996,8 +998,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 (l) => l?.itemId == it.id,
                 orElse: () => null,
               );
+      usedCtrls[it.id] = TextEditingController(
+        text: existingLine != null ? existingLine.usedQty : '0',
+      );
       countCtrls[it.id] = TextEditingController(
-        text: existingLine != null ? existingLine.countedQty : '0',
+        text: existingLine != null ? existingLine.countedQty : (existingLine?.bookQty ?? '0'),
       );
       reasonCtrls[it.id] = TextEditingController(
         text: existingLine?.reason ?? '',
@@ -1042,114 +1047,213 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ],
             ),
             content: SizedBox(
-              width: 700,
-              height: 480,
+              width: 1100,
+              height: 520,
               child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (stocktake.note != null && stocktake.note!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text('Ghi chú: ${stocktake.note}',
-                            style:
-                                const TextStyle(fontStyle: FontStyle.italic)),
-                      ),
-                    if (stocktake.shiftCode != null)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          'Còn lại cuối ca = (Tồn đầu ca + Nhập hàng) − Sử dụng. Độ lệch = Kiểm kê thực tế − Còn lại cuối ca.',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    if (stocktake.adjustmentRequestId != null)
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: Colors.green.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                color: Colors.green, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Đã sinh phiếu điều chỉnh kho tự động: #${stocktake.adjustmentRequestId}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.green,
-                                    fontSize: 13),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Table(
-                      columnWidths: const {
-                        0: FlexColumnWidth(3),
-                        1: FlexColumnWidth(1.5),
-                        2: FlexColumnWidth(1.8),
-                        3: FlexColumnWidth(1.5),
-                        4: FlexColumnWidth(2.5),
-                      },
-                      border: TableBorder.all(
-                          color: Colors.grey.withValues(alpha: 0.2)),
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 1050),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TableRow(
-                          decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.1)),
-                          children: const [
-                            Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Text('Mặt hàng',
+                        if (!canEdit)
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: (stocktake.status == 'submitted'
+                                      ? Colors.orange
+                                      : Colors.green)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: (stocktake.status == 'submitted'
+                                          ? Colors.orange
+                                          : Colors.green)
+                                      .withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  stocktake.status == 'submitted'
+                                      ? Icons.hourglass_top
+                                      : Icons.lock_outline,
+                                  color: stocktake.status == 'submitted'
+                                      ? Colors.orange[800]
+                                      : Colors.green[800],
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    stocktake.status == 'submitted'
+                                        ? 'Ca kiểm kê đang chờ Checker phê duyệt. Dữ liệu đã khóa để đảm bảo tính toàn vẹn.'
+                                        : 'Phiên kiểm kê đã đóng sổ & đối soát hoàn tất.',
                                     style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12))),
-                            Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Text('Sổ sách',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12))),
-                            Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Text('Thực đếm',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12))),
-                            Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Text('Chênh lệch',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12))),
-                            Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Text('Lý do',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12))),
+                                      fontWeight: FontWeight.w600,
+                                      color: stocktake.status == 'submitted'
+                                          ? Colors.orange[900]
+                                          : Colors.green[900],
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (stocktake.note != null && stocktake.note!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text('Ghi chú: ${stocktake.note}',
+                                style:
+                                    const TextStyle(fontStyle: FontStyle.italic)),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Công thức SRS: Còn lại cuối ca = Tồn đầu ca + Nhập − Sử dụng. Độ lệch = Kiểm thực tế − Còn lại cuối ca.',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.primary),
+                          ),
+                        ),
+                        if (stocktake.adjustmentRequestId != null)
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: Colors.green.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle,
+                                    color: Colors.green, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Đã sinh phiếu điều chỉnh kho tự động: #${stocktake.adjustmentRequestId}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green,
+                                        fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Table(
+                          columnWidths: const {
+                            0: FixedColumnWidth(45), // STT
+                            1: FixedColumnWidth(175), // Nguyên liệu
+                            2: FixedColumnWidth(65), // ĐVT
+                            3: FixedColumnWidth(80), // Tồn đầu
+                            4: FixedColumnWidth(70), // Nhập
+                            5: FixedColumnWidth(140), // Sử dụng (+/-)
+                            6: FixedColumnWidth(95), // Còn lại cuối ca
+                            7: FixedColumnWidth(140), // Kiểm thực tế (+/-)
+                            8: FixedColumnWidth(85), // Độ lệch
+                            9: FixedColumnWidth(155), // Trạng thái & Lý do
+                          },
+                          border: TableBorder.all(
+                              color: Colors.grey.withValues(alpha: 0.2)),
+                          children: [
+                            TableRow(
+                              decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.1)),
+                              children: const [
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('STT',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Nguyên liệu',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('ĐVT',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Tồn đầu',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Nhập',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Sử dụng (+/-)',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Còn lại',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Kiểm thực tế (+/-)',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Độ lệch',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                                Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('Trạng thái & Lý do',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12))),
+                              ],
+                            ),
+                            for (var idx = 0; idx < items.length; idx++)
+                              _buildStocktakeRow(
+                                index: idx,
+                                stocktake: stocktake,
+                                item: items[idx],
+                                canEdit: canEdit,
+                                usedCtrl: usedCtrls[items[idx].id]!,
+                                countCtrl: countCtrls[items[idx].id]!,
+                                reasonCtrl: reasonCtrls[items[idx].id]!,
+                                stockLevels: stockLevels,
+                                onChanged: () => setDlgState(() {}),
+                              ),
                           ],
                         ),
-                        for (final it in items)
-                          _buildStocktakeRow(
-                            stocktake: stocktake,
-                            item: it,
-                            canEdit: canEdit,
-                            countCtrl: countCtrls[it.id]!,
-                            reasonCtrl: reasonCtrls[it.id]!,
-                            onChanged: () => setDlgState(() {}),
-                          ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1164,14 +1268,27 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     final navigator = Navigator.of(ctx);
                     try {
                       final repo = RepositoryScope.of(context);
-                      final linesPayload = items
-                          .map((it) => {
-                                'item_id': it.id,
-                                'counted_qty':
-                                    countCtrls[it.id]?.text.trim() ?? '0',
-                                'reason': reasonCtrls[it.id]?.text.trim() ?? '',
-                              })
-                          .toList();
+                      final linesPayload = items.map((it) {
+                        final existingLine = stocktake.lines
+                            .cast<StocktakeLineItem?>()
+                            .firstWhere(
+                              (l) => l?.itemId == it.id,
+                              orElse: () => null,
+                            );
+                        final opening = double.tryParse(existingLine?.openingQty ?? '') ??
+                            (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
+                        final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
+                        final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                        final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                        return {
+                          'item_id': it.id,
+                          'opening_qty': opening.toString(),
+                          'received_qty': received.toString(),
+                          'used_qty': used.toString(),
+                          'counted_qty': counted.toString(),
+                          'reason': reasonCtrls[it.id]?.text.trim() ?? '',
+                        };
+                      }).toList();
                       await repo.updateStocktakeLines(
                           stocktake.id, linesPayload);
                       if (mounted) {
@@ -1203,14 +1320,27 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     final navigator = Navigator.of(ctx);
                     try {
                       final repo = RepositoryScope.of(context);
-                      final linesPayload = items
-                          .map((it) => {
-                                'item_id': it.id,
-                                'counted_qty':
-                                    countCtrls[it.id]?.text.trim() ?? '0',
-                                'reason': reasonCtrls[it.id]?.text.trim() ?? '',
-                              })
-                          .toList();
+                      final linesPayload = items.map((it) {
+                        final existingLine = stocktake.lines
+                            .cast<StocktakeLineItem?>()
+                            .firstWhere(
+                              (l) => l?.itemId == it.id,
+                              orElse: () => null,
+                            );
+                        final opening = double.tryParse(existingLine?.openingQty ?? '') ??
+                            (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
+                        final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
+                        final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                        final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                        return {
+                          'item_id': it.id,
+                          'opening_qty': opening.toString(),
+                          'received_qty': received.toString(),
+                          'used_qty': used.toString(),
+                          'counted_qty': counted.toString(),
+                          'reason': reasonCtrls[it.id]?.text.trim() ?? '',
+                        };
+                      }).toList();
                       await repo.updateStocktakeLines(
                           stocktake.id, linesPayload);
                       await repo.submitStocktake(stocktake.id);
@@ -1280,27 +1410,62 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   TableRow _buildStocktakeRow({
+    required int index,
     required StocktakeItem stocktake,
     required InventoryItem item,
     required bool canEdit,
+    required TextEditingController usedCtrl,
     required TextEditingController countCtrl,
     required TextEditingController reasonCtrl,
+    List<StockLevelItem>? stockLevels,
     required VoidCallback onChanged,
   }) {
     final line = stocktake.lines.cast<StocktakeLineItem?>().firstWhere(
           (l) => l?.itemId == item.id,
           orElse: () => null,
         );
-    final bookQty = double.tryParse(line?.bookQty ?? '0') ?? 0.0;
-    final countedQty = double.tryParse(countCtrl.text) ?? 0.0;
-    final diff = countedQty - bookQty;
+    final opening = double.tryParse(line?.openingQty ?? '') ??
+        (double.tryParse(line?.bookQty ?? '') ?? 0.0);
+    final received = double.tryParse(line?.receivedQty ?? '') ?? 0.0;
+    final used = double.tryParse(usedCtrl.text.trim()) ?? 0.0;
+    final remaining = opening + received - used;
+    final counted = double.tryParse(countCtrl.text.trim()) ?? 0.0;
+    final diff = counted - remaining;
 
     Color diffColor = Colors.grey;
-    if (diff > 0) diffColor = Colors.green;
-    if (diff < 0) diffColor = Colors.red;
+    if (diff > 0.001) diffColor = const Color(0xFF15803D);
+    if (diff < -0.001) diffColor = const Color(0xFFDC2626);
+
+    final statusText = diff.abs() < 0.001
+        ? '🟢 Khớp'
+        : (diff > 0 ? '🟡 Thừa' : '🔴 Thiếu');
+    final statusColor = diff.abs() < 0.001
+        ? const Color(0xFF15803D)
+        : (diff > 0 ? const Color(0xFFB45309) : const Color(0xFFDC2626));
+    final statusBg = statusColor.withValues(alpha: 0.12);
+
+    final stockLevel = stockLevels?.cast<StockLevelItem?>().firstWhere(
+          (sl) => sl?.itemId == item.id,
+          orElse: () => null,
+        );
+    final minQty = double.tryParse(stockLevel?.minQty ?? '') ?? 0.0;
+    final isLowStock = minQty > 0 && counted <= minQty;
+
+    String formatQty(double val) =>
+        val == val.roundToDouble() ? val.toInt().toString() : val.toStringAsFixed(1);
 
     return TableRow(
       children: [
+        // 0: STT
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(
+            '${index + 1}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ),
+        // 1: Nguyên liệu
         Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
@@ -1308,62 +1473,226 @@ class _InventoryScreenState extends State<InventoryScreen> {
             children: [
               Text(item.name,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
+                      fontWeight: FontWeight.w700, fontSize: 13)),
               Text(item.sku,
                   style: const TextStyle(color: Colors.grey, fontSize: 11)),
             ],
           ),
         ),
+        // 2: ĐVT
         Padding(
-          padding: const EdgeInsets.all(8),
-          child: Text('${line?.bookQty ?? '0'} ${item.unit}',
-              style: const TextStyle(fontSize: 13)),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(
+            item.unit,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12),
+          ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(6),
-          child: canEdit
-              ? SizedBox(
-                  height: 36,
-                  child: TextField(
-                    controller: countCtrl,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => onChanged(),
-                    decoration: const InputDecoration(
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                )
-              : Text('${countCtrl.text} ${item.unit}',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.bold)),
-        ),
+        // 3: Tồn đầu
         Padding(
           padding: const EdgeInsets.all(8),
           child: Text(
-            '${diff > 0 ? "+" : ""}${diff.toStringAsFixed(0)}',
-            style: TextStyle(
-                fontWeight: FontWeight.bold, color: diffColor, fontSize: 13),
+            formatQty(opening),
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
           ),
         ),
+        // 4: Nhập
         Padding(
-          padding: const EdgeInsets.all(6),
-          child: canEdit
-              ? SizedBox(
-                  height: 36,
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            formatQty(received),
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+          ),
+        ),
+        // 5: Sử dụng (+/-)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: _buildQtyTouchField(
+            controller: usedCtrl,
+            canEdit: canEdit,
+            onChanged: onChanged,
+          ),
+        ),
+        // 6: Còn lại cuối ca
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            formatQty(remaining),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF2563EB),
+            ),
+          ),
+        ),
+        // 7: Kiểm thực tế (+/-)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: _buildQtyTouchField(
+            controller: countCtrl,
+            canEdit: canEdit,
+            onChanged: onChanged,
+          ),
+        ),
+        // 8: Độ lệch
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            '${diff > 0.001 ? "+" : ""}${formatQty(diff)}',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+                fontWeight: FontWeight.w800, color: diffColor, fontSize: 13),
+          ),
+        ),
+        // 9: Trạng thái & Lý do
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (isLowStock) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        '≤ Min',
+                        style: TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              if (canEdit)
+                SizedBox(
+                  height: 32,
                   child: TextField(
                     controller: reasonCtrl,
+                    style: const TextStyle(fontSize: 11),
                     decoration: const InputDecoration(
                       hintText: 'Lý do lệch...',
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       border: OutlineInputBorder(),
+                      isDense: true,
                     ),
                   ),
                 )
-              : Text(reasonCtrl.text.isNotEmpty ? reasonCtrl.text : '—',
-                  style: const TextStyle(fontSize: 12)),
+              else
+                Text(
+                  reasonCtrl.text.isNotEmpty ? reasonCtrl.text : '—',
+                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQtyTouchField({
+    required TextEditingController controller,
+    required bool canEdit,
+    required VoidCallback onChanged,
+  }) {
+    if (!canEdit) {
+      return Center(
+        child: Text(
+          controller.text.isEmpty ? '0' : controller.text,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+        ),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        InkWell(
+          onTap: () {
+            final cur = double.tryParse(controller.text.trim()) ?? 0.0;
+            if (cur > 0) {
+              final next = cur - 1;
+              controller.text = next == next.roundToDouble()
+                  ? next.toInt().toString()
+                  : next.toStringAsFixed(1);
+              onChanged();
+            }
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withValues(alpha: 0.4)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Icon(Icons.remove, size: 13),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 48,
+          height: 32,
+          child: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            onChanged: (_) => onChanged(),
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        InkWell(
+          onTap: () {
+            final cur = double.tryParse(controller.text.trim()) ?? 0.0;
+            final next = cur + 1;
+            controller.text = next == next.roundToDouble()
+                ? next.toInt().toString()
+                : next.toStringAsFixed(1);
+            onChanged();
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withValues(alpha: 0.4)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Icon(Icons.add, size: 13),
+          ),
         ),
       ],
     );
@@ -1469,6 +1798,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
               if (data.lowStockAlerts.isNotEmpty) ...[
                 _buildLowStockAlertBanner(context, data.lowStockAlerts),
+                const SizedBox(height: 20),
+              ],
+
+              if (data.expiryAlerts.isNotEmpty) ...[
+                _buildExpiryAlertBanner(context, data.expiryAlerts),
                 const SizedBox(height: 20),
               ],
 
@@ -2187,7 +2521,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           ),
                           OutlinedButton.icon(
                             onPressed: () => _showStocktakeDetailDialog(
-                                st, data.items, data.locations),
+                                st, data.items, data.locations,
+                                stockLevels: data.stockLevels),
                             icon: const Icon(Icons.edit_note_rounded, size: 16),
                             label: Text(st.status == 'open'
                                 ? 'Nhập Số Đếm'
@@ -2228,7 +2563,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         unit: item.unit,
         openingQty: opening,
         receivedQty: 0,
-        usedQty: 0,
+        usedQty: double.tryParse(savedLine?.usedQty ?? '') ?? 0,
         countedQty: double.tryParse(savedLine?.countedQty ?? '') ?? opening,
         reason: savedLine?.reason ?? '',
       );
@@ -2236,7 +2571,202 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     return ShiftStocktakeDesk(
       lines: lines,
-      onStartShiftStocktake: () => _showCreateStocktakeDialog(data.locations),
+      onStartShiftStocktake: () {
+        if (activeStocktake != null) {
+          _showStocktakeDetailDialog(
+            activeStocktake,
+            data.items,
+            data.locations,
+            stockLevels: data.stockLevels,
+          );
+        } else {
+          _showCreateStocktakeDialog(data.locations);
+        }
+      },
+    );
+  }
+
+  Widget _buildExpiryAlertBanner(
+      BuildContext context, List<ExpiryAlertItem> alerts) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final criticalCount = alerts.where((a) => a.daysLeft <= 0).length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF3B2010) : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: criticalCount > 0
+              ? const Color(0xFFEF4444).withValues(alpha: 0.4)
+              : const Color(0xFFF59E0B).withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (criticalCount > 0 ? Colors.red : Colors.amber)
+                      .withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  criticalCount > 0
+                      ? Icons.warning_rounded
+                      : Icons.schedule_rounded,
+                  color: criticalCount > 0
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFFD97706),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cảnh Báo Hạn Sử Dụng Nguyên Liệu (${alerts.length} lô hàng cận/hết date)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: criticalCount > 0
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFFB45309),
+                      ),
+                    ),
+                    Text(
+                      'Kiểm tra và ưu tiên xuất pha chế trước (FEFO) hoặc lập phiếu hủy hỏng nếu đã hết hạn.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Column(
+            children: alerts.map((al) {
+              final isExpired = al.daysLeft <= 0;
+              final isWarning = al.daysLeft <= 3 && !isExpired;
+
+              final badgeColor = isExpired
+                  ? const Color(0xFFDC2626)
+                  : (isWarning
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF2563EB));
+              final badgeText = isExpired
+                  ? (al.daysLeft == 0
+                      ? 'HẾT HẠN HÔM NAY'
+                      : 'QUÁ HẠN ${-al.daysLeft} NGÀY')
+                  : (isWarning
+                      ? 'CẬN DATE (CÒN ${al.daysLeft} NGÀY)'
+                      : 'THEO DÕI (CÒN ${al.daysLeft} NGÀY)');
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF291B12) : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: badgeColor.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${al.itemName} (${al.sku})',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          Text(
+                            'Lô: ${al.lotNo ?? "N/A"} • HSD: ${al.expiryDate} • Số lượng: ${al.quantity} ${al.unit}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isExpired)
+                      FilledButton.tonal(
+                        onPressed: () {
+                          if (widget.onCreateStockRequest != null) {
+                            widget.onCreateStockRequest!();
+                          } else if (widget.onNavigate != null) {
+                            widget.onNavigate!(3);
+                          }
+                        },
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor:
+                              const Color(0xFFDC2626).withValues(alpha: 0.15),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Lập Phiếu Hủy',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFFDC2626),
+                                fontWeight: FontWeight.bold)),
+                      )
+                    else if (isWarning)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Ưu tiên dùng',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2321,6 +2851,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       repo.getLowStockAlerts(),
       repo.getStocktakes(),
       repo.getStockLevels(),
+      repo.getExpiryAlerts(days: 7),
     ]);
     return _InventoryData(
       locations: results[0] as List<InventoryLocation>,
@@ -2330,6 +2861,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       lowStockAlerts: results[4] as List<LowStockAlertItem>,
       stocktakes: results[5] as List<StocktakeItem>,
       stockLevels: results[6] as List<StockLevelItem>,
+      expiryAlerts: results[7] as List<ExpiryAlertItem>,
     );
   }
 }
@@ -2343,6 +2875,7 @@ class _InventoryData {
     required this.lowStockAlerts,
     required this.stocktakes,
     required this.stockLevels,
+    this.expiryAlerts = const [],
   });
 
   final List<InventoryLocation> locations;
@@ -2352,4 +2885,5 @@ class _InventoryData {
   final List<LowStockAlertItem> lowStockAlerts;
   final List<StocktakeItem> stocktakes;
   final List<StockLevelItem> stockLevels;
+  final List<ExpiryAlertItem> expiryAlerts;
 }

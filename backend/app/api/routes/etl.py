@@ -253,7 +253,7 @@ async def list_connections(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền truy cập ETL")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền truy cập ETL.")
 
     stmt = select(EtlConnection).order_by(desc(EtlConnection.created_at))
     if branch_id:
@@ -273,7 +273,7 @@ async def create_connection(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN)):
-        raise AppError(403, "FORBIDDEN", "Chỉ admin hoặc designer mới được tạo connection")
+        raise AppError(403, "FORBIDDEN", "Chỉ quản trị viên hoặc nhà thiết kế mới được tạo kết nối.")
 
     branch_uuid = uuid.UUID(payload.branch_id) if payload.branch_id else None
     conn = EtlConnection(
@@ -301,7 +301,7 @@ async def get_connection(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền truy cập ETL")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền truy cập ETL.")
 
     conn = await db.get(EtlConnection, uuid.UUID(conn_id))
     if not conn:
@@ -318,7 +318,7 @@ async def update_connection(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền sửa connection")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền sửa kết nối.")
 
     conn = await db.get(EtlConnection, uuid.UUID(conn_id))
     if not conn:
@@ -356,7 +356,7 @@ async def list_pipelines(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền truy cập ETL")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền truy cập ETL.")
 
     stmt = select(EtlPipeline).order_by(desc(EtlPipeline.created_at))
     if target:
@@ -386,7 +386,7 @@ async def create_pipeline(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN)):
-        raise AppError(403, "FORBIDDEN", "Chỉ admin hoặc designer mới được tạo pipeline")
+        raise AppError(403, "FORBIDDEN", "Chỉ quản trị viên hoặc nhà thiết kế mới được tạo pipeline.")
 
     conn = await db.get(EtlConnection, uuid.UUID(payload.connection_id))
     if not conn:
@@ -486,7 +486,7 @@ async def get_pipeline(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền truy cập ETL")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền truy cập ETL.")
 
     p = await db.get(EtlPipeline, uuid.UUID(pipeline_id))
     if not p:
@@ -509,7 +509,7 @@ async def update_pipeline(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền sửa pipeline")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền sửa pipeline.")
 
     p = await db.get(EtlPipeline, uuid.UUID(pipeline_id))
     if not p:
@@ -548,7 +548,7 @@ async def list_mapping_versions(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền xem mapping versions")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền xem các phiên bản ánh xạ.")
 
     p = await db.get(EtlPipeline, uuid.UUID(pipeline_id))
     if not p:
@@ -568,7 +568,7 @@ async def create_mapping_version(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN)):
-        raise AppError(403, "FORBIDDEN", "Chỉ admin hoặc designer mới được tạo mapping version")
+        raise AppError(403, "FORBIDDEN", "Chỉ quản trị viên hoặc nhà thiết kế mới được tạo phiên bản ánh xạ.")
 
     p = await db.get(EtlPipeline, uuid.UUID(pipeline_id))
     if not p:
@@ -608,7 +608,7 @@ async def publish_mapping_version(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN)):
-        raise AppError(403, "FORBIDDEN", "Chỉ admin hoặc designer mới được publish mapping")
+        raise AppError(403, "FORBIDDEN", "Chỉ quản trị viên hoặc nhà thiết kế mới được phát hành ánh xạ.")
 
     mv = await db.get(EtlMappingVersion, uuid.UUID(version_id))
     if not mv or str(mv.pipeline_id) != pipeline_id:
@@ -645,14 +645,14 @@ async def trigger_run(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_RUN)):
-        raise AppError(403, "FORBIDDEN", "Bạn không có quyền chạy ETL (thiếu capability etl:run)")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền chạy ETL.")
 
     p = await db.get(EtlPipeline, uuid.UUID(pipeline_id))
     if not p:
         raise AppError(404, "PIPELINE_NOT_FOUND", "Pipeline không tồn tại")
 
     if p.status != "active":
-        raise AppError(400, "PIPELINE_NOT_ACTIVE", f"Pipeline đang ở trạng thái {p.status}, không thể chạy")
+        raise AppError(400, "PIPELINE_NOT_ACTIVE", f"Pipeline đang ở trạng thái {p.status}, không thể chạy.")
 
     # Scope verification
     if _CAP_ADMIN not in caps:
@@ -668,7 +668,7 @@ async def trigger_run(
     )
     mapping_version = (await db.execute(mv_stmt)).scalars().first()
     if not mapping_version:
-        raise AppError(400, "NO_PUBLISHED_MAPPING", "Pipeline chưa có Mapping Version nào được publish")
+        raise AppError(400, "NO_PUBLISHED_MAPPING", "Pipeline chưa có phiên bản ánh xạ nào được phát hành.")
 
     raw_rows: list[dict[str, Any]] = []
     external_event_id: str | None = None
@@ -731,7 +731,7 @@ async def list_runs(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền xem danh sách ETL run")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền xem danh sách tiến trình ETL.")
 
     stmt = select(EtlRun).order_by(desc(EtlRun.created_at)).limit(limit)
     if pipeline_id:
@@ -751,7 +751,7 @@ async def get_run(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền xem ETL run")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền xem tiến trình ETL.")
 
     run = await db.get(EtlRun, uuid.UUID(run_id))
     if not run:
@@ -771,7 +771,7 @@ async def get_run_rows(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền xem chi tiết dòng ETL")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền xem chi tiết dòng ETL.")
 
     run_uuid = uuid.UUID(run_id)
     stmt = select(EtlRunRow).where(EtlRunRow.run_id == run_uuid).order_by(EtlRunRow.row_number)
@@ -808,7 +808,7 @@ async def review_run(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Chỉ reviewer hoặc admin mới được review staging")
+        raise AppError(403, "FORBIDDEN", "Chỉ người kiểm tra hoặc quản trị viên mới được rà soát staging.")
 
     run = await db.get(EtlRun, uuid.UUID(run_id))
     if not run:
@@ -855,14 +855,14 @@ async def post_run(
             raise AppError(
                 403,
                 "MISSING_CAPABILITY",
-                "Cần quyền 'etl:post_balance' hoặc 'etl:admin' để tự phê duyệt điều chỉnh tồn kho",
+                "Bạn không có quyền tự phê duyệt điều chỉnh tồn kho.",
             )
         # Single admin override policy
         if str(run.runner_id) == str(user.id):
             single_admin_override = True
     else:
         if not any(c in caps for c in (_CAP_ADMIN, _CAP_REVIEW)):
-            raise AppError(403, "FORBIDDEN", "Cần quyền 'etl:review' hoặc 'etl:admin' để post run")
+            raise AppError(403, "FORBIDDEN", "Bạn không có quyền phát hành (post) kết quả ETL.")
 
     result = await etl_engine.execute_etl_posting(
         db=db,
@@ -883,7 +883,7 @@ async def get_error_report(
 ):
     user, caps = user_caps
     if not any(c in caps for c in (_CAP_ADMIN, _CAP_DESIGN, _CAP_RUN, _CAP_REVIEW)):
-        raise AppError(403, "FORBIDDEN", "Không có quyền tải báo cáo lỗi")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền tải báo cáo lỗi.")
 
     run_uuid = uuid.UUID(run_id)
     stmt = (

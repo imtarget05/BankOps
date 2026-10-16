@@ -1,10 +1,10 @@
 """Quản Lý Kho Trà Sữa API Application."""
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -32,6 +32,8 @@ from app.config import settings
 from app.database import init_db
 
 PUBLIC_WEB_ORIGIN = "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
+
+logger = logging.getLogger("bankops.api")
 
 
 @asynccontextmanager
@@ -111,8 +113,7 @@ async def request_id_mw(request: Request, call_next):
     try:
         resp = await call_next(request)
     except HTTPException as e:
-        code = _ERROR_CODES.get(e.status_code, f"HTTP_{e.status_code}")
-        message = e.detail if isinstance(e.detail, str) else "Request failed"
+        code, message = _http_error_code_and_message(e)
         return JSONResponse(
             status_code=e.status_code,
             content={"error": {"code": code, "message": message, "request_id": rid, "details": {}}},
@@ -122,11 +123,30 @@ async def request_id_mw(request: Request, call_next):
     return resp
 
 
+def _http_error_code_and_message(exc: HTTPException) -> tuple[str, str]:
+    """Unpack detail theo hợp đồng envelope docs/06:44.
+
+    - `detail` là `{"code": ..., "message": ...}` (vd AI_UNAVAILABLE) -> lấy
+      đúng code/message đó.
+    - `detail` là string -> dùng trực tiếp.
+    - còn lại -> thông điệp chung chung, không lộ nội bộ.
+    """
+    code = _ERROR_CODES.get(exc.status_code, f"HTTP_{exc.status_code}")
+    message = "Yêu cầu không hợp lệ. Vui lòng thử lại."
+    if isinstance(exc.detail, str) and exc.detail.strip():
+        message = exc.detail
+    elif isinstance(exc.detail, dict):
+        if isinstance(exc.detail.get("code"), str) and exc.detail["code"].strip():
+            code = exc.detail["code"]
+        if isinstance(exc.detail.get("message"), str) and exc.detail["message"].strip():
+            message = exc.detail["message"]
+    return code, message
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_envelope(request: Request, exc: HTTPException):
     """Mọi HTTPException trả theo envelope docs/06:44, không phải {"detail": ...}."""
-    code = _ERROR_CODES.get(exc.status_code, f"HTTP_{exc.status_code}")
-    message = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    code, message = _http_error_code_and_message(exc)
     rid = _request_id(request)
     headers = dict(exc.headers or {})
     headers.setdefault("X-Request-ID", rid)
@@ -146,16 +166,24 @@ async def http_exception_envelope(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_envelope(request: Request, exc: RequestValidationError):
-    """422 theo cùng envelope docs/06:44 (không phải {"detail": ...})."""
+    """422 theo cùng envelope docs/06:44 (không phải {"detail": ...}).
+
+    Chỉ giữ loc/msg/type — KHÔNG trả lại `input` (password/tokens có thể lọt
+    qua đó) và không lộ chi tiết kỹ thuật nội bộ cho người dùng cuối.
+    """
     rid = _request_id(request)
+    safe_errors = [
+        {key: err.get(key) for key in ("loc", "msg", "type") if key in err}
+        for err in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
         content={
             "error": {
                 "code": _ERROR_CODES[422],
-                "message": "Validation failed",
+                "message": "Dữ liệu gửi lên chưa hợp lệ. Vui lòng kiểm tra lại các trường bắt buộc.",
                 "request_id": rid,
-                "details": {"errors": jsonable_encoder(exc.errors())},
+                "details": {"errors": safe_errors},
             }
         },
         headers={"X-Request-ID": rid},
@@ -165,12 +193,13 @@ async def validation_exception_envelope(request: Request, exc: RequestValidation
 async def unhandled_exception_envelope(request: Request, exc: Exception):
     """500 theo cùng envelope docs/06:44."""
     rid = getattr(request.state, "request_id", None) or _request_id(request)
+    logger.exception("unhandled error request_id=%s path=%s", rid, request.url.path)
     return JSONResponse(
         status_code=500,
         content={
             "error": {
                 "code": "INTERNAL_ERROR",
-                "message": "Internal server error",
+                "message": "Máy chủ đang gặp sự cố. Vui lòng thử lại sau ít phút.",
                 "request_id": rid,
                 "details": {},
             }

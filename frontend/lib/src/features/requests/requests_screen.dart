@@ -368,11 +368,11 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           : const Color(0xFF059669)),
                 ),
                 const SizedBox(width: 8),
-                Text(isSpoilage
-                    ? 'Báo Cáo Hư Hỏng Nguyên Liệu'
-                    : (kind == RequestKind.receipt
-                        ? 'Tạo Phiếu Nhập Kho Nguyên Liệu'
-                        : 'Tạo Phiếu Xuất Kho')),
+                Expanded(
+                  child: Text(isSpoilage
+                      ? 'Báo Cáo Hư Hỏng Nguyên Liệu'
+                      : 'Tạo Phiếu Kho Mới'),
+                ),
               ],
             ),
             content: SizedBox(
@@ -385,6 +385,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     if (!isSpoilage) ...[
                       DropdownButtonFormField<RequestKind>(
                         key: const Key('stock-kind-dropdown'),
+                        isExpanded: true,
                         initialValue: kind,
                         decoration: const InputDecoration(
                           labelText: 'Loại phiếu',
@@ -588,6 +589,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     const SizedBox(height: 12),
                     Autocomplete<String>(
                       key: const Key('stock-reason-autocomplete'),
+                      initialValue: TextEditingValue(text: reasonCtrl.text),
                       optionsBuilder: (TextEditingValue text) {
                         final query = text.text.trim();
                         if (query.isEmpty) return _stockReasonSuggestions;
@@ -600,6 +602,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           key: const Key('stock-reason-input'),
                           controller: ctrl,
                           focusNode: focus,
+                          onChanged: (val) {
+                            reasonCtrl.text = val;
+                          },
                           decoration: const InputDecoration(
                             labelText: 'Diễn giải / Lý do lập phiếu *',
                             hintText: 'Gõ hoặc chọn gợi ý...',

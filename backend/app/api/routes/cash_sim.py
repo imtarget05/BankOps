@@ -397,7 +397,7 @@ async def create_cash_request(
     key = _require_key(request)
     caps = await _user_capabilities(db, user.id)
     if "cash:create_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: cash:create_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền tạo phiếu quỹ.")
 
     try:
         amount = Decimal(str(payload.get("amount", "0")))
@@ -408,7 +408,7 @@ async def create_cash_request(
     if amount <= _ZERO:
         raise AppError(422, "INVALID_AMOUNT", f"amount phải > 0, nhận {amount}")
     if cashbox_id is None:
-        raise AppError(422, "CASHBOX_NOT_FOUND", "cashbox_id không tồn tại")
+        raise AppError(422, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
 
     replay = idempotency.check(key, idempotency.payload_hash(payload))
     if replay is not None:
@@ -448,9 +448,9 @@ async def submit_cash_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) != str(user.id):
-        raise AppError(403, "FORBIDDEN", "only the maker can submit")
+        raise AppError(403, "FORBIDDEN", "Chỉ người lập phiếu mới được gửi đi duyệt.")
     if req.status not in ("draft", "returned"):
-        raise AppError(409, "STATE_CONFLICT", f"cannot submit từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể gửi phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     req.status = "submitted"
@@ -486,17 +486,17 @@ async def approve_cash_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự duyệt phiếu của chính mình.")
     caps = await _user_capabilities(db, user.id)
     if "cash:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: cash:approve_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền duyệt phiếu quỹ.")
     if req.status != "submitted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot approve từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể duyệt phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     box = await _balance_for_box(db, req.cashbox_id)
     if box is None:
-        raise AppError(404, "CASHBOX_NOT_FOUND", "cashbox không tồn tại")
+        raise AppError(404, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
     amount = Decimal(str(req.amount))
     is_receipt = req.kind == "receipt"
     # Chi (payment/adjustment) mới cần quỹ đủ; thu (receipt) là tiền VÀO quỹ.
@@ -590,12 +590,12 @@ async def reject_cash_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự từ chối (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự từ chối phiếu của chính mình.")
     caps = await _user_capabilities(db, user.id)
     if "cash:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: cash:approve_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền duyệt phiếu quỹ.")
     if req.status != "submitted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot reject từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể từ chối phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     if payload and payload.get("reason"):
@@ -628,12 +628,12 @@ async def return_cash_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự trả về phiếu của mình (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự trả về phiếu của chính mình.")
     caps = await _user_capabilities(db, user.id)
     if "cash:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: cash:approve_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền duyệt phiếu quỹ.")
     if req.status != "submitted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot return từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể trả lại phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     reason = str(payload.get("reason", "")).strip() if payload else ""
@@ -676,9 +676,9 @@ async def reverse_cash_request(
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     caps = await _user_capabilities(db, user.id)
     if not ({"cash:create_request", "cash:approve_request", "cash:reconcile"} & caps):
-        raise AppError(403, "FORBIDDEN", "missing capability to reverse cash request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền đảo giao dịch quỹ.")
     if req.status != "posted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot reverse từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể đảo giao dịch khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     orig_j = (
@@ -689,11 +689,11 @@ async def reverse_cash_request(
 
     box = await _balance_for_box(db, req.cashbox_id)
     if box is None:
-        raise AppError(404, "CASHBOX_NOT_FOUND", "cashbox không tồn tại")
+        raise AppError(404, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
     amount = Decimal(str(req.amount))
     is_receipt = req.kind == "receipt"
     if is_receipt and Decimal(str(box.amount)) < amount:
-        raise AppError(409, "INSUFFICIENT_SIM_CASH", "quỹ không đủ để đảo bút toán thu.")
+        raise AppError(409, "INSUFFICIENT_SIM_CASH", "Quỹ không đủ để đảo bút toán thu.")
 
     now = _now()
     base = req.id.hex[:8]

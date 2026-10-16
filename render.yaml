@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: kho-tra-sua-fastapi
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SERVER_RELOAD
+        value: "false"
+      - key: AI_PROVIDER
+        value: disabled
+      - key: FRONTEND_BASE_URL
+        value: https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev
+      - key: ALLOWED_ORIGINS
+        value: '["https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"]'
+      # Secrets are supplied only in the Render dashboard at Blueprint creation.
+      - key: DATABASE_URL
+        sync: false
+      - key: BANKOPS_SIGNING_KEY
+        generateValue: true
+      - key: BANKOPS_SESSION_SECRET
+        generateValue: true

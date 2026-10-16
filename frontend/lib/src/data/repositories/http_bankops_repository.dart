@@ -791,6 +791,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
     required RequestKind kind,
     String? sourceLocationId,
     String? destLocationId,
+    String? supplier,
     required List<StockRequestLine> lines,
     String? reason,
   }) async {
@@ -804,9 +805,20 @@ class HttpBankOpsRepository implements BankOpsRepository {
             'item_id': line.itemId,
             'quantity': line.quantity,
             'serials': const <String>[],
+            if (line.unitPrice != null && line.unitPrice!.trim().isNotEmpty)
+              'unit_price': line.unitPrice!.trim(),
+            if (line.lotNo != null && line.lotNo!.trim().isNotEmpty)
+              'lot_no': line.lotNo!.trim(),
+            if (line.expiryDate != null && line.expiryDate!.trim().isNotEmpty)
+              'expiry_date': line.expiryDate!.trim(),
           }
       ],
     };
+    final trimmedSupplier = supplier?.trim();
+    if (serverKind == 'receipt' && trimmedSupplier != null &&
+        trimmedSupplier.isNotEmpty) {
+      payload['supplier'] = trimmedSupplier;
+    }
     if (serverKind == 'receipt') {
       payload['dest_id'] = destLocationId ?? sourceLocationId;
     } else if (serverKind == 'issue') {
@@ -837,6 +849,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
         .map((l) => StockRequestLine(
               itemId: _str(l, 'item_id'),
               quantity: _str(l, 'quantity', '0'),
+              unitPrice: l['unit_price']?.toString(),
+              lineTotal: l['line_total']?.toString(),
+              lotNo: l['lot_no']?.toString(),
+              expiryDate: l['expiry_date']?.toString(),
             ))
         .toList();
     final maker = _str(m, 'maker_id');
@@ -860,6 +876,8 @@ class HttpBankOpsRepository implements BankOpsRepository {
       rejectReason: m['reject_reason']?.toString(),
       returnReason: m['return_reason']?.toString(),
       destinationLocationId: destId,
+      supplier: m['supplier']?.toString(),
+      receivedAt: m['received_at'] != null ? _date(m, 'received_at') : null,
     );
   }
 
@@ -1167,7 +1185,14 @@ class HttpBankOpsRepository implements BankOpsRepository {
         'reason': item.detail,
       });
       return AiRiskAssessment.fromJson(res);
-    } catch (_) {
+    } catch (error) {
+      if (error is ApiException &&
+          (error.code == 'AI_UNAVAILABLE' ||
+              error.code == 'UPSTREAM_NOT_CONFIGURED')) {
+        // Backend đã trả lời rõ AI chưa sẵn sàng — không dùng điểm yếu giả
+        // lập; màn hình duyệt sẽ hiện trạng thái "chưa thẩm định" trung thực.
+        rethrow;
+      }
       final isCash = item.kind.toLowerCase() == 'cash' ||
           item.kind.toLowerCase().contains('quỹ');
       var rawImpact = item.impact;
@@ -1573,6 +1598,51 @@ class HttpBankOpsRepository implements BankOpsRepository {
                   : null,
               severity: _str(m, 'severity', 'normal'),
             ))
+        .toList();
+  }
+
+  @override
+  Future<List<ExpiryAlertItem>> getExpiryAlerts({int days = 7}) async {
+    final body = await _get('/inventory/expiry-alerts', {'days': '$days'});
+    return _asList(body, 'alerts')
+        .whereType<Map>()
+        .map((m) => ExpiryAlertItem.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  @override
+  Future<List<ConsumptionTopItem>> getConsumptionTop({
+    String? dateFrom,
+    String? dateTo,
+    int limit = 10,
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      if (dateFrom != null) 'date_from': dateFrom,
+      if (dateTo != null) 'date_to': dateTo,
+    };
+    final body = await _get('/reports/consumption-top', params);
+    return _asList(body, 'items')
+        .whereType<Map>()
+        .map((m) => ConsumptionTopItem.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  @override
+  Future<List<ShiftHistoryItem>> getShiftHistory({
+    String? dateFrom,
+    String? dateTo,
+    String? shiftCode,
+  }) async {
+    final params = <String, String>{
+      if (dateFrom != null) 'date_from': dateFrom,
+      if (dateTo != null) 'date_to': dateTo,
+      if (shiftCode != null) 'shift_code': shiftCode,
+    };
+    final body = await _get('/reports/shift-history', params);
+    return _asList(body, 'shifts')
+        .whereType<Map>()
+        .map((m) => ShiftHistoryItem.fromJson(Map<String, dynamic>.from(m)))
         .toList();
   }
 

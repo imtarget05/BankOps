@@ -15,6 +15,7 @@ class AppUser {
     this.phoneNumber,
     this.branch,
     this.employeeCode,
+    this.avatarUrl,
   });
 
   final String id;
@@ -26,6 +27,7 @@ class AppUser {
   final String? phoneNumber;
   final String? branch;
   final String? employeeCode;
+  final String? avatarUrl;
 
   String get effectiveEmail => (email != null && email!.trim().isNotEmpty)
       ? email!.trim()
@@ -60,6 +62,7 @@ class AppUser {
     String? phoneNumber,
     String? branch,
     String? employeeCode,
+    String? avatarUrl,
   }) {
     return AppUser(
       id: id ?? this.id,
@@ -71,6 +74,7 @@ class AppUser {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       branch: branch ?? this.branch,
       employeeCode: employeeCode ?? this.employeeCode,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 }
@@ -317,10 +321,23 @@ class StockMovement {
 
 /// Line item trong stock request.
 class StockRequestLine {
-  const StockRequestLine({required this.itemId, required this.quantity});
+  const StockRequestLine({
+    required this.itemId,
+    required this.quantity,
+    this.unitPrice,
+    this.lineTotal,
+    this.lotNo,
+    this.expiryDate,
+  });
 
   final String itemId;
   final String quantity;
+  // Receipt-only metadata: giá tạm tính / lô / hạn dùng để hiện trên phiếu
+  // nhập kho (SRS trà sữa). Backend không ép buộc các trường này.
+  final String? unitPrice;
+  final String? lineTotal;
+  final String? lotNo;
+  final String? expiryDate;
 }
 
 /// Stock request.
@@ -341,6 +358,8 @@ class StockRequest {
     this.rejectReason,
     this.returnReason,
     this.destinationLocationId,
+    this.supplier,
+    this.receivedAt,
   });
 
   final String id;
@@ -358,6 +377,8 @@ class StockRequest {
   final String? rejectReason;
   final String? returnReason;
   final String? destinationLocationId;
+  final String? supplier;
+  final DateTime? receivedAt;
 }
 
 /// Cash box.
@@ -1017,3 +1038,133 @@ class EtlRunRowDto {
     );
   }
 }
+
+/// Cảnh báo cận date (SRS §3.4).
+class ExpiryAlertItem {
+  const ExpiryAlertItem({
+    required this.itemId,
+    required this.sku,
+    required this.itemName,
+    required this.unit,
+    this.lotNo,
+    required this.expiryDate,
+    required this.daysLeft,
+    required this.quantity,
+    required this.severity,
+    required this.message,
+  });
+
+  final String itemId;
+  final String sku;
+  final String itemName;
+  final String unit;
+  final String? lotNo;
+  final String expiryDate;
+  final int daysLeft;
+  final String quantity;
+  final String severity; // 'critical' | 'warning' | 'watch'
+  final String message;
+
+  factory ExpiryAlertItem.fromJson(Map<String, dynamic> json) {
+    return ExpiryAlertItem(
+      itemId: json['item_id'] as String? ?? '',
+      sku: json['sku'] as String? ?? '',
+      itemName: json['item_name'] as String? ?? '',
+      unit: json['unit'] as String? ?? '',
+      lotNo: json['lot_no'] as String?,
+      expiryDate: json['expiry_date'] as String? ?? '',
+      daysLeft: (json['days_left'] as num?)?.toInt() ?? 0,
+      quantity: json['quantity']?.toString() ?? '0',
+      severity: json['severity'] as String? ?? 'warning',
+      message: json['message'] as String? ?? '',
+    );
+  }
+}
+
+/// Top nguyên liệu tiêu hao (SRS §3.5).
+class ConsumptionTopItem {
+  const ConsumptionTopItem({
+    required this.itemId,
+    required this.sku,
+    required this.name,
+    this.unit,
+    this.category,
+    required this.usedQty,
+  });
+
+  final String itemId;
+  final String sku;
+  final String name;
+  final String? unit;
+  final String? category;
+  final String usedQty;
+
+  double get usedQtyNumber => double.tryParse(usedQty) ?? 0.0;
+
+  factory ConsumptionTopItem.fromJson(Map<String, dynamic> json) {
+    return ConsumptionTopItem(
+      itemId: json['item_id'] as String? ?? '',
+      sku: json['sku'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      unit: json['unit'] as String?,
+      category: json['category'] as String?,
+      usedQty: json['used_qty']?.toString() ?? '0',
+    );
+  }
+}
+
+/// Lịch sử chốt ca (SRS §3.5).
+class ShiftHistoryItem {
+  const ShiftHistoryItem({
+    required this.id,
+    this.businessDate,
+    this.shiftCode,
+    required this.locationId,
+    required this.status,
+    required this.maker,
+    required this.lineCount,
+    required this.varianceLines,
+    required this.totalAbsVariance,
+    this.completedAt,
+  });
+
+  final String id;
+  final String? businessDate;
+  final String? shiftCode;
+  final String locationId;
+  final String status;
+  final String maker;
+  final int lineCount;
+  final int varianceLines;
+  final String totalAbsVariance;
+  final String? completedAt;
+
+  String get shiftName {
+    switch (shiftCode) {
+      case 'morning':
+        return 'Ca Sáng (07:30 - 15:00)';
+      case 'afternoon':
+        return 'Ca Chiều (15:00 - 23:00)';
+      case 'split':
+        return 'Ca Lỡ (07:30 - 18:00)';
+      default:
+        return 'Kiểm kê thường';
+    }
+  }
+
+  factory ShiftHistoryItem.fromJson(Map<String, dynamic> json) {
+    return ShiftHistoryItem(
+      id: json['id'] as String? ?? '',
+      businessDate: json['business_date'] as String?,
+      shiftCode: json['shift_code'] as String?,
+      locationId: json['location_id'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      maker: json['maker'] as String? ?? '',
+      lineCount: (json['line_count'] as num?)?.toInt() ?? 0,
+      varianceLines: (json['variance_lines'] as num?)?.toInt() ?? 0,
+      totalAbsVariance: json['total_abs_variance']?.toString() ?? '0',
+      completedAt: json['completed_at'] as String?,
+    );
+  }
+}
+

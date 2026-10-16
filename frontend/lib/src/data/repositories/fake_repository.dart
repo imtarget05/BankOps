@@ -592,6 +592,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     required RequestKind kind,
     String? sourceLocationId,
     String? destLocationId,
+    String? supplier,
     required List<StockRequestLine> lines,
     String? reason,
   }) async {
@@ -1311,6 +1312,113 @@ class FakeBankOpsRepository implements BankOpsRepository {
     int criticalDays = 90,
   }) =>
       _delay(_seedStagnation());
+
+  // =========================================================================
+  // SRS Trà Sữa: Cảnh báo cận date & Báo cáo F&B
+  // =========================================================================
+
+  @override
+  Future<List<ExpiryAlertItem>> getExpiryAlerts({int days = 7}) =>
+      _delay([
+        const ExpiryAlertItem(
+          itemId: 'i-sua-tuoi-barista',
+          sku: 'SUA-BARISTA-1L',
+          itemName: 'Sữa tươi thanh trùng Barista 1L',
+          unit: 'Hộp',
+          lotNo: 'L2610-01',
+          expiryDate: '2026-10-18',
+          daysLeft: 2,
+          quantity: '5',
+          severity: 'warning',
+          message: 'Lô L2610-01 Sữa tươi thanh trùng Barista 1L HSD 2026-10-18 (còn 2 ngày)',
+        ),
+        const ExpiryAlertItem(
+          itemId: 'i-kem-cheese-anchor',
+          sku: 'KEM-CHEESE-1KG',
+          itemName: 'Kem phô mai tươi Anchor',
+          unit: 'Hộp',
+          lotNo: 'L2610-02',
+          expiryDate: '2026-10-16',
+          daysLeft: 0,
+          quantity: '2',
+          severity: 'critical',
+          message: 'Lô L2610-02 Kem phô mai tươi Anchor HSD 2026-10-16 (Hết hạn hôm nay!)',
+        ),
+      ]);
+
+  @override
+  Future<List<ConsumptionTopItem>> getConsumptionTop({
+    String? dateFrom,
+    String? dateTo,
+    int limit = 10,
+  }) =>
+      _delay([
+        const ConsumptionTopItem(
+          itemId: 'i-tra-den-phuc-long',
+          sku: 'TRA-DEN-500G',
+          name: 'Trà đen Phúc Long thượng hạng',
+          unit: 'Gói',
+          category: 'Trà & Cốt trà',
+          usedQty: '48.5',
+        ),
+        const ConsumptionTopItem(
+          itemId: 'i-sua-dac-ngoi-sao',
+          sku: 'SUA-DAC-NG-SAO',
+          name: 'Sữa đặc Ngôi Sao Phương Nam 1.28kg',
+          unit: 'Hộp',
+          category: 'Sữa & Bột béo',
+          usedQty: '36.0',
+        ),
+        const ConsumptionTopItem(
+          itemId: 'i-tran-chau-den-gia-thinh',
+          sku: 'TC-DEN-GIA-THINH',
+          name: 'Trân châu đen Gia Thịnh Phát 3kg',
+          unit: 'Túi',
+          category: 'Topping & Hạt',
+          usedQty: '25.0',
+        ),
+        const ConsumptionTopItem(
+          itemId: 'i-siro-dao-monin',
+          sku: 'SIRO-DAO-MONIN',
+          name: 'Siro đào Monin 700ml',
+          unit: 'Chai',
+          category: 'Siro & Đường',
+          usedQty: '14.0',
+        ),
+      ]);
+
+  @override
+  Future<List<ShiftHistoryItem>> getShiftHistory({
+    String? dateFrom,
+    String? dateTo,
+    String? shiftCode,
+  }) =>
+      _delay([
+        const ShiftHistoryItem(
+          id: 'st-shift-101',
+          businessDate: '2026-10-15',
+          shiftCode: 'morning',
+          locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+          status: 'closed',
+          maker: 'Nguyễn Văn Pha (Trưởng ca sáng)',
+          lineCount: 8,
+          varianceLines: 0,
+          totalAbsVariance: '0.0',
+          completedAt: '2026-10-15T15:05:00Z',
+        ),
+        const ShiftHistoryItem(
+          id: 'st-shift-102',
+          businessDate: '2026-10-15',
+          shiftCode: 'afternoon',
+          locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+          status: 'closed',
+          maker: 'Trần Thị Ngon (Trưởng ca chiều)',
+          lineCount: 8,
+          varianceLines: 1,
+          totalAbsVariance: '0.2',
+          completedAt: '2026-10-15T23:10:00Z',
+        ),
+      ]);
 
   // =========================================================================
   // Admin IAM (Phase 1)

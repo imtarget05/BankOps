@@ -208,8 +208,10 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
         answer = 'Tài khoản này chưa được phép dùng trợ lý nghiệp vụ.';
       } else if (error.statusCode == 429) {
         answer = 'Bạn đã gửi quá nhiều câu hỏi. Hãy thử lại sau một phút.';
+      } else if (error.statusCode == 503) {
+        answer = 'Khai chưa sẵn sàng. Vui lòng thử lại sau.';
       } else {
-        answer = 'Khai chưa sẵn sàng. Hãy thử lại sau.';
+        answer = 'Máy chủ trả lỗi ${error.statusCode}.';
       }
     } catch (_) {
       answer = 'Không kết nối được với Khai. Hãy kiểm tra kết nối rồi thử lại.';

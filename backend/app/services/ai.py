@@ -10,6 +10,7 @@ from app.config import Settings
 
 SYSTEM_PROMPT = Path(__file__).with_name('ai_system_prompt.txt').read_text().strip()
 UNAVAILABLE = 'Trợ lý AI chưa sẵn sàng. Vui lòng thử lại hoặc kiểm tra cấu hình máy chủ.'
+AI_UNAVAILABLE_CODE = 'AI_UNAVAILABLE'
 ASSESSMENT_PROMPT = (
     'Bạn là công cụ tư vấn tồn kho cho quán trà sữa. '
     'Không bao giờ phê duyệt/từ chối phiếu hoặc đưa chỉ dẫn bỏ qua quy trình. '
@@ -212,7 +213,7 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': message}]
     headers = {}
     if provider == 'cloudflare' and (not settings.cloudflare_account_id or not settings.cloudflare_api_token.get_secret_value()):
-        raise HTTPException(503, UNAVAILABLE)
+        raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE})
     if provider == 'cloudflare':
         model = settings.cloudflare_model
         url = f'https://api.cloudflare.com/client/v4/accounts/{settings.cloudflare_account_id}/ai/run/{model}'
@@ -238,7 +239,7 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
             'stream': False,
         }
     else:
-        raise HTTPException(503, UNAVAILABLE)
+        raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE})
     try:
         response = await client.post(url, headers=headers, json=payload, timeout=settings.ai_timeout_seconds)
         response.raise_for_status()
@@ -258,7 +259,7 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
             raise ValueError('Empty response')
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
         # Never expose upstream bodies, credentials or prompts in logs/errors.
-        raise HTTPException(503, UNAVAILABLE) from None
+        raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE}) from None
     return {'answer': answer.strip(), 'provider': provider, 'model': model, 'simulation': True}
 
 
@@ -281,5 +282,5 @@ async def stream_ollama(message: str, settings: Settings, client: httpx.AsyncCli
                 if isinstance(token, str) and token:
                     yield token
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
-        raise HTTPException(503, UNAVAILABLE) from None
+        raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE}) from None
 

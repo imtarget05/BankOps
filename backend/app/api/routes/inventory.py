@@ -257,6 +257,10 @@ def _req_out(req: InventoryRequest, lines: list | None = None) -> dict:
         body["dest_id"] = str(req.dest_id)
     if getattr(req, "return_reason", None):
         body["return_reason"] = req.return_reason
+    if getattr(req, "supplier", None):
+        body["supplier"] = req.supplier
+    if getattr(req, "received_at", None):
+        body["received_at"] = req.received_at.isoformat()
     if lines is not None:
         body["lines"] = lines
     return body
@@ -971,7 +975,7 @@ async def submit_request(
     if str(req.maker_id) != str(user.id):
         raise AppError(403, "FORBIDDEN", "Chỉ maker mới được submit phiếu của mình")
     if req.status not in ("draft", "returned"):
-        raise AppError(409, "STATE_CONFLICT", f"cannot submit từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể gửi phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     # Lock the request before reserving stock, so a duplicate concurrent submit
@@ -986,7 +990,7 @@ async def submit_request(
             )
         ).scalar_one()
         if req.status not in ("draft", "returned"):
-            raise AppError(409, "STATE_CONFLICT", f"cannot submit từ {req.status}")
+            raise AppError(409, "STATE_CONFLICT", f"Không thể gửi phiếu khi đang ở trạng thái {req.status}.")
 
     lines = (
         await db.execute(
@@ -1072,11 +1076,11 @@ async def approve_request(
     # role has no approval capability.  The final state is still rechecked
     # under the row lock below before any posting can occur.
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự duyệt phiếu của chính mình.")
 
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: inventory:approve_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt phiếu kho.")
 
     # Every final decision takes the same row lock.  Reject/return use this
     # exact pattern, so a losing action observes the final state and cannot
@@ -1094,9 +1098,9 @@ async def approve_request(
     # Invariant 1 — maker không tự duyệt, kể cả admin. Recheck after the
     # final-decision lock to keep the invariant adjacent to the mutation.
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự duyệt phiếu của chính mình.")
     if req.status != "submitted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot approve từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể duyệt phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     lines = (
@@ -1119,7 +1123,7 @@ async def approve_request(
             bal = balances.get((req.source_id, item_id))
             have = Decimal(str(bal.quantity)) if bal else _ZERO
             if have < qty:
-                raise AppError(409, "INSUFFICIENT_STOCK", "không đủ tồn tại kho nguồn")
+                raise AppError(409, "INSUFFICIENT_STOCK", "Không đủ tồn kho ở kho nguồn.")
             reserved = (
                 Decimal(str(getattr(bal, "reserved_quantity", 0) or 0))
                 if bal is not None
@@ -1142,7 +1146,7 @@ async def approve_request(
             target = req.dest_id or req.source_id
             bal = balances.get((target, ln.item_id)) if target is not None else None
             if bal is None or Decimal(str(bal.quantity)) < Decimal(str(ln.quantity)):
-                raise AppError(409, "INSUFFICIENT_STOCK", "điều chỉnh giảm vượt quá tồn kho")
+                raise AppError(409, "INSUFFICIENT_STOCK", "Phiếu điều chỉnh giảm vượt quá tồn kho hiện có.")
 
     amount = sum(
         Decimal(str(line.quantity)) for line in lines
@@ -1308,7 +1312,7 @@ async def reject_request(
     req = await _load_request(db, request_id)
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: inventory:approve_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt phiếu kho.")
     req = (
         await db.execute(
             select(InventoryRequest)
@@ -1320,9 +1324,9 @@ async def reject_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự duyệt (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự duyệt phiếu của chính mình.")
     if req.status != "submitted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot reject từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể từ chối phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     lines = (
@@ -1374,7 +1378,7 @@ async def return_request(
     req = await _load_request(db, request_id)
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "missing capability: inventory:approve_request")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt phiếu kho.")
     req = (
         await db.execute(
             select(InventoryRequest)
@@ -1386,9 +1390,9 @@ async def return_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "maker không được tự trả về phiếu của mình (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự trả về phiếu của chính mình.")
     if req.status != "submitted":
-        raise AppError(409, "STATE_CONFLICT", f"cannot return từ {req.status}")
+        raise AppError(409, "STATE_CONFLICT", f"Không thể trả lại phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
     reason = str(payload.get("reason", "")).strip() if payload else ""
@@ -2238,7 +2242,7 @@ async def approve_stocktake(
 
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
-        raise AppError(403, "FORBIDDEN", "Thiếu quyền inventory:approve_request để phê duyệt kiểm kê")
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt kiểm kê.")
 
     # Single-winner state transition: the second checker waits and then sees
     # `closed`, so it cannot emit a second adjustment draft.
@@ -2253,7 +2257,7 @@ async def approve_stocktake(
 
     # Invariant A1: Maker không tự duyệt đợt kiểm kê của chính mình
     if str(st.maker_id) == str(user.id):
-        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Maker không được tự duyệt đợt kiểm kê của mình (A1)")
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự duyệt đợt kiểm kê của chính mình.")
 
     if st.status != "submitted":
         raise AppError(409, "STATE_CONFLICT", f"Không thể approve từ trạng thái {st.status}")

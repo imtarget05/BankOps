@@ -11,7 +11,10 @@ def test_google_login_validation_errors(client):
     assert r.status_code == 422
     data = r.json()
     assert data["error"]["code"] == "VALIDATION_ERROR"
-    assert data["error"]["message"] == "Validation failed"
+    assert data["error"]["message"] == "Dữ liệu gửi lên chưa hợp lệ. Vui lòng kiểm tra lại các trường bắt buộc."
+    # details chỉ giữ loc/msg/type, không lộ input (password/token)
+    for e in data["error"]["details"]["errors"]:
+        assert "input" not in e
 
     # 2. Short id_token
     r = client.post("/api/v1/auth/google", json={"id_token": "short"})
