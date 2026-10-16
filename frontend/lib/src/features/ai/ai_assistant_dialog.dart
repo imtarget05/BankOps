@@ -15,6 +15,7 @@ class AiAssistantDialog extends StatefulWidget {
 
   static Future<void> show(BuildContext context) {
     final repo = RepositoryScope.maybeOf(context);
+    final theme = Theme.of(context);
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -27,7 +28,14 @@ class AiAssistantDialog extends StatefulWidget {
         if (repo != null) {
           child = RepositoryScope(repository: repo, child: child);
         }
-        return child;
+        return Theme(
+          data: theme.copyWith(
+            bottomSheetTheme: theme.bottomSheetTheme.copyWith(
+              showDragHandle: false,
+            ),
+          ),
+          child: child,
+        );
       },
     );
   }
@@ -118,33 +126,19 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
         final localSop = _getLocalSopAnswer(query);
         answer = localSop ??
             '📌 **Quy chuẩn vận hành**: Khai đang hoạt động ở chế độ ngoại tuyến (Offline Demo). Mọi thao tác kho được lưu trữ an toàn trên thiết bị của bạn.';
-        if (mounted && !_disposed) {
-          setState(() => _messages[responseIndex] =
-              _ChatMessage(isUser: false, text: answer));
-          _scrollToBottom();
-        }
         return;
       }
 
-      final token = repository is HttpBankOpsRepository
-          ? await repository.accessToken
-          : await auth.getAccessToken();
+      final token = await repository.accessToken;
       if (token == null || token.isEmpty) {
         final localSop = _getLocalSopAnswer(query);
         if (localSop != null) {
           answer = localSop;
-          if (mounted && !_disposed) {
-            setState(() => _messages[responseIndex] =
-                _ChatMessage(isUser: false, text: answer));
-            _scrollToBottom();
-          }
           return;
         }
         throw const _ChatRequestFailure(401);
       }
-      final apiBaseUrl = repository is HttpBankOpsRepository
-          ? repository.baseUrl
-          : auth.apiBaseUrl;
+      final apiBaseUrl = repository.baseUrl;
       final request =
           http.Request('POST', Uri.parse('$apiBaseUrl/ai/chat/stream'))
             ..headers.addAll({
@@ -255,15 +249,21 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       final localSop = _getLocalSopAnswer(query);
       answer = localSop ??
           'Không kết nối được với Khai. Hãy kiểm tra kết nối rồi thử lại.';
+    } finally {
+      if (mounted && !_disposed) {
+        setState(() {
+          if (answer.isNotEmpty) {
+            _messages[responseIndex] = _ChatMessage(
+              isUser: false,
+              text: answer,
+              needsSignIn: needsSignIn,
+            );
+          }
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
     }
-
-    if (!mounted || _disposed) return;
-    setState(() {
-      _messages[responseIndex] =
-          _ChatMessage(isUser: false, text: answer, needsSignIn: needsSignIn);
-      _isLoading = false;
-    });
-    _scrollToBottom();
   }
 
   static String? _getLocalSopAnswer(String query) {
