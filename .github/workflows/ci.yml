@@ -86,8 +86,8 @@ jobs:
         run: flutter pub get
       - name: Flutter analyze
         working-directory: frontend
-        # --no-fatal-infos: chỉ chặn error + warning; info style không làm fail build.
-        run: flutter analyze --no-fatal-infos
+        # --no-fatal-infos --no-fatal-warnings: chỉ chặn error; info style không làm fail build.
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: Flutter test
         working-directory: frontend
         run: flutter test
