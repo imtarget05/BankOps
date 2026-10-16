@@ -937,34 +937,33 @@ class _RequestsScreenState extends State<RequestsScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Quản Lý & Lập Phiếu Yêu Cầu',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 720;
+                  final titleWidget = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quản Lý & Lập Phiếu Yêu Cầu',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Khởi tạo phiếu nhập, xuất và điều chỉnh nguyên liệu để quản lý phê duyệt',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 13,
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Khởi tạo phiếu nhập, xuất và điều chỉnh nguyên liệu để quản lý phê duyệt',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 13,
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Wrap(
+                      ),
+                    ],
+                  );
+
+                  final buttonsWidget = Wrap(
                     spacing: 10,
+                    runSpacing: 8,
                     children: [
                       FilledButton.icon(
                         key: const Key('btn-create-stock-request'),
@@ -1008,8 +1007,28 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         ),
                       ),
                     ],
-                  ),
-                ],
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        titleWidget,
+                        const SizedBox(height: 12),
+                        buttonsWidget,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: titleWidget),
+                      const SizedBox(width: 16),
+                      buttonsWidget,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 20),
 
@@ -1071,8 +1090,11 @@ class _RequestsScreenState extends State<RequestsScreen> {
               const SizedBox(height: 20),
 
               // Phiếu kho
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
                 children: [
                   Text(
                     'Phiếu Kho Nguyên Liệu (${_statusFilter == null ? data.stockRequests.length : data.stockRequests.where((r) => r.status == _statusFilter).length})',
@@ -1107,9 +1129,11 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
+                    child: LayoutBuilder(
+                      builder: (context, cardConstraints) {
+                        final isCompact = cardConstraints.maxWidth < 640;
+
+                        final iconWidget = Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color:
@@ -1118,133 +1142,176 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           ),
                           child: const Icon(Icons.inventory_2_outlined,
                               color: Color(0xFF2563EB), size: 20),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
+                        );
+
+                        final detailsWidget = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
                                     'Phiếu kho ${r.id.length > 8 ? "${r.id.substring(0, 8)}…" : r.id}',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(width: 8),
-                                  _statusChip(r.status),
-                                  const Spacer(),
-                                  IconButton(
-                                    key: Key('print-stock-${r.id}'),
-                                    icon: const Icon(Icons.print_outlined,
-                                        size: 20),
-                                    tooltip: 'In phiếu ${r.id} (AI Kiểm Duyệt)',
-                                    onPressed: () => _printStockWithAiCheck(r),
-                                  ),
-                                  IconButton(
-                                    key: Key('request-history-stock-${r.id}'),
-                                    icon: const Icon(Icons.history_outlined,
-                                        size: 20),
-                                    tooltip: 'Lịch sử phiếu ${r.id}',
-                                    onPressed: () => _showHistory(r.id),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Loại: ${r.kind.label} • Người lập: ${r.createdByName} • Lý do: ${r.reason.isEmpty ? "Xuất nhập kho định kỳ" : r.reason}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                              ),
-                              if (r.status == RequestStatus.returned &&
-                                  (r.returnReason?.isNotEmpty ?? false)) ...[
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFFBEB),
-                                    border: Border.all(
-                                        color: const Color(0xFFFDE68A)),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                          Icons.assignment_return_outlined,
-                                          size: 16,
-                                          color: Color(0xFFD97706)),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'Ý kiến KSV: ${r.returnReason}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF92400E),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                const SizedBox(width: 8),
+                                _statusChip(r.status),
+                                const Spacer(),
+                                IconButton(
+                                  key: Key('print-stock-${r.id}'),
+                                  icon: const Icon(Icons.print_outlined,
+                                      size: 20),
+                                  tooltip: 'In phiếu ${r.id} (AI Kiểm Duyệt)',
+                                  onPressed: () => _printStockWithAiCheck(r),
+                                ),
+                                IconButton(
+                                  key: Key('request-history-stock-${r.id}'),
+                                  icon: const Icon(Icons.history_outlined,
+                                      size: 20),
+                                  tooltip: 'Lịch sử phiếu ${r.id}',
+                                  onPressed: () => _showHistory(r.id),
                                 ),
                               ],
-                            ],
-                          ),
-                        ),
-                        if (r.status == RequestStatus.draft)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                key: Key('btn-delete-stock-${r.id}'),
-                                icon: const Icon(Icons.delete_outline,
-                                    color: Colors.red, size: 20),
-                                tooltip: 'Xoá phiếu nháp',
-                                onPressed:
-                                    _busy ? null : () => _deleteStock(r.id),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Loại: ${r.kind.label} • Người lập: ${r.createdByName} • Lý do: ${r.reason.isEmpty ? "Xuất nhập kho định kỳ" : r.reason}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
-                              const SizedBox(width: 4),
-                              FilledButton.icon(
-                                key: Key('btn-submit-stock-${r.id}'),
-                                onPressed:
-                                    _busy ? null : () => _submitStock(r.id),
-                                icon: const Icon(Icons.send_rounded, size: 16),
-                                label: const Text('Gửi duyệt'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2563EB),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                            ),
+                            if (r.status == RequestStatus.returned &&
+                                (r.returnReason?.isNotEmpty ?? false)) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFFBEB),
+                                  border: Border.all(
+                                      color: const Color(0xFFFDE68A)),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                        Icons.assignment_return_outlined,
+                                        size: 16,
+                                        color: Color(0xFFD97706)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Ý kiến KSV: ${r.returnReason}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF92400E),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          )
-                        else if (r.status == RequestStatus.returned)
-                          FilledButton.icon(
-                            key: Key('btn-resubmit-stock-${r.id}'),
-                            onPressed: _busy ? null : () => _submitStock(r.id),
-                            icon: const Icon(Icons.refresh_rounded, size: 16),
-                            label: const Text('Gửi duyệt lại'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFD97706),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                          )
-                        else
-                          _statusBadge(r.status),
-                      ],
+                          ],
+                        );
+
+                        final actionsWidget = r.status == RequestStatus.draft
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    key: Key('btn-delete-stock-${r.id}'),
+                                    icon: const Icon(Icons.delete_outline,
+                                        color: Colors.red, size: 20),
+                                    tooltip: 'Xoá phiếu nháp',
+                                    onPressed:
+                                        _busy ? null : () => _deleteStock(r.id),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  FilledButton.icon(
+                                    key: Key('btn-submit-stock-${r.id}'),
+                                    onPressed:
+                                        _busy ? null : () => _submitStock(r.id),
+                                    icon: const Icon(Icons.send_rounded,
+                                        size: 16),
+                                    label: const Text('Gửi duyệt'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFF2563EB),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : (r.status == RequestStatus.returned
+                                ? FilledButton.icon(
+                                    key: Key('btn-resubmit-stock-${r.id}'),
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _submitStock(r.id),
+                                    icon: const Icon(Icons.refresh_rounded,
+                                        size: 16),
+                                    label: const Text('Gửi duyệt lại'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFFD97706),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                    ),
+                                  )
+                                : _statusBadge(r.status));
+
+                        if (isCompact) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  iconWidget,
+                                  const SizedBox(width: 12),
+                                  Expanded(child: detailsWidget),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: actionsWidget,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            iconWidget,
+                            const SizedBox(width: 14),
+                            Expanded(child: detailsWidget),
+                            const SizedBox(width: 12),
+                            actionsWidget,
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
               const SizedBox(height: 24),
 
               // Phiếu quỹ
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
                 children: [
                   Text(
                     'Phiếu Điều Chỉnh Kho (${_statusFilter == null ? data.cashRequests.length : data.cashRequests.where((r) => r.status == _statusFilter).length})',
@@ -1279,9 +1346,11 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
+                    child: LayoutBuilder(
+                      builder: (context, cardConstraints) {
+                        final isCompact = cardConstraints.maxWidth < 640;
+
+                        final iconWidget = Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color:
@@ -1290,125 +1359,165 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           ),
                           child: const Icon(Icons.savings_outlined,
                               color: Color(0xFF059669), size: 20),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
+                        );
+
+                        final detailsWidget = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
                                     'Phiếu quỹ ${r.id.length > 8 ? "${r.id.substring(0, 8)}…" : r.id}',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 14),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(width: 8),
-                                  _statusChip(r.status),
-                                  const Spacer(),
-                                  IconButton(
-                                    key: Key('print-cash-${r.id}'),
-                                    icon: const Icon(Icons.print_outlined,
-                                        size: 20),
-                                    tooltip: 'In phiếu ${r.id} (AI Kiểm Duyệt)',
-                                    onPressed: () => _printCashWithAiCheck(r),
-                                  ),
-                                  IconButton(
-                                    key: Key('request-history-cash-${r.id}'),
-                                    icon: const Icon(Icons.history_outlined,
-                                        size: 20),
-                                    tooltip: 'Lịch sử phiếu ${r.id}',
-                                    onPressed: () => _showHistory(r.id),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Số tiền: ${AppFormat.money(r.amount, currency: r.currency)} • Người lập: ${r.createdByName} • Lý do: ${r.reason.isEmpty ? "Giao dịch quỹ thường kỳ" : r.reason}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                              ),
-                              if (r.status == RequestStatus.returned &&
-                                  (r.returnReason?.isNotEmpty ?? false)) ...[
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFFBEB),
-                                    border: Border.all(
-                                        color: const Color(0xFFFDE68A)),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                          Icons.assignment_return_outlined,
-                                          size: 16,
-                                          color: Color(0xFFD97706)),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'Ý kiến KSV: ${r.returnReason}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF92400E),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                const SizedBox(width: 8),
+                                _statusChip(r.status),
+                                const Spacer(),
+                                IconButton(
+                                  key: Key('print-cash-${r.id}'),
+                                  icon: const Icon(Icons.print_outlined,
+                                      size: 20),
+                                  tooltip: 'In phiếu ${r.id} (AI Kiểm Duyệt)',
+                                  onPressed: () => _printCashWithAiCheck(r),
+                                ),
+                                IconButton(
+                                  key: Key('request-history-cash-${r.id}'),
+                                  icon: const Icon(Icons.history_outlined,
+                                      size: 20),
+                                  tooltip: 'Lịch sử phiếu ${r.id}',
+                                  onPressed: () => _showHistory(r.id),
                                 ),
                               ],
-                            ],
-                          ),
-                        ),
-                        if (r.status == RequestStatus.draft)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                key: Key('btn-delete-cash-${r.id}'),
-                                icon: const Icon(Icons.delete_outline,
-                                    color: Colors.red, size: 20),
-                                tooltip: 'Xoá phiếu nháp',
-                                onPressed:
-                                    _busy ? null : () => _deleteCash(r.id),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Số tiền: ${AppFormat.money(r.amount, currency: r.currency)} • Người lập: ${r.createdByName} • Lý do: ${r.reason.isEmpty ? "Giao dịch quỹ thường kỳ" : r.reason}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
-                              const SizedBox(width: 4),
-                              FilledButton.icon(
-                                key: Key('btn-submit-cash-${r.id}'),
-                                onPressed:
-                                    _busy ? null : () => _submitCash(r.id),
-                                icon: const Icon(Icons.send_rounded, size: 16),
-                                label: const Text('Gửi duyệt'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF059669),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                            ),
+                            if (r.status == RequestStatus.returned &&
+                                (r.returnReason?.isNotEmpty ?? false)) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFFBEB),
+                                  border: Border.all(
+                                      color: const Color(0xFFFDE68A)),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                        Icons.assignment_return_outlined,
+                                        size: 16,
+                                        color: Color(0xFFD97706)),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Ý kiến KSV: ${r.returnReason}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF92400E),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          )
-                        else if (r.status == RequestStatus.returned)
-                          FilledButton.icon(
-                            key: Key('btn-resubmit-cash-${r.id}'),
-                            onPressed: _busy ? null : () => _submitCash(r.id),
-                            icon: const Icon(Icons.refresh_rounded, size: 16),
-                            label: const Text('Gửi duyệt lại'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFD97706),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                          )
-                        else
-                          _statusBadge(r.status),
-                      ],
+                          ],
+                        );
+
+                        final actionsWidget = r.status == RequestStatus.draft
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    key: Key('btn-delete-cash-${r.id}'),
+                                    icon: const Icon(Icons.delete_outline,
+                                        color: Colors.red, size: 20),
+                                    tooltip: 'Xoá phiếu nháp',
+                                    onPressed:
+                                        _busy ? null : () => _deleteCash(r.id),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  FilledButton.icon(
+                                    key: Key('btn-submit-cash-${r.id}'),
+                                    onPressed:
+                                        _busy ? null : () => _submitCash(r.id),
+                                    icon: const Icon(Icons.send_rounded,
+                                        size: 16),
+                                    label: const Text('Gửi duyệt'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFF059669),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : (r.status == RequestStatus.returned
+                                ? FilledButton.icon(
+                                    key: Key('btn-resubmit-cash-${r.id}'),
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _submitCash(r.id),
+                                    icon: const Icon(Icons.refresh_rounded,
+                                        size: 16),
+                                    label: const Text('Gửi duyệt lại'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFFD97706),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                    ),
+                                  )
+                                : _statusBadge(r.status));
+
+                        if (isCompact) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  iconWidget,
+                                  const SizedBox(width: 12),
+                                  Expanded(child: detailsWidget),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: actionsWidget,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            iconWidget,
+                            const SizedBox(width: 14),
+                            Expanded(child: detailsWidget),
+                            const SizedBox(width: 12),
+                            actionsWidget,
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),

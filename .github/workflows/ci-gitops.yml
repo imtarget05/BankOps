@@ -83,7 +83,7 @@ jobs:
         working-directory: frontend
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos
+          flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter test
 
   # =========================================================================

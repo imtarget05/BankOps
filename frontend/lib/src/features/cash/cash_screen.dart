@@ -254,33 +254,31 @@ class _CashScreenState extends State<CashScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               // Header Panel
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Quản Lý Quỹ Tiền Mặt & Két Sắt',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 640;
+                  final titleWidget = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quản Lý Quỹ Tiền Mặt & Két Sắt',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Kiểm soát hạn mức tồn quỹ chi nhánh, tiền mặt tại quầy và nhật ký bút toán',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 13,
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Kiểm soát hạn mức tồn quỹ chi nhánh, tiền mặt tại quầy và nhật ký bút toán',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 13,
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Wrap(
+                      ),
+                    ],
+                  );
+
+                  final buttonsWidget = Wrap(
                     spacing: 10,
                     runSpacing: 8,
                     children: [
@@ -290,7 +288,8 @@ class _CashScreenState extends State<CashScreen> {
                         icon: const Icon(Icons.add_box_outlined, size: 18),
                         label: const Text('Thêm két sắt mới'),
                         style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                       FilledButton.icon(
@@ -306,51 +305,87 @@ class _CashScreenState extends State<CashScreen> {
                         label: const Text('Lập phiếu quỹ mới'),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF059669),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                     ],
-                  ),
-                ],
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        titleWidget,
+                        const SizedBox(height: 12),
+                        buttonsWidget,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: titleWidget),
+                      const SizedBox(width: 16),
+                      buttonsWidget,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 20),
 
               // Metric Overview Strip
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildMetricBox(
-                      context,
-                      title: 'TỔNG TỒN QUỸ KHẢ DỤNG',
-                      value: AppFormat.money(totalCash.toStringAsFixed(0)),
-                      subtitle: 'Đã khóa sổ ca giao dịch gần nhất',
-                      icon: Icons.account_balance_wallet_rounded,
-                      color: const Color(0xFF059669),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildMetricBox(
-                      context,
-                      title: 'SỐ LƯỢNG KÉT QUỸ CHI NHÁNH',
-                      value: '${data.cashboxes.length} két sắt',
-                      subtitle: '100% két đang sẵn sàng hoạt động',
-                      icon: Icons.lock_clock_rounded,
-                      color: const Color(0xFF2563EB),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildMetricBox(
-                      context,
-                      title: 'BÚT TOÁN ĐÃ GHI SỔ',
-                      value: '${data.journals.length} giao dịch',
-                      subtitle: 'Đã đối chiếu sổ cái (GL) khớp 100%',
-                      icon: Icons.receipt_long_rounded,
-                      color: const Color(0xFF7C3AED),
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 640;
+                  final box1 = _buildMetricBox(
+                    context,
+                    title: 'TỔNG TỒN QUỸ KHẢ DỤNG',
+                    value: AppFormat.money(totalCash.toStringAsFixed(0)),
+                    subtitle: 'Đã khóa sổ ca giao dịch gần nhất',
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: const Color(0xFF059669),
+                  );
+                  final box2 = _buildMetricBox(
+                    context,
+                    title: 'SỐ LƯỢNG KÉT QUỸ CHI NHÁNH',
+                    value: '${data.cashboxes.length} két sắt',
+                    subtitle: '100% két đang sẵn sàng hoạt động',
+                    icon: Icons.lock_clock_rounded,
+                    color: const Color(0xFF2563EB),
+                  );
+                  final box3 = _buildMetricBox(
+                    context,
+                    title: 'BÚT TOÁN ĐÃ GHI SỔ',
+                    value: '${data.journals.length} giao dịch',
+                    subtitle: 'Đã đối chiếu sổ cái (GL) khớp 100%',
+                    icon: Icons.receipt_long_rounded,
+                    color: const Color(0xFF7C3AED),
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      children: [
+                        box1,
+                        const SizedBox(height: 10),
+                        box2,
+                        const SizedBox(height: 10),
+                        box3,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: box1),
+                      const SizedBox(width: 14),
+                      Expanded(child: box2),
+                      const SizedBox(width: 14),
+                      Expanded(child: box3),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
 

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../data/repositories/bankops_repository.dart';
 
 /// Chuyển một lỗi bất kỳ thành câu hiển thị an toàn cho người dùng.
@@ -12,6 +14,7 @@ import '../../data/repositories/bankops_repository.dart';
 /// ánh xạ theo code để user vẫn thấy tiếng Việt thân thiện như mọi
 /// notification khác trong hệ thống.
 String friendlyError(Object? error) {
+  debugPrint('[friendlyError] $error');
   if (error is ApiException) return _friendlyApiMessage(error);
   if (error is FormatException) return error.message;
   return 'Không kết nối được máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';

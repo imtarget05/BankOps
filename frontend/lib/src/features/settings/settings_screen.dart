@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../app/app_shell.dart';
 import '../../app/theme_mode_controller.dart';
 import '../../core/i18n/locale_controller.dart';
 import '../../core/theme/app_ui_settings_controller.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../core/util/web_helpers.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/util/role_visibility.dart';
@@ -732,6 +735,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
             const SectionHeader(title: 'Ứng dụng', showCount: false),
             const SizedBox(height: AppSpacing.md),
+            const _AppDownloadCard(),
+            const SizedBox(height: AppSpacing.lg),
             Card(
               child: Column(
                 children: [
@@ -969,3 +974,293 @@ class _ColorPresetCard extends StatelessWidget {
     );
   }
 }
+
+class _AppDownloadCard extends StatefulWidget {
+  const _AppDownloadCard();
+
+  @override
+  State<_AppDownloadCard> createState() => _AppDownloadCardState();
+}
+
+class _AppDownloadCardState extends State<_AppDownloadCard> {
+  int _selectedPlatformTab = 0;
+
+  static const String appUrl =
+      'https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev';
+  static const String apkDownloadUrl =
+      'https://github.com/mainguyenbinhtan/BankOps/releases/latest';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 640;
+
+            final qrBlock = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: QrImageView(
+                    data: appUrl,
+                    version: QrVersions.auto,
+                    size: isCompact ? 140 : 160,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Color(0xFF1E293B),
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Quét mã mở trên điện thoại',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            );
+
+            final actionsAndGuides = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.install_mobile_rounded,
+                          color: Color(0xFF0284C7), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Cài đặt Ứng dụng Di động',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'Tự động cài đặt PWA hoặc tải APK chạy độc lập mượt mà như app gốc',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      key: const Key('btn-install-pwa'),
+                      onPressed: () {
+                        promptPwaInstall();
+                        AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
+                      },
+                      icon: const Icon(Icons.download_for_offline_rounded, size: 18),
+                      label: const Text('Cài đặt Web App (1-Click PWA)'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF0284C7),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('btn-download-apk'),
+                      onPressed: () => openWebUrl(apkDownloadUrl),
+                      icon: const Icon(Icons.android_rounded, size: 18, color: Color(0xFF059669)),
+                      label: const Text(
+                        'Tải File APK (Android)',
+                        style: TextStyle(color: Color(0xFF059669), fontWeight: FontWeight.w700),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF6EE7B7)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('btn-copy-install-link'),
+                      onPressed: () async {
+                        await Clipboard.setData(const ClipboardData(text: appUrl));
+                        if (context.mounted) {
+                          AppToast.success(context, 'Đã sao chép liên kết ứng dụng: $appUrl');
+                        }
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Sao chép link web'),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Text(
+                  'Hướng dẫn thêm vào màn hình chính (Home Screen):',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 0,
+                      label: Text('Android / Chrome'),
+                      icon: Icon(Icons.android, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: 1,
+                      label: Text('iPhone / Safari'),
+                      icon: Icon(Icons.apple, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: 2,
+                      label: Text('Zalo / Quét QR'),
+                      icon: Icon(Icons.qr_code_scanner, size: 16),
+                    ),
+                  ],
+                  selected: {_selectedPlatformTab},
+                  onSelectionChanged: (val) {
+                    setState(() => _selectedPlatformTab = val.first);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: _buildGuideContent(_selectedPlatformTab),
+                ),
+              ],
+            );
+
+            if (isCompact) {
+              return Column(
+                children: [
+                  qrBlock,
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  actionsAndGuides,
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                qrBlock,
+                const SizedBox(width: 24),
+                Expanded(child: actionsAndGuides),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuideContent(int tabIndex) {
+    switch (tabIndex) {
+      case 0:
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '1. Mở website bằng trình duyệt Google Chrome trên điện thoại.\n'
+              '2. Nhấn nút 3 chấm dọc (⋮) ở góc trên bên phải màn hình.\n'
+              '3. Chọn "Cài đặt ứng dụng" (hoặc "Thêm vào màn hình chính").\n'
+              '4. Biểu tượng ứng dụng Quản Lý Kho Trà Sữa sẽ xuất hiện ngay trên màn hình chính của bạn.',
+              style: TextStyle(fontSize: 12.5, height: 1.5),
+            ),
+          ],
+        );
+      case 1:
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '1. Mở website bằng trình duyệt Safari trên iPhone / iPad.\n'
+              '2. Nhấn vào nút Chia sẻ (biểu tượng hình vuông có mũi tên chỉ lên ⎋ ở thanh dưới).\n'
+              '3. Cuộn xuống và chọn "Thêm vào MH chính" (Add to Home Screen).\n'
+              '4. Nhấn "Thêm" ở góc trên bên phải để hoàn tất.',
+              style: TextStyle(fontSize: 12.5, height: 1.5),
+            ),
+          ],
+        );
+      case 2:
+      default:
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '1. Dùng ứng dụng Camera, Zalo hoặc ZaloPay để quét mã QR bên cạnh.\n'
+              '2. Khi Zalo mở liên kết, hãy nhấn vào biểu tượng 3 chấm (⋯) ở góc trên bên phải.\n'
+              '3. Chọn "Mở bằng trình duyệt" (Chrome / Safari).\n'
+              '4. Sau đó tiến hành thêm vào màn hình chính theo hướng dẫn của hệ điều hành.',
+              style: TextStyle(fontSize: 12.5, height: 1.5),
+            ),
+          ],
+        );
+    }
+  }
+}
+

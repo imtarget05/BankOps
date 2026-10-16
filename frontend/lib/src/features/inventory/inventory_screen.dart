@@ -229,9 +229,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _showImportItemsDialog(List<InventoryItem> existingItems) async {
+    final repo = RepositoryScope.of(context);
     final result = await showDialog<BatchItemImportResult>(
       context: context,
-      builder: (ctx) => ImportItemsDialog(existingItems: existingItems),
+      builder: (ctx) => RepositoryScope(
+        repository: repo,
+        child: ImportItemsDialog(
+          existingItems: existingItems,
+          repository: repo,
+        ),
+      ),
     );
 
     if (result != null && mounted) {

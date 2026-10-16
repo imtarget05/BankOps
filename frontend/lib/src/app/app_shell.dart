@@ -1220,7 +1220,7 @@ class _TeaOpsTicker extends StatelessWidget {
       label: text,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         color: theme.colorScheme.primaryContainer,
         child: Row(
           children: [
@@ -1238,6 +1238,21 @@ class _TeaOpsTicker extends StatelessWidget {
                   color: theme.colorScheme.onPrimaryContainer,
                 ),
               ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              key: const Key('btn-dismiss-live-ticker'),
+              icon: Icon(Icons.close_rounded,
+                  size: 17, color: theme.colorScheme.onPrimaryContainer),
+              tooltip: 'Tắt thanh thông báo',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () {
+                context
+                    .read<AppUiSettingsController?>()
+                    ?.setShowLiveTicker(false);
+              },
             ),
           ],
         ),

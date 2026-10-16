@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../app/app_shell.dart';
 import '../../core/util/error_text.dart';
 import '../../data/models/dtos.dart';
+import '../../data/repositories/bankops_repository.dart';
 
 class SampleItemTemplate {
   final String sku;
@@ -169,10 +170,12 @@ const teaShopSampleItems = <SampleItemTemplate>[
 
 class ImportItemsDialog extends StatefulWidget {
   final List<InventoryItem> existingItems;
+  final BankOpsRepository? repository;
 
   const ImportItemsDialog({
     super.key,
     required this.existingItems,
+    this.repository,
   });
 
   @override
@@ -375,7 +378,7 @@ class _ImportItemsDialogState extends State<ImportItemsDialog>
     });
 
     try {
-      final repo = RepositoryScope.of(context);
+      final repo = widget.repository ?? RepositoryScope.of(context);
       final res = await repo.createItemsBatch(itemsToImport);
 
       if (mounted) {

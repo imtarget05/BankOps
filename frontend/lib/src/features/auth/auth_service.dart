@@ -82,21 +82,21 @@ class AuthService extends ChangeNotifier {
     return trimmed;
   }
 
+  static const String canonicalProductionBaseUrl =
+      'https://kho-tra-sua-api.tanmainguyenbinh.workers.dev/api/v1';
+
   /// Per-platform default: Android emulator cannot reach host `localhost`,
   /// so use `10.0.2.2`; iOS simulator/desktop/web keep `localhost`.
-  /// Overridable (and REQUIRED for release web) via `--dart-define=API_BASE_URL=...`.
-  ///
-  /// Không còn fallback host cứng cho production web: host cũ
-  /// (`bankops-api.tanmainguyenbinh.pages.dev`) và Modal
-  /// (`imtarget05--quan-ly-kho-tra-sua-api...modal.run`) đều đã chết/nghỉ —
-  /// release web KHÔNG có API_BASE_URL sẽ nhận chuỗi rỗng và app tự chạy
-  /// chế độ demo/offline thay vì trỏ vào một URL sai.
+  /// In release mode (web/APK), defaults to Cloudflare Workers production proxy.
+  /// Overridable via `--dart-define=API_BASE_URL=...`.
   static String get defaultBaseUrl {
     const env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (env.isNotEmpty) return env;
+    if (kReleaseMode) {
+      return canonicalProductionBaseUrl;
+    }
     if (kIsWeb) {
-      // Release web: không đoán URL backend — để trống, caller tự quyết
-      // (AuthService sẽ chuyển sang offline demo khi không cấu hình).
+      // In local web debug, allow empty to run in local offline/mock mode if no server.
       return '';
     }
     switch (defaultTargetPlatform) {

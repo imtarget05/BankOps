@@ -991,16 +991,19 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      'Mã phiếu: ${item.id}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                        fontWeight: FontWeight.w600,
+                                    Expanded(
+                                      child: Text(
+                                        'Mã phiếu: ${item.id}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color:
+                                              theme.colorScheme.onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    const Spacer(),
+                                    const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 3),
@@ -1021,184 +1024,166 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (canApprove) ...[
-                                      Checkbox(
-                                        key: Key('approval-select-${item.id}'),
-                                        value: _selected.contains(item.id),
-                                        onChanged: _busy
-                                            ? null
-                                            : (v) => setState(() {
-                                                  if (v == true) {
-                                                    _selected.add(item.id);
-                                                  } else {
-                                                    _selected.remove(item.id);
-                                                  }
-                                                }),
-                                      ),
-                                    ],
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text.rich(
-                                            TextSpan(
-                                              children: [
-                                                WidgetSpan(
-                                                  alignment:
-                                                      PlaceholderAlignment
-                                                          .middle,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 6),
-                                                    child: Icon(
-                                                      Icons.person_outline,
-                                                      size: 16,
-                                                      color: theme.colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                  ),
-                                                ),
-                                                TextSpan(
-                                                  text: 'Người lập phiếu: ',
-                                                  style: TextStyle(
-                                                    fontSize: 12.5,
-                                                    color: theme.colorScheme
-                                                        .onSurfaceVariant,
-                                                  ),
-                                                ),
-                                                TextSpan(
-                                                  text: item.maker,
-                                                  style: const TextStyle(
-                                                    fontSize: 12.5,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text.rich(
-                                            TextSpan(
-                                              children: [
-                                                WidgetSpan(
-                                                  alignment:
-                                                      PlaceholderAlignment
-                                                          .middle,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 6),
-                                                    child: Icon(
-                                                      Icons.trending_up_rounded,
-                                                      size: 16,
-                                                      color: accentColor,
-                                                    ),
-                                                  ),
-                                                ),
-                                                TextSpan(
-                                                  text: 'Tác động số dư: ',
-                                                  style: TextStyle(
-                                                    fontSize: 12.5,
-                                                    color: theme.colorScheme
-                                                        .onSurfaceVariant,
-                                                  ),
-                                                ),
-                                                TextSpan(
-                                                  text: item.impact,
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: accentColor,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          if (item.detail.isNotEmpty) ...[
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Chi tiết: ${item.detail}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: theme.colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                            ),
-                                          ],
-                                          const SizedBox(height: 10),
-                                          Wrap(
-                                            spacing: 8,
-                                            runSpacing: 6,
-                                            crossAxisAlignment:
-                                                WrapCrossAlignment.center,
+                                LayoutBuilder(
+                                  builder: (context, cardConstraints) {
+                                    final isCompact =
+                                        cardConstraints.maxWidth < 640;
+
+                                    final infoWidget = Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text.rich(
+                                          TextSpan(
                                             children: [
-                                              _buildRiskLevelBadge(
-                                                  _assessments[item.id]),
-                                              InkWell(
-                                                key: Key(
-                                                    'btn-ai-assess-${item.id}'),
-                                                onTap: () =>
-                                                    _showAiAssessmentSheet(
-                                                        item),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3),
-                                                  decoration: BoxDecoration(
-                                                    color:
-                                                        const Color(0xFF2563EB)
-                                                            .withValues(
-                                                                alpha: 0.1),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            6),
-                                                    border: Border.all(
-                                                      color: const Color(
-                                                              0xFF2563EB)
-                                                          .withValues(
-                                                              alpha: 0.25),
-                                                    ),
+                                              WidgetSpan(
+                                                alignment:
+                                                    PlaceholderAlignment.middle,
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          right: 6),
+                                                  child: Icon(
+                                                    Icons.person_outline,
+                                                    size: 16,
+                                                    color: theme.colorScheme
+                                                        .onSurfaceVariant,
                                                   ),
-                                                  child: const Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Icon(Icons.auto_awesome,
-                                                          size: 12,
-                                                          color: Color(
-                                                              0xFF2563EB)),
-                                                      SizedBox(width: 4),
-                                                      Text(
-                                                        'Xem đánh giá AI',
-                                                        style: TextStyle(
-                                                          fontSize: 10.5,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color:
-                                                              Color(0xFF2563EB),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: 'Người lập phiếu: ',
+                                                style: TextStyle(
+                                                  fontSize: 12.5,
+                                                  color: theme.colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: item.maker,
+                                                style: const TextStyle(
+                                                  fontSize: 12.5,
+                                                  fontWeight: FontWeight.w700,
                                                 ),
                                               ),
                                             ],
                                           ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text.rich(
+                                          TextSpan(
+                                            children: [
+                                              WidgetSpan(
+                                                alignment:
+                                                    PlaceholderAlignment.middle,
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          right: 6),
+                                                  child: Icon(
+                                                    Icons.trending_up_rounded,
+                                                    size: 16,
+                                                    color: accentColor,
+                                                  ),
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: 'Tác động số dư: ',
+                                                style: TextStyle(
+                                                  fontSize: 12.5,
+                                                  color: theme.colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: item.impact,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: accentColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (item.detail.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Chi tiết: ${item.detail}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: theme.colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          ),
                                         ],
-                                      ),
-                                    ),
-                                    Wrap(
+                                        const SizedBox(height: 10),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 6,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            _buildRiskLevelBadge(
+                                                _assessments[item.id]),
+                                            InkWell(
+                                              key: Key(
+                                                  'btn-ai-assess-${item.id}'),
+                                              onTap: () =>
+                                                  _showAiAssessmentSheet(
+                                                      item),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF2563EB)
+                                                      .withValues(alpha: 0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                            0xFF2563EB)
+                                                        .withValues(
+                                                            alpha: 0.25),
+                                                  ),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.auto_awesome,
+                                                        size: 12,
+                                                        color: Color(
+                                                            0xFF2563EB)),
+                                                    SizedBox(width: 4),
+                                                    Text(
+                                                      'Xem đánh giá AI',
+                                                      style: TextStyle(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color:
+                                                            Color(0xFF2563EB),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    );
+
+                                    final actionsWidget = Wrap(
                                       spacing: 8,
+                                      runSpacing: 8,
                                       crossAxisAlignment:
                                           WrapCrossAlignment.center,
                                       children: [
@@ -1206,7 +1191,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                           key: Key('print-approval-${item.id}'),
                                           onPressed: () =>
                                               _exportVoucherWithAiCheck(item),
-                                          icon: const Icon(Icons.print_outlined,
+                                          icon: const Icon(
+                                              Icons.print_outlined,
                                               size: 20),
                                           tooltip:
                                               'In phiếu ${item.id} (AI Kiểm Duyệt)',
@@ -1216,7 +1202,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                             key: Key('btn-return-${item.id}'),
                                             onPressed: _busy
                                                 ? null
-                                                : () => _returnForRework(item),
+                                                : () =>
+                                                    _returnForRework(item),
                                             icon: const Icon(
                                                 Icons
                                                     .assignment_return_outlined,
@@ -1308,8 +1295,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                               border: Border.all(
-                                                color: theme
-                                                    .colorScheme.outlineVariant
+                                                color: theme.colorScheme
+                                                    .outlineVariant
                                                     .withValues(alpha: 0.5),
                                               ),
                                             ),
@@ -1337,8 +1324,79 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                           ),
                                         ],
                                       ],
-                                    ),
-                                  ],
+                                    );
+
+                                    if (isCompact) {
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (canApprove) ...[
+                                                Checkbox(
+                                                  key: Key(
+                                                      'approval-select-${item.id}'),
+                                                  value: _selected
+                                                      .contains(item.id),
+                                                  onChanged: _busy
+                                                      ? null
+                                                      : (v) => setState(() {
+                                                            if (v == true) {
+                                                              _selected
+                                                                  .add(item.id);
+                                                            } else {
+                                                              _selected.remove(
+                                                                  item.id);
+                                                            }
+                                                          }),
+                                                ),
+                                              ],
+                                              Expanded(child: infoWidget),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          const Divider(height: 1),
+                                          const SizedBox(height: 10),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: actionsWidget,
+                                          ),
+                                        ],
+                                      );
+                                    }
+
+                                    return Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (canApprove) ...[
+                                          Checkbox(
+                                            key: Key(
+                                                'approval-select-${item.id}'),
+                                            value: _selected
+                                                .contains(item.id),
+                                            onChanged: _busy
+                                                ? null
+                                                : (v) => setState(() {
+                                                      if (v == true) {
+                                                        _selected
+                                                            .add(item.id);
+                                                      } else {
+                                                        _selected
+                                                            .remove(item.id);
+                                                      }
+                                                    }),
+                                          ),
+                                        ],
+                                        Expanded(child: infoWidget),
+                                        const SizedBox(width: 12),
+                                        actionsWidget,
+                                      ],
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -1388,13 +1446,16 @@ class _SelectionBar extends StatelessWidget {
             value: selected.isEmpty ? false : (allSelected ? true : null),
             onChanged: busy ? null : (v) => onToggleAll(v == true),
           ),
-          Text(
-            selected.isEmpty
-                ? 'Chọn để duyệt hàng loạt'
-                : 'Đã chọn ${selected.length}/${allIds.length}',
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          Flexible(
+            child: Text(
+              selected.isEmpty
+                  ? 'Chọn để duyệt hàng loạt'
+                  : 'Đã chọn ${selected.length}/${allIds.length}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           if (selected.isNotEmpty)
             FilledButton.icon(
               key: const Key('approve-selected-btn'),

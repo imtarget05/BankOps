@@ -169,6 +169,28 @@
       window.addEventListener('webglcontextrestored', function(e) {
         console.log('[WebOps] WebGL context restored');
       }, true);
+
+      // PWA Install prompt handler
+      var deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        window.isPwaInstallAvailable = true;
+        console.log('[PWA] beforeinstallprompt captured');
+      });
+
+      window.promptPwaInstall = function() {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then(function(choiceResult) {
+            console.log('[PWA] User choice: ' + choiceResult.outcome);
+            deferredPrompt = null;
+            window.isPwaInstallAvailable = false;
+          });
+          return true;
+        }
+        return false;
+      };
     })();
   </script>
 
