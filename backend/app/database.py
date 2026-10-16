@@ -10,7 +10,19 @@ from app.db.base import Base
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = settings.database_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://")
+def _normalize_async_database_url(url: str) -> str:
+    """Normalize database URL for asyncpg engine."""
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql+psycopg2://"):
+        url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    # asyncpg expects ssl=require, not sslmode=require
+    if "sslmode=" in url:
+        url = url.replace("sslmode=", "ssl=")
+    return url
+
+
+DATABASE_URL = _normalize_async_database_url(settings.database_url)
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -54,7 +66,8 @@ async def init_db() -> None:
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
-        raise
+        if settings.app_env != "production":
+            raise
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
