@@ -20,6 +20,7 @@ from app.api.routes import (
     auth,
     auth_google,
     cash_sim,
+    dashboard,
     etl,
     events,
     health,
@@ -228,6 +229,7 @@ def _mount_routes(target: FastAPI | APIRouter, *, include_in_schema: bool = True
     target.include_router(auth_google.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)
     target.include_router(admin_users.router, tags=["admin"], include_in_schema=include_in_schema)
     target.include_router(inventory.router, tags=["inventory"], include_in_schema=include_in_schema)
+    target.include_router(dashboard.router, tags=["dashboard"], include_in_schema=include_in_schema)
     target.include_router(cash_sim.router, tags=["cash-sim"], include_in_schema=include_in_schema)
     target.include_router(approvals.router, prefix="/approvals", tags=["approvals"], include_in_schema=include_in_schema)
     target.include_router(activity.router, tags=["activity"], include_in_schema=include_in_schema)

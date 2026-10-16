@@ -1168,3 +1168,31 @@ class ShiftHistoryItem {
   }
 }
 
+/// DTO tổng hợp toàn bộ 10 thành phần Dashboard chỉ trong 1 round-trip.
+class DashboardSummaryDto {
+  const DashboardSummaryDto({
+    required this.locations,
+    required this.items,
+    required this.balances,
+    required this.assets,
+    required this.stockRequests,
+    required this.inbox,
+    required this.cashBalances,
+    required this.cashboxes,
+    required this.lowStockAlerts,
+    required this.reconciliations,
+  });
+
+  final List<InventoryLocation> locations;
+  final List<InventoryItem> items;
+  final List<StockBalance> balances;
+  final List<AssetRecord> assets;
+  final List<StockRequest> stockRequests;
+  final List<ApprovalItem> inbox;
+  final List<CashBalance> cashBalances;
+  final List<Cashbox> cashboxes;
+  final List<LowStockAlertItem> lowStockAlerts;
+  final List<ReconciliationRun> reconciliations;
+}
+
+

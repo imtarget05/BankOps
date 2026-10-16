@@ -282,3 +282,33 @@ def test_high_risk_dual_control_pin_e2e_flow(client):
     )
     assert ok_app.status_code == 200, ok_app.text
     assert ok_app.json()["status"] == "posted"
+
+
+def test_dashboard_summary_endpoint(client):
+    """Verify single-payload dashboard summary endpoint returns all 10 components."""
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"username": "demo_maker", "password": DEMO_PASSWORD},
+    )
+    assert r.status_code == 200
+    token = r.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Test both /api/v1/dashboard/summary and /dashboard/summary
+    for path in ("/api/v1/dashboard/summary", "/dashboard/summary"):
+        res = client.get(path, headers=headers)
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert "locations" in data
+        assert "items" in data
+        assert "balances" in data
+        assert "assets" in data
+        assert "stock_requests" in data
+        assert "inbox" in data
+        assert "cash_balances" in data
+        assert "cashboxes" in data
+        assert "low_stock_alerts" in data
+        assert "reconciliations" in data
+        assert isinstance(data["items"], list)
+        assert isinstance(data["low_stock_alerts"], list)
+

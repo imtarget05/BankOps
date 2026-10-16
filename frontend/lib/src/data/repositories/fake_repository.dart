@@ -2109,4 +2109,32 @@ class FakeBankOpsRepository implements BankOpsRepository {
     return _delay(
         'Dòng,Mã SKU,Chi tiết lỗi\n2,ERR_SKU_999,SKU không tồn tại trong danh mục\n');
   }
+
+  @override
+  Future<DashboardSummaryDto> getDashboardSummary({bool canApprove = false}) async {
+    final results = await Future.wait([
+      getLocations(),
+      getItems(),
+      getBalances(),
+      getAssets(),
+      getStockRequests(),
+      canApprove ? getApprovalInbox() : Future.value(<ApprovalItem>[]),
+      getCashBalances(),
+      getCashboxes(),
+      getLowStockAlerts(),
+      getReconciliations(),
+    ]);
+    return DashboardSummaryDto(
+      locations: results[0] as List<InventoryLocation>,
+      items: results[1] as List<InventoryItem>,
+      balances: results[2] as List<StockBalance>,
+      assets: results[3] as List<AssetRecord>,
+      stockRequests: results[4] as List<StockRequest>,
+      inbox: results[5] as List<ApprovalItem>,
+      cashBalances: results[6] as List<CashBalance>,
+      cashboxes: results[7] as List<Cashbox>,
+      lowStockAlerts: results[8] as List<LowStockAlertItem>,
+      reconciliations: results[9] as List<ReconciliationRun>,
+    );
+  }
 }

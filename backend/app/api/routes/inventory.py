@@ -837,8 +837,31 @@ async def list_requests(
     page, next_cursor = rows[:limit], None
     if len(rows) > limit:
         next_cursor = base64.urlsafe_b64encode(str(page[-1].id).encode()).decode()
+
+    req_ids = [r.id for r in page]
+    lines_by_req: dict[uuid.UUID, list[dict]] = {r.id: [] for r in page}
+    if req_ids:
+        line_rows = (
+            await db.execute(
+                select(InventoryRequestLine).where(
+                    InventoryRequestLine.request_id.in_(req_ids)
+                )
+            )
+        ).scalars().all()
+        for lr in line_rows:
+            lines_by_req[lr.request_id].append({
+                "item_id": str(lr.item_id),
+                "quantity": str(lr.quantity),
+                "direction": getattr(lr, "direction", "increase"),
+                "serial": lr.serial,
+                "unit_price": str(lr.unit_price) if lr.unit_price is not None else None,
+                "line_total": _line_total(lr.quantity, lr.unit_price),
+                "lot_no": getattr(lr, "lot_no", None),
+                "expiry_date": lr.expiry_date.isoformat() if getattr(lr, "expiry_date", None) else None,
+            })
+
     return {
-        "requests": [_req_out(r, await _load_lines(db, r.id)) for r in page],
+        "requests": [_req_out(r, lines_by_req.get(r.id, [])) for r in page],
         "next_cursor": next_cursor,
         "limit": limit,
     }
@@ -1855,33 +1878,34 @@ async def list_stock_levels(
 
 
 @router.get("/inventory/low-stock")
+@router.get("/inventory/alerts/low-stock")
 async def list_low_stock(
     location_id: str | None = None,
     user=Depends(require_any_capability(*_VIEW_CATALOG)),
     db: AsyncSession = Depends(get_db),
 ):
     """So sánh số dư thực tế với định mức min_qty và trả về danh sách cảnh báo thiếu."""
-    stmt = select(StockLevel)
+    stmt = (
+        select(StockLevel, Balance, Item, Location)
+        .outerjoin(
+            Balance,
+            (Balance.location_id == StockLevel.location_id)
+            & (Balance.item_id == StockLevel.item_id),
+        )
+        .join(Item, Item.id == StockLevel.item_id)
+        .join(Location, Location.id == StockLevel.location_id)
+    )
     if location_id:
         stmt = stmt.where(StockLevel.location_id == _uuid(location_id, "location_id"))
-    levels = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
 
     items_out = []
-    for level in levels:
-        bal = (
-            await db.execute(
-                select(Balance).where(
-                    Balance.location_id == level.location_id,
-                    Balance.item_id == level.item_id,
-                )
-            )
-        ).scalars().first()
-        current_qty = Decimal(str(bal.quantity)) if bal else Decimal("0")
+    for level, bal, it, loc in rows:
+        current_qty = Decimal(str(bal.quantity)) if bal and bal.quantity is not None else Decimal("0")
+        min_qty = Decimal(str(level.min_qty))
 
-        if current_qty < Decimal(str(level.min_qty)):
-            loc = (await db.execute(select(Location).where(Location.id == level.location_id))).scalars().first()
-            it = (await db.execute(select(Item).where(Item.id == level.item_id))).scalars().first()
-            deficit = Decimal(str(level.min_qty)) - current_qty
+        if current_qty < min_qty:
+            deficit = min_qty - current_qty
             status = "empty" if current_qty <= Decimal("0") else "low"
             unit = it.unit if it else "đơn vị"
             deficit_str = _format_qty(deficit)
@@ -1905,6 +1929,7 @@ async def list_low_stock(
             })
 
     return {"items": items_out}
+
 
 
 # --------------------------------------------------------------------------

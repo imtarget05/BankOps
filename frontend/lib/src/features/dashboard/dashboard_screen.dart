@@ -21,6 +21,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  static DashboardData? _cachedData;
   Future<DashboardData>? _future;
   DataSyncController? _syncController;
 
@@ -29,7 +30,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.didChangeDependencies();
     final repo = RepositoryScope.of(context);
     final user = SessionScope.maybeOf(context)?.user;
-    _future ??= _load(repo, user);
+    if (_cachedData != null) {
+      _future = Future.value(_cachedData);
+      _revalidateSilently(repo, user);
+    } else {
+      _future ??= _load(repo, user);
+    }
 
     final sync = SyncScope.maybeOf(context);
     if (sync != _syncController) {
@@ -1065,32 +1071,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final roles = RoleVisibility.rolesOf(user);
     final canApprove = RoleVisibility.canApprove(roles);
 
-    final results = await Future.wait([
-      repo.getLocations().catchError((_) => <InventoryLocation>[]),
-      repo.getItems().catchError((_) => <InventoryItem>[]),
-      repo.getBalances().catchError((_) => <StockBalance>[]),
-      repo.getAssets().catchError((_) => <AssetRecord>[]),
-      repo.getStockRequests().catchError((_) => <StockRequest>[]),
-      canApprove
-          ? repo.getApprovalInbox().catchError((_) => <ApprovalItem>[])
-          : Future.value(<ApprovalItem>[]),
-      repo.getCashBalances().catchError((_) => <CashBalance>[]),
-      repo.getCashboxes().catchError((_) => <Cashbox>[]),
-      repo.getLowStockAlerts().catchError((_) => <LowStockAlertItem>[]),
-      repo.getReconciliations().catchError((_) => <ReconciliationRun>[]),
-    ]);
-    return DashboardData(
-      locations: results[0] as List<InventoryLocation>,
-      items: results[1] as List<InventoryItem>,
-      balances: results[2] as List<StockBalance>,
-      assets: results[3] as List<AssetRecord>,
-      stockRequests: results[4] as List<StockRequest>,
-      inbox: results[5] as List<ApprovalItem>,
-      cashBalances: results[6] as List<CashBalance>,
-      cashboxes: results[7] as List<Cashbox>,
-      lowStockAlerts: results[8] as List<LowStockAlertItem>,
-      reconciliations: results[9] as List<ReconciliationRun>,
-    );
+    final summaryDto = await repo.getDashboardSummary(canApprove: canApprove);
+    final data = DashboardData.fromDto(summaryDto);
+    _cachedData = data;
+    return data;
+  }
+
+  Future<void> _revalidateSilently(BankOpsRepository repo, AppUser? user) async {
+    try {
+      final roles = RoleVisibility.rolesOf(user);
+      final canApprove = RoleVisibility.canApprove(roles);
+      final summaryDto = await repo.getDashboardSummary(canApprove: canApprove);
+      final data = DashboardData.fromDto(summaryDto);
+      _cachedData = data;
+      if (mounted) {
+        setState(() {
+          _future = Future.value(data);
+        });
+      }
+    } catch (_) {
+      // Background revalidation silently ignored; cached data remains visible
+    }
   }
 }
 
@@ -1214,6 +1215,21 @@ class DashboardData {
     required this.lowStockAlerts,
     required this.reconciliations,
   });
+
+  factory DashboardData.fromDto(DashboardSummaryDto dto) {
+    return DashboardData(
+      locations: dto.locations,
+      items: dto.items,
+      balances: dto.balances,
+      assets: dto.assets,
+      stockRequests: dto.stockRequests,
+      inbox: dto.inbox,
+      cashBalances: dto.cashBalances,
+      cashboxes: dto.cashboxes,
+      lowStockAlerts: dto.lowStockAlerts,
+      reconciliations: dto.reconciliations,
+    );
+  }
 
   final List<InventoryLocation> locations;
   final List<InventoryItem> items;

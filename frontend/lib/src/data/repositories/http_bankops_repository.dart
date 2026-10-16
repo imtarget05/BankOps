@@ -1993,4 +1993,164 @@ class HttpBankOpsRepository implements BankOpsRepository {
     }
     return resp.body;
   }
+
+  @override
+  Future<DashboardSummaryDto> getDashboardSummary({bool canApprove = false}) async {
+    try {
+      final res = await _get('/dashboard/summary');
+      if (res is Map) {
+        final locs = _asList(res, 'locations')
+            .whereType<Map>()
+            .map((m) => InventoryLocation(
+                  id: _str(m, 'id'),
+                  code: _str(m, 'code'),
+                  name: _str(m, 'name'),
+                ))
+            .toList();
+
+        final items = _asList(res, 'items')
+            .whereType<Map>()
+            .map((m) => InventoryItem(
+                  id: _str(m, 'id'),
+                  sku: _str(m, 'sku'),
+                  name: _str(m, 'name'),
+                  unit: _str(m, 'unit'),
+                  trackedSerial: m['tracked_serial'] == true,
+                  category: _nullableStr(m, 'category'),
+                  packaging: _nullableStr(m, 'packaging'),
+                ))
+            .toList();
+
+        final balances = _asList(res, 'balances')
+            .whereType<Map>()
+            .map((m) => StockBalance(
+                  locationId: _str(m, 'location_id'),
+                  itemId: _str(m, 'item_id'),
+                  quantity: _str(m, 'quantity', '0'),
+                  reservedQuantity: _str(m, 'reserved_quantity', '0'),
+                  availableQuantity: m['available_quantity']?.toString(),
+                ))
+            .toList();
+
+        final assets = _asList(res, 'assets')
+            .whereType<Map>()
+            .map((m) => AssetRecord(
+                  id: m['id']?.toString(),
+                  serial: _str(m, 'serial'),
+                  itemId: _str(m, 'item_id'),
+                  locationId: _str(m, 'location_id'),
+                  status: _assetStatus(_str(m, 'status')),
+                  assignee: m['assignee']?.toString() ?? m['assignee_demo']?.toString(),
+                ))
+            .toList();
+
+        final stockRequests = _asList(res, 'stock_requests')
+            .whereType<Map>()
+            .map(_parseStockRequest)
+            .toList();
+
+        final inbox = canApprove
+            ? _asList(res, 'inbox').whereType<Map>().map((m) {
+                final id = _str(m, 'id');
+                return ApprovalItem(
+                  id: id,
+                  kind: _str(m, 'kind'),
+                  maker: _str(m, 'maker'),
+                  impact: _str(m, 'impact', _str(m, 'status')),
+                  detail: _str(m, 'detail', id),
+                  approvalDetail: m['approval_detail'] is Map
+                      ? Map<String, dynamic>.from(m['approval_detail'] as Map)
+                      : (m['approval_detail'] is String
+                          ? _decodeMap(m['approval_detail'] as String)
+                          : null),
+                );
+              }).toList()
+            : <ApprovalItem>[];
+
+        final cashBalances = _asList(res, 'cash_balances')
+            .whereType<Map>()
+            .map((m) => CashBalance(
+                  cashboxId: _str(m, 'cashbox_id'),
+                  amount: _str(m, 'amount', '0'),
+                  currency: _str(m, 'currency', 'VND'),
+                ))
+            .toList();
+
+        final cashboxes = _asList(res, 'cashboxes')
+            .whereType<Map>()
+            .map((m) => Cashbox(
+                  id: _str(m, 'id'),
+                  code: _str(m, 'code'),
+                  name: _str(m, 'name'),
+                  openingBalance: _str(m, 'opening_balance', '0'),
+                ))
+            .toList();
+
+        final lowStockAlerts = _asList(res, 'low_stock_alerts')
+            .whereType<Map>()
+            .map((m) => LowStockAlertItem(
+                  locationId: _str(m, 'location_id'),
+                  locationCode: _str(m, 'location_code', 'N/A'),
+                  locationName: _str(m, 'location_name', 'N/A'),
+                  itemId: _str(m, 'item_id'),
+                  sku: _str(m, 'sku', 'N/A'),
+                  itemName: _str(m, 'item_name', 'N/A'),
+                  unit: _str(m, 'unit', 'đơn vị'),
+                  currentQty: _str(m, 'current_qty', '0'),
+                  minQty: _str(m, 'min_qty', '0'),
+                  maxQty: m['max_qty']?.toString(),
+                  status: _str(m, 'status', 'low'),
+                  deficit: _str(m, 'deficit', '0'),
+                  suggestedAction: _str(m, 'suggested_action', ''),
+                ))
+            .toList();
+
+        final recList = _asList(res, 'reconciliations');
+        final reconciliations = recList.whereType<Map>().map(_parseReconciliation).toList();
+
+        return DashboardSummaryDto(
+          locations: locs,
+          items: items,
+          balances: balances,
+          assets: assets,
+          stockRequests: stockRequests,
+          inbox: inbox,
+          cashBalances: cashBalances,
+          cashboxes: cashboxes,
+          lowStockAlerts: lowStockAlerts,
+          reconciliations: reconciliations,
+        );
+      }
+    } catch (_) {
+      // Graceful fallback to individual calls if server endpoint is unavailable
+    }
+
+    final results = await Future.wait([
+      getLocations().catchError((_) => <InventoryLocation>[]),
+      getItems().catchError((_) => <InventoryItem>[]),
+      getBalances().catchError((_) => <StockBalance>[]),
+      getAssets().catchError((_) => <AssetRecord>[]),
+      getStockRequests().catchError((_) => <StockRequest>[]),
+      canApprove
+          ? getApprovalInbox().catchError((_) => <ApprovalItem>[])
+          : Future.value(<ApprovalItem>[]),
+      getCashBalances().catchError((_) => <CashBalance>[]),
+      getCashboxes().catchError((_) => <Cashbox>[]),
+      getLowStockAlerts().catchError((_) => <LowStockAlertItem>[]),
+      getReconciliations().catchError((_) => <ReconciliationRun>[]),
+    ]);
+
+    return DashboardSummaryDto(
+      locations: results[0] as List<InventoryLocation>,
+      items: results[1] as List<InventoryItem>,
+      balances: results[2] as List<StockBalance>,
+      assets: results[3] as List<AssetRecord>,
+      stockRequests: results[4] as List<StockRequest>,
+      inbox: results[5] as List<ApprovalItem>,
+      cashBalances: results[6] as List<CashBalance>,
+      cashboxes: results[7] as List<Cashbox>,
+      lowStockAlerts: results[8] as List<LowStockAlertItem>,
+      reconciliations: results[9] as List<ReconciliationRun>,
+    );
+  }
 }

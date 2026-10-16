@@ -46,18 +46,28 @@ async def get_approval_inbox(
         )
     ).scalars().all()
 
+    inv_ids = [r.id for r in inv_rows]
+    qty_by_req: dict = {}
+    if inv_ids:
+        sums = (
+            await db.execute(
+                select(
+                    InventoryRequestLine.request_id,
+                    func.coalesce(func.sum(InventoryRequestLine.quantity), 0),
+                )
+                .where(InventoryRequestLine.request_id.in_(inv_ids))
+                .group_by(InventoryRequestLine.request_id)
+            )
+        ).all()
+        qty_by_req = {str(row[0]): row[1] for row in sums}
+
     approvals = []
     for r in inv_rows:
         if str(r.maker_id) == str(current_user.id):
             continue
-        line_count = (
-            await db.execute(
-                select(func.coalesce(func.sum(InventoryRequestLine.quantity), 0)).where(
-                    InventoryRequestLine.request_id == r.id
-                )
-            )
-        ).scalar_one()
+        line_count = qty_by_req.get(str(r.id), 0)
         maker_id = str(r.maker_id)
+
         approvals.append(
             {
                 "id": str(r.id),

@@ -359,4 +359,5 @@ abstract class BankOpsRepository {
   });
   Future<Map<String, dynamic>> postEtlRun(String runId);
   Future<String> getEtlErrorReport(String runId);
+  Future<DashboardSummaryDto> getDashboardSummary({bool canApprove = false});
 }

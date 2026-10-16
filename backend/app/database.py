@@ -1,9 +1,10 @@
 """Database module - handles SQLAlchemy engine, session, and base."""
 import logging
+import os
+import sys
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.db.base import Base
@@ -24,11 +25,33 @@ def _normalize_async_database_url(url: str) -> str:
 
 DATABASE_URL = _normalize_async_database_url(settings.database_url)
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    poolclass=NullPool,
+_engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+}
+
+_is_testing = (
+    "pytest" in sys.modules
+    or "PYTEST_CURRENT_TEST" in os.environ
+    or os.environ.get("TESTING", "").lower() in ("1", "true", "yes")
+    or getattr(settings, "environment", "") == "test"
 )
+
+if "sqlite" in DATABASE_URL:
+    from sqlalchemy.pool import StaticPool
+    _engine_kwargs["poolclass"] = StaticPool
+elif _is_testing:
+    from sqlalchemy.pool import NullPool
+    _engine_kwargs["poolclass"] = NullPool
+else:
+    _engine_kwargs.update({
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_timeout": 30,
+        "pool_recycle": 300,
+    })
+
+engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

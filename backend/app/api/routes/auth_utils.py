@@ -267,11 +267,19 @@ async def get_user_from_token_string(token: str, db: AsyncSession) -> User:
 
 async def get_current_user_with_capabilities(
     token: str = Depends(oauth2_scheme),
-        db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> tuple[User, list[str]]:
     user = await get_current_user(token, db)
+    try:
+        payload = jwt.decode(token, settings.signing_key, algorithms=[settings.jwt_algorithm])
+        caps = payload.get("caps")
+        if isinstance(caps, list):
+            return user, caps
+    except Exception:
+        pass
     capabilities = await get_user_capabilities(db, user.id)
     return user, capabilities
+
 
 
 def require_capability(*required_caps: str):
