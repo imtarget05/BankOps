@@ -236,6 +236,49 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
+  Future<BatchItemImportResult> createItemsBatch(
+    List<Map<String, dynamic>> items,
+  ) async {
+    if (_items.isEmpty) _items.addAll(_seedItems());
+    final existingSkus = _items.map((i) => i.sku.toUpperCase()).toSet();
+    final createdList = <InventoryItem>[];
+    var skipped = 0;
+
+    for (final it in items) {
+      final sku = (it['sku'] ?? '').toString().trim().toUpperCase();
+      final name = (it['name'] ?? '').toString().trim();
+      final unit = (it['unit'] ?? 'đơn vị').toString().trim();
+      final category = it['category']?.toString();
+      final packaging = it['packaging']?.toString();
+      final trackedSerial = it['tracked_serial'] == true;
+
+      if (sku.isEmpty || name.isEmpty || existingSkus.contains(sku)) {
+        skipped++;
+        continue;
+      }
+
+      existingSkus.add(sku);
+      final newItem = InventoryItem(
+        id: 'itm-000${_items.length + 1}',
+        sku: sku,
+        name: name,
+        unit: unit.isEmpty ? 'đơn vị' : unit,
+        trackedSerial: trackedSerial,
+        category: category,
+        packaging: packaging,
+      );
+      _items.add(newItem);
+      createdList.add(newItem);
+    }
+
+    return _delay(BatchItemImportResult(
+      createdCount: createdList.length,
+      skippedCount: skipped,
+      items: createdList,
+    ));
+  }
+
+  @override
   Future<InventoryItem> updateItem({
     required String id,
     String? name,

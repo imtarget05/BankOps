@@ -42,3 +42,62 @@ def test_manager_can_record_tea_ingredient_catalog_details(client):
     item = next(row for row in listed.json()["items"] if row["id"] == body["id"])
     assert item["category"] == "Nhóm Trà"
     assert item["packaging"] == "500 g/gói"
+
+
+def test_manager_can_batch_import_items(client):
+    """A manager can import multiple catalog items in a single request, skipping duplicates."""
+    sku_exist = f"TRA-EXIST-{uuid.uuid4().hex[:8]}"
+    client.post(
+        "/inventory/items",
+        headers=_manager_headers(client),
+        json={
+            "sku": sku_exist,
+            "name": "Trà đen lộc phát đã có",
+            "unit": "Gói",
+            "category": "Nhóm Trà",
+            "packaging": "500g/gói",
+            "tracked_serial": False,
+        },
+    )
+
+    sku_new_1 = f"TRA-NEW1-{uuid.uuid4().hex[:8]}"
+    sku_new_2 = f"TRA-NEW2-{uuid.uuid4().hex[:8]}"
+
+    batch_resp = client.post(
+        "/inventory/items/batch",
+        headers=_manager_headers(client),
+        json={
+            "items": [
+                {
+                    "sku": sku_exist,
+                    "name": "Trà đen lộc phát trùng",
+                    "unit": "Gói",
+                    "category": "Nhóm Trà",
+                    "packaging": "500g/gói",
+                },
+                {
+                    "sku": sku_new_1,
+                    "name": "Trà nhài hoa cúc",
+                    "unit": "Gói",
+                    "category": "Nhóm Trà",
+                    "packaging": "500g/gói",
+                },
+                {
+                    "sku": sku_new_2,
+                    "name": "Bột kem béo dừa",
+                    "unit": "Túi",
+                    "category": "Nhóm Bột & Sữa",
+                    "packaging": "1kg/túi",
+                },
+            ]
+        },
+    )
+
+    assert batch_resp.status_code == 201, batch_resp.text
+    data = batch_resp.json()
+    assert data["created_count"] == 2
+    assert data["skipped_count"] == 1
+    created_skus = [i["sku"] for i in data["items"]]
+    assert sku_new_1.upper() in created_skus
+    assert sku_new_2.upper() in created_skus
+

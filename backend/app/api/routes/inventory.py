@@ -580,6 +580,63 @@ async def create_item(
     return _item_out(item)
 
 
+@router.post("/inventory/items/batch", status_code=201)
+async def create_items_batch(
+    payload: dict,
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    raw_items = payload.get("items", [])
+    if not isinstance(raw_items, list) or not raw_items:
+        raise AppError(422, "EMPTY_BATCH", "Danh sách mặt hàng không được để trống")
+
+    skus = [str(r.get("sku", "")).strip().upper() for r in raw_items if r.get("sku")]
+    existing_skus_res = await db.execute(select(Item.sku).where(Item.sku.in_(skus)))
+    existing_skus = set(existing_skus_res.scalars().all())
+
+    created_items = []
+    skipped_count = 0
+    seen_in_batch = set()
+
+    for r in raw_items:
+        sku = str(r.get("sku", "")).strip().upper()
+        name = str(r.get("name", "")).strip()
+        unit = str(r.get("unit", "")).strip() or "đơn vị"
+        category = str(r.get("category", "")).strip() or None
+        packaging = str(r.get("packaging", "")).strip() or None
+
+        if not sku or not name:
+            skipped_count += 1
+            continue
+        if sku in existing_skus or sku in seen_in_batch:
+            skipped_count += 1
+            continue
+
+        seen_in_batch.add(sku)
+        item = Item(
+            id=uuid.uuid4(),
+            sku=sku,
+            name=name,
+            unit=unit,
+            category=category,
+            packaging=packaging,
+            tracked_serial=False,
+            active=True,
+        )
+        db.add(item)
+        created_items.append(item)
+
+    await db.commit()
+    for item in created_items:
+        await db.refresh(item)
+
+    return {
+        "created_count": len(created_items),
+        "skipped_count": skipped_count,
+        "items": [_item_out(i) for i in created_items],
+    }
+
+
 @router.put("/inventory/items/{item_id}")
 async def update_item(
     item_id: str,

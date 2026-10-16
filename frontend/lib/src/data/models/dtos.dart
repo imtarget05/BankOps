@@ -113,6 +113,19 @@ class InventoryItem {
   final String? packaging;
 }
 
+/// Kết quả import mặt hàng hàng loạt.
+class BatchItemImportResult {
+  const BatchItemImportResult({
+    required this.createdCount,
+    required this.skippedCount,
+    required this.items,
+  });
+
+  final int createdCount;
+  final int skippedCount;
+  final List<InventoryItem> items;
+}
+
 /// Số tồn kho theo location + item.
 class StockBalance {
   const StockBalance({

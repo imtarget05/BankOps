@@ -10,6 +10,7 @@ import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 import 'shift_stocktake_desk.dart';
+import 'import_items_dialog.dart';
 
 /// Chế độ hiển thị của màn hình Kho và Ca làm việc.
 enum InventoryTabMode {
@@ -196,6 +197,27 @@ class _InventoryScreenState extends State<InventoryScreen> {
           );
         }
       }
+    }
+  }
+
+  Future<void> _showImportItemsDialog(List<InventoryItem> existingItems) async {
+    final result = await showDialog<BatchItemImportResult>(
+      context: context,
+      builder: (ctx) => ImportItemsDialog(existingItems: existingItems),
+    );
+
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã nhập thành công ${result.createdCount} mặt hàng vào kho!'
+            '${result.skippedCount > 0 ? " (Bỏ qua ${result.skippedCount} món đã có)" : ""}',
+          ),
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _refresh();
     }
   }
 
@@ -1787,7 +1809,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ),
             )
           else ...[
-            if (canManageCatalog)
+            if (canManageCatalog) ...[
               OutlinedButton.icon(
                 key: const Key('btn-add-item'),
                 onPressed: () => _showCreateItemDialog(),
@@ -1798,6 +1820,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       borderRadius: BorderRadius.circular(10)),
                 ),
               ),
+              OutlinedButton.icon(
+                key: const Key('btn-import-items'),
+                onPressed: () => _showImportItemsDialog(data.items),
+                icon: const Icon(Icons.upload_file_outlined, size: 18),
+                label: const Text('Import mặt hàng'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF059669),
+                  side: const BorderSide(color: Color(0xFF059669)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
             FilledButton.icon(
               key: const Key('btn-create-stock-request'),
               onPressed: () {
@@ -2023,11 +2058,74 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               if (data.items.isEmpty)
-                const Card(
-                    child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                            'Chưa có mặt hàng. Người quản lý kho có thể thêm mặt hàng mới.')))
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.inventory_2_outlined,
+                            size: 48,
+                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Chưa có mặt hàng nào trong kho',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            canManageCatalog
+                                ? 'Bạn có thể import nhanh 19 mặt hàng mẫu chuẩn quán trà sữa hoặc thêm thủ công từng món.'
+                                : 'Người quản lý kho có thể thêm mặt hàng hoặc import danh mục nguyên vật liệu.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          if (canManageCatalog) ...[
+                            const SizedBox(height: 16),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 10,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                FilledButton.icon(
+                                  key: const Key('btn-empty-import-sample'),
+                                  onPressed: () => _showImportItemsDialog(data.items),
+                                  icon: const Icon(Icons.download_for_offline_outlined, size: 18),
+                                  label: const Text('Import 19 mẫu Trà Sữa / File'),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  key: const Key('btn-empty-add-item'),
+                                  onPressed: () => _showCreateItemDialog(),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Thêm thủ công'),
+                                  style: OutlinedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                )
               else
                 Card(
                   child: Column(

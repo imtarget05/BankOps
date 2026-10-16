@@ -438,6 +438,61 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
+  Future<BatchItemImportResult> createItemsBatch(
+    List<Map<String, dynamic>> items,
+  ) async {
+    try {
+      final body = await _post('/inventory/items/batch', {'items': items});
+      final createdList = (body['items'] as List<dynamic>? ?? [])
+          .map((i) => InventoryItem(
+                id: _str(i as Map<String, dynamic>, 'id'),
+                sku: _str(i, 'sku'),
+                name: _str(i, 'name'),
+                unit: _str(i, 'unit'),
+                trackedSerial: i['tracked_serial'] == true,
+                category: _nullableStr(i, 'category'),
+                packaging: _nullableStr(i, 'packaging'),
+              ))
+          .toList();
+      return BatchItemImportResult(
+        createdCount: body['created_count'] as int? ?? createdList.length,
+        skippedCount: body['skipped_count'] as int? ?? 0,
+        items: createdList,
+      );
+    } catch (_) {
+      // Fallback tuần tự nếu endpoint batch gặp lỗi mạng hoặc route
+      final createdList = <InventoryItem>[];
+      var skipped = 0;
+      for (final it in items) {
+        final sku = (it['sku'] ?? '').toString().trim();
+        final name = (it['name'] ?? '').toString().trim();
+        if (sku.isEmpty || name.isEmpty) {
+          skipped++;
+          continue;
+        }
+        try {
+          final res = await createItem(
+            sku: sku,
+            name: name,
+            unit: (it['unit'] ?? 'đơn vị').toString().trim(),
+            trackedSerial: it['tracked_serial'] == true,
+            category: it['category']?.toString(),
+            packaging: it['packaging']?.toString(),
+          );
+          createdList.add(res);
+        } catch (_) {
+          skipped++;
+        }
+      }
+      return BatchItemImportResult(
+        createdCount: createdList.length,
+        skippedCount: skipped,
+        items: createdList,
+      );
+    }
+  }
+
+  @override
   Future<InventoryItem> updateItem({
     required String id,
     String? name,

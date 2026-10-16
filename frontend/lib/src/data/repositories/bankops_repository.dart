@@ -98,6 +98,9 @@ abstract class BankOpsRepository {
     String? category,
     String? packaging,
   });
+  Future<BatchItemImportResult> createItemsBatch(
+    List<Map<String, dynamic>> items,
+  );
   Future<InventoryItem> updateItem({
     required String id,
     String? name,
