@@ -254,7 +254,7 @@ async def shift_history(
         lines = (
             await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == s.id))
         ).scalars().all()
-        total_var = sum((abs(Decimal(str(l.variance))) for l in lines), Decimal("0"))
+        total_var = sum((abs(Decimal(str(ln.variance))) for ln in lines), Decimal("0"))
         maker = users.get(str(s.maker_id))
         out.append(
             {
@@ -265,7 +265,7 @@ async def shift_history(
                 "status": s.status,
                 "maker": maker.display_name_demo if maker else str(s.maker_id),
                 "line_count": len(lines),
-                "variance_lines": sum(1 for l in lines if Decimal(str(l.variance)) != 0),
+                "variance_lines": sum(1 for ln in lines if Decimal(str(ln.variance)) != 0),
                 "total_abs_variance": str(total_var),
                 "completed_at": s.completed_at.isoformat() if s.completed_at else None,
             }

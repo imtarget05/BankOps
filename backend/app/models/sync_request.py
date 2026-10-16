@@ -1,8 +1,10 @@
 """Staged source-data synchronization requests with Root maker-checker approval."""
 import uuid
-from app.db.base import Base, TimestampMixin
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String
+
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
+
+from app.db.base import Base, TimestampMixin
 
 
 class SyncRequest(Base, TimestampMixin):

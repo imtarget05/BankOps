@@ -1731,7 +1731,7 @@ async def expiry_alerts(
     )
     rows = (await db.execute(stmt)).all()
     alerts = []
-    for line, req, item in rows:
+    for line, _req, item in rows:
         delta = (line.expiry_date - today).days
         if delta <= days:
             alerts.append(
@@ -1984,7 +1984,7 @@ async def create_stocktake(
             prev_lines = (
                 await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == prev.id))
             ).scalars().all()
-            prev_counted = {str(l.item_id): Decimal(str(l.counted_qty)) for l in prev_lines}
+            prev_counted = {str(pl.item_id): Decimal(str(pl.counted_qty)) for pl in prev_lines}
     balances = (
         await db.execute(select(Balance).where(Balance.location_id == location_id))
     ).scalars().all()

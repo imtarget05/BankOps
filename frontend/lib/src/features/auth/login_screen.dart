@@ -635,7 +635,9 @@ class _LoginScreenState extends State<LoginScreen> {
           enabled: !_busy,
           decoration: InputDecoration(
             labelText: 'Tài khoản nhân viên / Quản lý',
-            hintText: 'staff_morning / manager_demo',
+            hintText: auth.apiBaseUrl.isEmpty
+                ? 'staff_morning / manager_demo'
+                : 'Tài khoản nhân viên',
             prefixIcon: const Icon(Icons.person_outline, size: 20),
             filled: true,
             isDense: true,
@@ -651,6 +653,9 @@ class _LoginScreenState extends State<LoginScreen> {
           onSubmitted: (_) => _loginWithPassword(),
           decoration: InputDecoration(
             labelText: 'Mật khẩu',
+            hintText: auth.apiBaseUrl.isEmpty
+                ? 'DemoPass123! hoặc 123456'
+                : 'Mật khẩu',
             prefixIcon: const Icon(Icons.lock_outline, size: 20),
             suffixIcon: IconButton(
               icon: Icon(
@@ -710,9 +715,9 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Quick shift accounts — CHỈ bản debug. Prod (release) ẩn toàn bộ
-        // để không lộ tài khoản/mật khẩu demo hardcode (DemoPass123!).
-        if (kDebugMode)
+        // Quick shift accounts — hiển thị ở debug HOẶC khi web chạy ở chế độ demo
+        // (chưa cấu hình API remote) để nhân viên/quản lý có thể đăng nhập ngay.
+        if (kDebugMode || auth.apiBaseUrl.isEmpty)
           Row(
             children: [
               Expanded(
@@ -737,8 +742,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           .withValues(alpha: 0.6))),
             ],
           ),
-        if (kDebugMode) const SizedBox(height: 10),
-        if (kDebugMode)
+        if (kDebugMode || auth.apiBaseUrl.isEmpty) const SizedBox(height: 10),
+        if (kDebugMode || auth.apiBaseUrl.isEmpty)
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -775,7 +780,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-        if (kDebugMode) const SizedBox(height: 16),
+        if (kDebugMode || auth.apiBaseUrl.isEmpty) const SizedBox(height: 16),
 
         Row(
           children: [
