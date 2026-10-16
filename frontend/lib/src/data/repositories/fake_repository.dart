@@ -353,9 +353,136 @@ class FakeBankOpsRepository implements BankOpsRepository {
   final _stockLevels = <StockLevelItem>[];
   final _stocktakes = <StocktakeItem>[];
 
+  void _ensureStockLevelsSeeded() {
+    if (_stockLevels.isNotEmpty) return;
+    const locId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+    _stockLevels.addAll([
+      const StockLevelItem(
+          id: 'sl-1',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
+          minQty: '30',
+          maxQty: '300'),
+      const StockLevelItem(
+          id: 'sl-2',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
+          minQty: '20',
+          maxQty: '200'),
+      const StockLevelItem(
+          id: 'sl-3',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3',
+          minQty: '20',
+          maxQty: '200'),
+      const StockLevelItem(
+          id: 'sl-4',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc4',
+          minQty: '15',
+          maxQty: '100'),
+      const StockLevelItem(
+          id: 'sl-5',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc5',
+          minQty: '24',
+          maxQty: '150'),
+      const StockLevelItem(
+          id: 'sl-6',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc19',
+          minQty: '100',
+          maxQty: '1000'),
+      const StockLevelItem(
+          id: 'sl-7',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc20',
+          minQty: '100',
+          maxQty: '1000'),
+      const StockLevelItem(
+          id: 'sl-8',
+          locationId: locId,
+          itemId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc21',
+          minQty: '50',
+          maxQty: '500'),
+    ]);
+  }
+
+  void _ensureStocktakesSeeded() {
+    if (_stocktakes.isNotEmpty) return;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final morningLines = [
+      const StocktakeLineItem(
+        id: 'stl-seed-1',
+        itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
+        bookQty: '250',
+        countedQty: '245',
+        variance: '0',
+        openingQty: '250',
+        receivedQty: '0',
+        usedQty: '5',
+        theoreticalQty: '245',
+        reason: 'Khớp định mức pha chế ca sáng',
+      ),
+      const StocktakeLineItem(
+        id: 'stl-seed-2',
+        itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
+        bookQty: '1000',
+        countedQty: '992',
+        variance: '0',
+        openingQty: '1000',
+        receivedQty: '0',
+        usedQty: '8',
+        theoreticalQty: '992',
+        reason: 'Khớp định mức pha chế ca sáng',
+      ),
+      const StocktakeLineItem(
+        id: 'stl-seed-3',
+        itemId: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3',
+        bookQty: '500',
+        countedQty: '494',
+        variance: '0',
+        openingQty: '500',
+        receivedQty: '0',
+        usedQty: '6',
+        theoreticalQty: '494',
+        reason: 'Khớp định mức pha chế ca sáng',
+      ),
+      const StocktakeLineItem(
+        id: 'stl-seed-4',
+        itemId: 'cccccccc-cccc-4ccc-8ccc-cccccccccc19',
+        bookQty: '200',
+        countedQty: '168',
+        variance: '-2',
+        openingQty: '200',
+        receivedQty: '0',
+        usedQty: '30',
+        theoreticalQty: '170',
+        reason: 'Làm rơi vỡ 2 ly trong ca',
+      ),
+    ];
+    _stocktakes.add(
+      StocktakeItem(
+        id: 'st-seed-morning',
+        locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+        status: 'closed',
+        note: 'Chốt tồn Ca Sáng (07:30 - 15:00)',
+        makerId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+        approverId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
+        adjustmentRequestId: 'sr-adj-seed-01',
+        createdAt: DateTime.now().subtract(const Duration(hours: 4)).toUtc(),
+        completedAt: DateTime.now().subtract(const Duration(hours: 3)).toUtc(),
+        lines: morningLines,
+        shiftCode: 'morning',
+        businessDate: today,
+      ),
+    );
+  }
+
   @override
   Future<List<StockLevelItem>> getStockLevels(
       {String? locationId, String? itemId}) async {
+    _ensureStockLevelsSeeded();
     return _delay(_stockLevels.where((l) {
       if (locationId != null && l.locationId != locationId) return false;
       if (itemId != null && l.itemId != itemId) return false;
@@ -370,6 +497,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     required String minQty,
     String? maxQty,
   }) async {
+    _ensureStockLevelsSeeded();
     final idx = _stockLevels
         .indexWhere((l) => l.locationId == locationId && l.itemId == itemId);
     final item = StockLevelItem(
@@ -390,6 +518,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
   @override
   Future<List<LowStockAlertItem>> getLowStockAlerts(
       {String? locationId}) async {
+    _ensureStockLevelsSeeded();
     final alerts = <LowStockAlertItem>[];
     final balances = await getBalances(locationId: locationId);
     final items = await getItems();
@@ -439,6 +568,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<List<StocktakeItem>> getStocktakes({String? locationId}) async {
+    _ensureStocktakesSeeded();
     return _delay(_stocktakes
         .where((s) => locationId == null || s.locationId == locationId)
         .toList());
@@ -446,6 +576,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<StocktakeItem> getStocktake(String id) async {
+    _ensureStocktakesSeeded();
     final st = _stocktakes.firstWhere((s) => s.id == id,
         orElse: () =>
             throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê'));
@@ -459,16 +590,58 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? shiftCode,
     String? businessDate,
   }) async {
+    _ensureStocktakesSeeded();
+    final items = await getItems();
+    final balances = await getBalances(locationId: locationId);
+    final balMap = {
+      for (final b in balances) b.itemId: double.tryParse(b.quantity) ?? 0.0
+    };
+
+    final prevSt = _stocktakes.cast<StocktakeItem?>().firstWhere(
+          (s) =>
+              s != null &&
+              s.locationId == locationId &&
+              (s.status == 'submitted' || s.status == 'closed'),
+          orElse: () => null,
+        );
+    final prevCounted = <String, double>{};
+    if (prevSt != null) {
+      for (final l in prevSt.lines) {
+        prevCounted[l.itemId] = double.tryParse(l.countedQty) ?? 0.0;
+      }
+    }
+
+    final lineItems = <StocktakeLineItem>[];
+    for (var i = 0; i < items.length; i++) {
+      final it = items[i];
+      final opening = prevCounted[it.id] ?? balMap[it.id] ?? 0.0;
+      final openingStr = opening == opening.roundToDouble()
+          ? opening.toInt().toString()
+          : opening.toStringAsFixed(1);
+      lineItems.add(StocktakeLineItem(
+        id: 'stl-new-$i',
+        itemId: it.id,
+        bookQty: openingStr,
+        countedQty: openingStr,
+        variance: '0',
+        openingQty: openingStr,
+        receivedQty: '0',
+        usedQty: '0',
+        theoreticalQty: openingStr,
+        reason: '',
+      ));
+    }
+
     final st = StocktakeItem(
       id: 'st-${_stocktakes.length + 1}',
       locationId: locationId,
       status: 'open',
       note: note,
-      makerId: 'u_maker',
+      makerId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       createdAt: DateTime.now().toUtc(),
-      lines: const [],
+      lines: lineItems,
       shiftCode: shiftCode,
-      businessDate: businessDate,
+      businessDate: businessDate ?? DateTime.now().toIso8601String().substring(0, 10),
     );
     _stocktakes.insert(0, st);
     return _delay(st);
@@ -576,6 +749,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       createdAt: st.createdAt,
       completedAt: DateTime.now().toUtc(),
       lines: st.lines,
+      shiftCode: st.shiftCode,
+      businessDate: st.businessDate,
     );
     _stocktakes[idx] = updated;
     return _delay(updated);
