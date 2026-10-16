@@ -5,23 +5,24 @@ namespace: bankops-prod
 namePrefix: prod-
 
 resources:
-  - ../../base
+- ../../base
 
 patches:
-  - patch: |-
-      - op: replace
-        path: /spec/rules/0/host
-        value: bankops.yourbank.com
-      - op: replace
-        path: /spec/tls/0/hosts/0
-        value: bankops.yourbank.com
-    target:
-      kind: Ingress
-      name: bankops-ingress
+- patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: bankops.yourbank.com
+    - op: replace
+      path: /spec/tls/0/hosts/0
+      value: bankops.yourbank.com
+  target:
+    kind: Ingress
+    name: bankops-ingress
 
 # ArgoCD / GitHub Actions updates newTag on release
 images:
-  - name: ghcr.io/imtarget05/bankops-api
-    newTag: v1.0.0
-  - name: ghcr.io/imtarget05/bankops-frontend
-    newTag: v1.0.0
+- name: ghcr.io/imtarget05/bankops-api
+  newName: ghcr.io/imtarget05/bankops-api
+  newTag: sha-c0f8824
+- name: ghcr.io/imtarget05/bankops-frontend
+  newTag: v1.0.0
