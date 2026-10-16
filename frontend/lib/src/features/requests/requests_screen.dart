@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/report_share.dart';
@@ -32,6 +33,7 @@ class RequestsScreen extends StatefulWidget {
 
 class _RequestsScreenState extends State<RequestsScreen> {
   Future<_RequestsData>? _future;
+  DataSyncController? _syncController;
   bool _busy = false;
   bool _handledInitialOpen = false;
   RequestStatus? _statusFilter;
@@ -62,6 +64,24 @@ class _RequestsScreenState extends State<RequestsScreen> {
     super.didChangeDependencies();
     final repo = RepositoryScope.of(context);
     _future ??= _load(repo);
+
+    final sync = SyncScope.maybeOf(context);
+    if (sync != _syncController) {
+      _syncController?.removeListener(_onSyncUpdate);
+      _syncController = sync;
+      _syncController?.addListener(_onSyncUpdate);
+    }
+  }
+
+  void _onSyncUpdate() {
+    if (!mounted) return;
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    _syncController?.removeListener(_onSyncUpdate);
+    super.dispose();
   }
 
   void _reload() {

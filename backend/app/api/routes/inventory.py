@@ -2217,12 +2217,21 @@ async def submit_stocktake(
     st.status = "submitted"
     await db.commit()
     await db.refresh(st)
+    await broadcast_approval_event(
+        action="submitted",
+        request_id=str(st.id),
+        kind="stocktake",
+        status="submitted",
+        message=f"Đợt kiểm kê {str(st.id)[:8]} đã được gửi phê duyệt",
+        meta={"location_id": str(st.location_id), "maker_id": str(user.id)},
+    )
     return {
         "id": str(st.id),
         "location_id": str(st.location_id),
         "status": st.status,
         "note": st.note,
     }
+
 
 
 @router.post("/inventory/stocktakes/{stocktake_id}/approve")
@@ -2326,6 +2335,20 @@ async def approve_stocktake(
 
     await db.commit()
     await db.refresh(st)
+
+    await broadcast_approval_event(
+        action="approved",
+        request_id=str(st.id),
+        kind="stocktake",
+        status="closed",
+        message=f"Đợt kiểm kê {str(st.id)[:8]} đã được phê duyệt",
+        meta={
+            "location_id": str(st.location_id),
+            "maker_id": str(st.maker_id),
+            "approver_id": str(st.approver_id),
+            "adjustment_request_id": adj_id,
+        },
+    )
 
     body = {
         "id": str(st.id),

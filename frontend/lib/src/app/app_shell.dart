@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models/dtos.dart';
 import '../data/repositories/bankops_repository.dart';
+import '../core/sync/data_sync_controller.dart';
 import '../core/theme/app_tokens.dart';
 import '../core/theme/app_ui_settings_controller.dart';
 import '../core/i18n/app_i18n.dart';
@@ -77,13 +78,37 @@ class _AppShellState extends State<AppShell> {
   BankOpsRepository? _repository;
   int _index = 0;
   int _refreshTick = 0;
-  StreamSubscription<String>? _approvalSub;
+  late final DataSyncController _syncController = DataSyncController();
   int _pendingApprovalCount = 0;
   int _requestsNavId = 0;
   bool _autoOpenStockRequest = false;
   bool _autoOpenCashRequest = false;
   bool _aiUnavailable = false;
   Timer? _offlinePingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncController.addListener(_onSyncSignal);
+  }
+
+  void _onSyncSignal() {
+    if (!mounted) return;
+    final repo = _repository;
+    if (repo != null) {
+      _fetchPendingCount(repo);
+    }
+    final event = _syncController.lastEvent;
+    if (event != null &&
+        (event.action == 'submitted' || event.action == 'create') &&
+        _canAccessApprovals(SessionScope.maybeOf(context))) {
+      AppToast.info(
+        context,
+        event.message ??
+            '🔔 Yêu cầu mới chờ phê duyệt kiểm soát kép (Dual Control)!',
+      );
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -106,7 +131,10 @@ class _AppShellState extends State<AppShell> {
       }
       _startOfflinePing();
     }
-    _initApprovalSubscription();
+    _syncController.bindRepository(_repository);
+    if (_repository != null) {
+      _fetchPendingCount(_repository!);
+    }
 
     final repo = _repository;
     if (repo != null && repo is HttpBankOpsRepository) {
@@ -163,28 +191,12 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _offlinePingTimer?.cancel();
-    _approvalSub?.cancel();
+    _syncController.removeListener(_onSyncSignal);
+    _syncController.dispose();
     _repository?.dispose();
     super.dispose();
   }
 
-  void _initApprovalSubscription() {
-    _approvalSub?.cancel();
-    final repo = _repository;
-    if (repo != null) {
-      _fetchPendingCount(repo);
-      _approvalSub = repo.approvalNotifications.listen((event) {
-        if (mounted) {
-          _fetchPendingCount(repo);
-          if (event.startsWith('new_request:') &&
-              _canAccessApprovals(SessionScope.maybeOf(context))) {
-            AppToast.info(context,
-                '🔔 Yêu cầu mới chờ phê duyệt kiểm soát kép (Dual Control)!');
-          }
-        }
-      });
-    }
-  }
 
   Future<void> _fetchPendingCount(BankOpsRepository repo) async {
     try {
@@ -1042,7 +1054,9 @@ class _AppShellState extends State<AppShell> {
 
   Widget _wide(SessionScope? session, Widget body) {
     return RepositoryScope(
-        repository: _repository!,
+      repository: _repository!,
+      child: SyncScope(
+        controller: _syncController,
         child: Scaffold(
           floatingActionButton: _aiUnavailable
               ? null
@@ -1069,12 +1083,16 @@ class _AppShellState extends State<AppShell> {
               ),
             ],
           ),
-        ));
+        ),
+      ),
+    );
   }
 
   Widget _medium(SessionScope? session, Widget body) {
     return RepositoryScope(
-        repository: _repository!,
+      repository: _repository!,
+      child: SyncScope(
+        controller: _syncController,
         child: Scaffold(
           floatingActionButton: _aiUnavailable
               ? null
@@ -1104,12 +1122,16 @@ class _AppShellState extends State<AppShell> {
               ),
             ],
           ),
-        ));
+        ),
+      ),
+    );
   }
 
   Widget _compact(SessionScope? session, Widget body) {
     return RepositoryScope(
-        repository: _repository!,
+      repository: _repository!,
+      child: SyncScope(
+        controller: _syncController,
         child: Scaffold(
           floatingActionButton: _aiUnavailable
               ? null
@@ -1134,7 +1156,9 @@ class _AppShellState extends State<AppShell> {
             ],
           ),
           bottomNavigationBar: _bottomBar(session: session),
-        ));
+        ),
+      ),
+    );
   }
 }
 

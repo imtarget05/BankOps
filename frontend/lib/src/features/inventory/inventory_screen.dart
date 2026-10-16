@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/util/error_text.dart';
@@ -27,12 +28,38 @@ class InventoryScreen extends StatefulWidget {
 
 class _InventoryScreenState extends State<InventoryScreen> {
   Future<_InventoryData>? _future;
+  DataSyncController? _syncController;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final repo = RepositoryScope.of(context);
     _future ??= _load(repo);
+
+    final sync = SyncScope.maybeOf(context);
+    if (sync != _syncController) {
+      _syncController?.removeListener(_onSyncUpdate);
+      _syncController = sync;
+      _syncController?.addListener(_onSyncUpdate);
+    }
+  }
+
+  void _onSyncUpdate() {
+    if (!mounted) return;
+    final last = _syncController?.lastEvent;
+    if (last == null ||
+        last.topic == SyncTopic.inventory ||
+        last.topic == SyncTopic.stocktake ||
+        last.topic == SyncTopic.requests ||
+        last.topic == SyncTopic.all) {
+      _refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncController?.removeListener(_onSyncUpdate);
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -1703,16 +1730,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return FutureBuilder<_InventoryData>(
       future: _future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: LoadingView());
-        }
-        if (snapshot.hasError) {
+        if (snapshot.hasError && !snapshot.hasData) {
           return Center(
             child: ErrorView(
               message: '${snapshot.error}',
               onRetry: _refresh,
             ),
           );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: LoadingView());
         }
         final data = snapshot.data!;
         final canManageCatalog = RoleVisibility.canManageCatalog(

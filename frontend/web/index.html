@@ -33,16 +33,137 @@
 
   <title>Quản Lý Kho Trà Sữa</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #F8F5F0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    #app-splash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #F8F5F0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+    }
+    #app-splash.fade-out {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .splash-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 24px;
+      max-width: 320px;
+    }
+    .tea-icon {
+      width: 68px;
+      height: 68px;
+      margin-bottom: 20px;
+      animation: teaPulse 1.8s infinite ease-in-out;
+    }
+    @keyframes teaPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    .splash-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #381E19;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+    .splash-desc {
+      font-size: 13px;
+      color: #7D6B65;
+      margin-bottom: 24px;
+    }
+    .progress-bar-container {
+      width: 140px;
+      height: 4px;
+      background: #E5DFD7;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar-fill {
+      width: 45%;
+      height: 100%;
+      background: linear-gradient(90deg, #A8573E, #D97706);
+      border-radius: 999px;
+      position: absolute;
+      animation: progressIndeterminate 1.2s infinite ease-in-out;
+    }
+    @keyframes progressIndeterminate {
+      0% { left: -45%; }
+      100% { left: 100%; }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <div id="app-splash" aria-label="Đang tải Quản Lý Kho Trà Sữa">
+    <div class="splash-card">
+      <svg class="tea-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="18" y="22" width="28" height="34" rx="5" fill="#C28E64" opacity="0.3"/>
+        <path d="M16 20H48L44 54C43.8 56.2 41.9 58 39.7 58H24.3C22.1 58 20.2 56.2 20 54L16 20Z" fill="#8B4513"/>
+        <path d="M19 24L22.5 52C22.6 53.1 23.5 54 24.6 54H39.4C40.5 54 41.4 53.1 41.5 52L45 24H19Z" fill="#D2996E"/>
+        <!-- Trân châu (Boba pearls) -->
+        <circle cx="26" cy="46" r="3.2" fill="#2E1C14"/>
+        <circle cx="34" cy="48" r="3.2" fill="#2E1C14"/>
+        <circle cx="38" cy="44" r="3" fill="#2E1C14"/>
+        <circle cx="30" cy="41" r="2.8" fill="#2E1C14"/>
+        <circle cx="25" cy="38" r="2.5" fill="#2E1C14"/>
+        <!-- Nắp ly & Ống hút -->
+        <rect x="14" y="17" width="36" height="5" rx="2.5" fill="#3D2314"/>
+        <path d="M36 6L28 20" stroke="#FF8A65" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <div class="splash-title">Quản Lý Kho Trà Sữa</div>
+      <div class="splash-desc">Đang khởi tạo hệ thống...</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill"></div>
+      </div>
+    </div>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <script>
+    (function() {
+      function removeSplash() {
+        var splash = document.getElementById('app-splash');
+        if (splash && !splash.classList.contains('fade-out')) {
+          splash.classList.add('fade-out');
+          setTimeout(function() {
+            if (splash && splash.parentNode) {
+              splash.parentNode.removeChild(splash);
+            }
+          }, 360);
+        }
+      }
+      window.addEventListener('flutter-first-frame', removeSplash);
+      // Fallback khi DOM đã có flutter-view nhưng frame event bị miss
+      var checkInterval = setInterval(function() {
+        if (document.querySelector('flutter-view, flt-glass-pane')) {
+          clearInterval(checkInterval);
+          removeSplash();
+        }
+      }, 500);
+      setTimeout(function() {
+        clearInterval(checkInterval);
+        removeSplash();
+      }, 6000);
+    })();
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

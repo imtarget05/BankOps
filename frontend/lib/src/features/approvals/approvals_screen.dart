@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
@@ -28,7 +29,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   bool _busy = false;
   final Set<String> _selected = {};
   final Map<String, AiRiskAssessment> _assessments = {};
-  StreamSubscription<String>? _approvalSub;
+  DataSyncController? _syncController;
 
   @override
   void didChangeDependencies() {
@@ -39,18 +40,26 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         _loadAiAssessments(items, repo);
         return items;
       });
-      _approvalSub?.cancel();
-      _approvalSub = repo.approvalNotifications.listen((_) {
-        if (mounted) _reload();
-      });
     }
+    final sync = SyncScope.maybeOf(context);
+    if (sync != _syncController) {
+      _syncController?.removeListener(_onSyncUpdate);
+      _syncController = sync;
+      _syncController?.addListener(_onSyncUpdate);
+    }
+  }
+
+  void _onSyncUpdate() {
+    if (!mounted) return;
+    _reload();
   }
 
   @override
   void dispose() {
-    _approvalSub?.cancel();
+    _syncController?.removeListener(_onSyncUpdate);
     super.dispose();
   }
+
 
   void _loadAiAssessments(List<ApprovalItem> items, BankOpsRepository repo) {
     for (final item in items) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/state_views.dart';
@@ -21,6 +22,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   Future<DashboardData>? _future;
+  DataSyncController? _syncController;
 
   @override
   void didChangeDependencies() {
@@ -28,6 +30,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final repo = RepositoryScope.of(context);
     final user = SessionScope.maybeOf(context)?.user;
     _future ??= _load(repo, user);
+
+    final sync = SyncScope.maybeOf(context);
+    if (sync != _syncController) {
+      _syncController?.removeListener(_onSyncUpdate);
+      _syncController = sync;
+      _syncController?.addListener(_onSyncUpdate);
+    }
+  }
+
+  void _onSyncUpdate() {
+    if (!mounted) return;
+    final last = _syncController?.lastEvent;
+    if (last == null ||
+        last.topic == SyncTopic.dashboard ||
+        last.topic == SyncTopic.inventory ||
+        last.topic == SyncTopic.stocktake ||
+        last.topic == SyncTopic.approvals ||
+        last.topic == SyncTopic.all) {
+      _refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncController?.removeListener(_onSyncUpdate);
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -43,10 +71,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return FutureBuilder<DashboardData>(
       future: _future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: LoadingView());
-        }
-        if (snapshot.hasError) {
+        if (snapshot.hasError && !snapshot.hasData) {
           return Center(
             child: ErrorView(
               message: '${snapshot.error}',
@@ -54,7 +79,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           );
         }
+        if (!snapshot.hasData) {
+          return const Center(child: LoadingView());
+        }
         final data = snapshot.data!;
+
         final width = MediaQuery.sizeOf(context).width;
         final isWide = width >= 1000;
         final user = SessionScope.maybeOf(context)?.user;

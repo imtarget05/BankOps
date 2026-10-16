@@ -70,9 +70,11 @@ jobs:
         run: |
           flutter build web \
             --release \
+            --tree-shake-icons \
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
             --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
             --dart-define=APP_ENV=production
+
 
       - name: Deploy to Cloudflare Workers Assets
         env:
