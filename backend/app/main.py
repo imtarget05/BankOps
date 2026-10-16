@@ -53,6 +53,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+@app.get("/", include_in_schema=False)
+async def root_status():
+    return {
+        "service": "Quản Lý Kho Trà Sữa FastAPI",
+        "status": "alive",
+        "docs": "/docs",
+        "health": "/api/v1/health/live",
+    }
+
 @app.get("/api/v1/docs", include_in_schema=False)
 async def redirect_api_v1_docs():
     return RedirectResponse(url="/docs")
@@ -70,6 +79,7 @@ _allowed_origins = list(
             *settings.allowed_origins,
             PUBLIC_WEB_ORIGIN,
             "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev",
+            "https://kho-tra-sua-api.tanmainguyenbinh.workers.dev",
         ]
     )
 )
