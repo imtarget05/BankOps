@@ -13,11 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Backend FastAPI tạm NGHỈ trên Modal (workspace vượt spend limit → app bị xoá).
-  # Khi redeploy backend thì điền lại URL tại đây (vd. https://<workspace>--quan-ly-kho-tra-sua-api.<region>.modal.run
-  # hoặc host mới) — build sẽ nhận qua --dart-define=API_BASE_URL.
-  # Để trống → release web chạy chế độ demo/offline (KHÔNG trỏ vào URL chết).
-  API_BASE_URL: ""
+  # Canonical API FastAPI qua Cloudflare Worker Reverse Proxy
+  API_BASE_URL: "https://kho-tra-sua-api.tanmainguyenbinh.workers.dev/api/v1"
 
 jobs:
   build-and-deploy:
