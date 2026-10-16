@@ -17,10 +17,11 @@ APP_ENV = "production"
 # ─── Secrets (Production) ─────────────────────────────────────────────────────
 # Set via wrangler CLI — NEVER hardcode values here:
 #
+#   wrangler secret put UPSTREAM_API_URL
 #   wrangler secret put DATABASE_URL
 #
-# DATABASE_URL – Neon connection string (pooled); used only by
-#                GET /api/v1/health/ready.
+# UPSTREAM_API_URL – URL of canonical FastAPI (e.g. https://kho-tra-sua-fastapi.onrender.com)
+# DATABASE_URL – Neon connection string (pooled); used by /api/v1/health/ready fallback.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Staging environment

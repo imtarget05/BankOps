@@ -15,9 +15,11 @@ import { secureHeaders } from "hono/secure-headers";
 import { healthRoutes } from "./routes/health";
 
 export interface Env {
-  // Secret (wrangler secret put DATABASE_URL) – only /health/ready uses it.
-  DATABASE_URL: string;
+  // Secret (wrangler secret put DATABASE_URL) – only fallback /health/ready uses it.
+  DATABASE_URL?: string;
   APP_ENV: string;
+  // Upstream canonical API (FastAPI on Render or Modal)
+  UPSTREAM_API_URL?: string;
 }
 
 type AppEnv = { Bindings: Env; Variables: { rid: string } };
@@ -75,7 +77,7 @@ app.use("*", async (c, next) => {
   c.header("X-Correlation-ID", reqId);
 });
 
-// ─── 410 Gone (retired business surface) ─────────────────────────────────────
+// ─── 410 Gone (retired business surface fallback) ───────────────────────────
 // Same error envelope as the 404/500 handlers below.
 function gone(c: Context<AppEnv>) {
   const rid = c.get("rid") || crypto.randomUUID();
@@ -86,29 +88,102 @@ function gone(c: Context<AppEnv>) {
   );
 }
 
+// ─── Reverse Proxy to Canonical FastAPI (when UPSTREAM_API_URL is set) ──────
+async function proxyToUpstream(c: Context<AppEnv>) {
+  const upstream = c.env.UPSTREAM_API_URL?.replace(/\/+$/, "");
+  if (!upstream) {
+    return gone(c);
+  }
+
+  const url = new URL(c.req.raw.url);
+  const targetUrl = `${upstream}${url.pathname}${url.search}`;
+
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("X-Forwarded-Host", url.host);
+  headers.set("X-Forwarded-Proto", url.protocol.replace(":", ""));
+  const rid = c.get("rid") || crypto.randomUUID();
+  headers.set("X-Request-ID", rid);
+  headers.set("X-Correlation-ID", rid);
+
+  const isBodyAllowed = !["GET", "HEAD"].includes(c.req.method);
+
+  try {
+    const upstreamResponse = await fetch(targetUrl, {
+      method: c.req.method,
+      headers,
+      body: isBodyAllowed ? c.req.raw.body : undefined,
+      redirect: "follow",
+    });
+
+    const respHeaders = new Headers(upstreamResponse.headers);
+    // Strip upstream CORS headers to avoid duplicate header errors with Hono cors() middleware
+    respHeaders.delete("access-control-allow-origin");
+    respHeaders.delete("access-control-allow-credentials");
+    respHeaders.delete("access-control-allow-methods");
+    respHeaders.delete("access-control-allow-headers");
+    respHeaders.delete("access-control-expose-headers");
+    respHeaders.delete("access-control-max-age");
+
+    respHeaders.set("X-Request-ID", rid);
+    respHeaders.set("X-Correlation-ID", rid);
+
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+      statusText: upstreamResponse.statusText,
+      headers: respHeaders,
+    });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[PROXY_ERROR] ${c.req.method} ${targetUrl}:`, errMsg);
+    return c.json(
+      {
+        error: {
+          code: "BAD_GATEWAY",
+          message: "Không thể kết nối đến máy chủ backend (Upstream API).",
+          details: { error: errMsg },
+          request_id: rid,
+        },
+      },
+      502,
+      { "X-Request-ID": rid }
+    );
+  }
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
-// The ONLY capability this retired boundary still serves.
+// The retired boundary local health check (only used when UPSTREAM_API_URL is unset)
 app.route("/api/v1/health", healthRoutes);
 
-// Every business API path ever mounted here (auth, inventory, cash-sim,
-// approvals, activity, reports, integrations, reconciliations, ai,
-// ai-knowledge, me, openapi, docs, …) → 410 Gone.
-app.all("/api/*", (c, next) => {
+// If UPSTREAM_API_URL is configured, proxy /api/*, /docs, /openapi.json to canonical FastAPI
+app.all("/api/*", async (c, next) => {
+  if (c.env.UPSTREAM_API_URL) {
+    return proxyToUpstream(c);
+  }
   if (c.req.path.startsWith("/api/v1/health")) return next();
   return gone(c);
 });
 
-// Retired business documentation endpoints (root-level).
-app.all("/docs", gone);
-app.all("/openapi.json", gone);
+// Documentation endpoints
+app.all("/docs", async (c) => {
+  if (c.env.UPSTREAM_API_URL) return proxyToUpstream(c);
+  return gone(c);
+});
 
-// Root: small status pointer — no business data.
+app.all("/openapi.json", async (c) => {
+  if (c.env.UPSTREAM_API_URL) return proxyToUpstream(c);
+  return gone(c);
+});
+
+// Root: status pointer
 app.get("/", (c) =>
   c.json({
     service: "Quản Lý Kho Trà Sữa Cloudflare Worker",
-    status: "retired",
-    message: GONE_MESSAGE,
+    status: c.env.UPSTREAM_API_URL ? "proxy" : "retired",
+    upstream: c.env.UPSTREAM_API_URL ? "configured" : "none",
+    message: c.env.UPSTREAM_API_URL
+      ? "Forwarding to canonical FastAPI"
+      : GONE_MESSAGE,
     health: "/api/v1/health/live",
   })
 );

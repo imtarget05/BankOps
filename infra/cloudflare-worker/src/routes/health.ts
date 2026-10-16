@@ -20,8 +20,12 @@ healthRoutes.get("/live", (c) =>
 healthRoutes.get("/ready", async (c) => {
   let dbStatus = "unknown";
   try {
-    await db(c.env.DATABASE_URL)`SELECT 1`;
-    dbStatus = "ready";
+    if (!c.env.DATABASE_URL) {
+      dbStatus = "not_ready: DATABASE_URL not configured";
+    } else {
+      await db(c.env.DATABASE_URL)`SELECT 1`;
+      dbStatus = "ready";
+    }
   } catch (err) {
     dbStatus = `not_ready: ${err instanceof Error ? err.message : String(err)}`;
   }

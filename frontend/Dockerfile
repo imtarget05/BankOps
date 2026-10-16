@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for BankOps Flutter Web
 # Stage 1: Build Flutter Web application
-FROM ghcr.io/cirruslabs/flutter:3.24.5 AS builder
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
 WORKDIR /app
 COPY pubspec.yaml pubspec.lock* ./
