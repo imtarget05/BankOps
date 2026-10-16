@@ -48,6 +48,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _onSyncUpdate() {
     if (!mounted) return;
     final last = _syncController?.lastEvent;
+    // Bỏ qua heartbeat_poll định kỳ để không làm giật/reset giao diện nếu không có sự kiện thay đổi
+    if (last?.action == 'heartbeat_poll') {
+      return;
+    }
     if (last == null ||
         last.topic == SyncTopic.dashboard ||
         last.topic == SyncTopic.inventory ||
@@ -1106,9 +1110,12 @@ class _DashboardHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isVeryNarrow = screenWidth < 420;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+      padding: EdgeInsets.fromLTRB(isVeryNarrow ? 16 : 24, 20, isVeryNarrow ? 16 : 24, 16),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0F172A) : Colors.white,
         border: Border(
@@ -1158,7 +1165,7 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: (canApprove
                       ? const Color(0xFF1E3A8A)
@@ -1179,20 +1186,26 @@ class _DashboardHeader extends StatelessWidget {
                     color: canApprove
                         ? const Color(0xFF1E3A8A)
                         : const Color(0xFF059669)),
-                const SizedBox(width: 6),
-                Text(
-                  canApprove
-                      ? 'KIỂM SOÁT KÉP (MAKER–CHECKER)'
-                      : 'QUẦY GIAO DỊCH VIÊN',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: canApprove
-                        ? const Color(0xFF1E3A8A)
-                        : const Color(0xFF059669),
-                    letterSpacing: 0.5,
+                if (!isVeryNarrow) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    canApprove
+                        ? (screenWidth < 680
+                            ? 'KIỂM SOÁT KÉP'
+                            : 'KIỂM SOÁT KÉP (MAKER–CHECKER)')
+                        : (screenWidth < 680
+                            ? 'GIAO DỊCH VIÊN'
+                            : 'QUẦY GIAO DỊCH VIÊN'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: canApprove
+                          ? const Color(0xFF1E3A8A)
+                          : const Color(0xFF059669),
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

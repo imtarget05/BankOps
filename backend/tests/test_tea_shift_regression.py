@@ -34,8 +34,8 @@ def test_shift_formula_carryover_and_duplicate_guard(client, tea_tokens):
     items = _h(client, "GET", "/inventory/items", token=maker).json()["items"]
     assert items, "cần seed nguyên liệu trà sữa"
     item = items[0]["id"]
-    base_date = date(2026, 12, 1)
-    offset = int(uuid.uuid4().hex[:4], 16) % 28
+    base_date = date(2050, 1, 1)
+    offset = int(uuid.uuid4().hex[:6], 16) % 10000
     test_date = (base_date + timedelta(days=offset)).isoformat()
     while date.fromisoformat(test_date).weekday() >= 5:  # Sat/Sun
         test_date = (date.fromisoformat(test_date) + timedelta(days=1)).isoformat()

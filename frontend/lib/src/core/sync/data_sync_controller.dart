@@ -42,9 +42,9 @@ class SyncEvent {
 /// Kết hợp 3 cơ chế:
 /// 1. Push từ Server-Sent Events (SSE) qua repository.
 /// 2. Bắt sự kiện chuyển tab / mở lại app qua [WidgetsBindingObserver] (Lifecycle Resume).
-/// 3. Heartbeat Poller (chu kỳ 12s) đóng vai trò dự phòng khi rớt mạng di động.
+/// 3. Heartbeat Poller (chu kỳ 60s) đóng vai trò dự phòng khi rớt mạng di động.
 class DataSyncController extends ChangeNotifier with WidgetsBindingObserver {
-  DataSyncController({this.autoPollInterval = const Duration(seconds: 12)}) {
+  DataSyncController({this.autoPollInterval = const Duration(seconds: 60)}) {
     WidgetsBinding.instance.addObserver(this);
     _startHeartbeat();
   }

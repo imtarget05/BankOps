@@ -79,6 +79,7 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   int _refreshTick = 0;
   late final DataSyncController _syncController = DataSyncController();
+  final GlobalKey _bodySubtreeKey = GlobalKey();
   int _pendingApprovalCount = 0;
   int _requestsNavId = 0;
   bool _autoOpenStockRequest = false;
@@ -138,18 +139,18 @@ class _AppShellState extends State<AppShell> {
 
     final repo = _repository;
     if (repo != null && repo is HttpBankOpsRepository) {
-      final base = repo.baseUrl.replaceAll(RegExp(r'/api/v1$'), '');
+      final base = repo.baseUrl.replaceFirst(RegExp(r'/+$'), '');
       OfflineHub.instance.pingUrl = '$base/health/live';
     } else {
       final auth = Provider.of<AuthService?>(context, listen: false);
       if (auth != null && auth.apiBaseUrl.isNotEmpty) {
-        OfflineHub.instance.pingUrl =
-            '${auth.apiBaseUrl.replaceAll(RegExp(r'/api/v1$'), '')}/health/live';
+        final base = auth.apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+        OfflineHub.instance.pingUrl = '$base/health/live';
       }
     }
   }
 
-  /// Thu thập lại trạng thái mạng mỗi 5s (ping health của backend), cập nhật
+  /// Thu thập lại trạng thái mạng mỗi 30s (ping health của backend), cập nhật
   /// [OfflineHub] để hiển thị banner "Ngoại tuyến - sẽ đồng bộ".
   Future<void> _pingHealth() async {
     try {
@@ -183,7 +184,7 @@ class _AppShellState extends State<AppShell> {
 
   void _startOfflinePing() {
     if (_offlinePingTimer?.isActive ?? false) return;
-    _offlinePingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _offlinePingTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _pingHealth();
     });
   }
@@ -1007,21 +1008,101 @@ class _AppShellState extends State<AppShell> {
 
     final body = AppScreen(
       body: KeyedSubtree(
-        key:
-            ValueKey('screen-$_index-$_refreshTick-${session?.user?.id ?? ''}'),
-        child: _screenFor(_index, session),
+        key: _bodySubtreeKey,
+        child: KeyedSubtree(
+          key: ValueKey(
+              'screen-$_index-$_refreshTick-${session?.user?.id ?? ''}'),
+          child: _screenFor(_index, session),
+        ),
       ),
       header: _index == 0 ? const _DashboardHeader() : null,
       onRefresh: _reload,
     );
 
+    final bodyWithTicker = _withLiveTicker(body);
+
+    Widget mainBody;
     if (layout.isWide) {
-      return _shortcutWrapper(_wide(session, _withLiveTicker(body)));
+      mainBody = Row(
+        children: [
+          _navRail(width: 256, session: session),
+          const VerticalDivider(width: 8, thickness: 1),
+          Expanded(
+            child: Column(
+              children: [
+                OfflineBanner(pending: OfflineHub.instance.pending),
+                _topBar(session: session),
+                Expanded(child: bodyWithTicker),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else if (layout.isMedium) {
+      mainBody = Stack(
+        children: [
+          Row(
+            children: [
+              _navRail(width: 88, session: session),
+              const VerticalDivider(width: 8, thickness: 1),
+              Expanded(child: bodyWithTicker),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: OfflineBanner(pending: OfflineHub.instance.pending),
+          ),
+        ],
+      );
+    } else {
+      mainBody = Stack(
+        children: [
+          bodyWithTicker,
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: OfflineBanner(pending: OfflineHub.instance.pending),
+          ),
+        ],
+      );
     }
-    if (layout.isMedium) {
-      return _shortcutWrapper(_medium(session, _withLiveTicker(body)));
-    }
-    return _shortcutWrapper(_compact(session, _withLiveTicker(body)));
+
+    final scaffold = Scaffold(
+      floatingActionButton: _aiUnavailable
+          ? null
+          : (layout.isWide
+              ? FloatingActionButton.extended(
+                  key: const Key('btn-ai-assistant'),
+                  onPressed: () => AiAssistantDialog.show(context),
+                  icon: const Icon(Icons.psychology_outlined),
+                  label: const Text('Trợ lý AI'),
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                )
+              : FloatingActionButton(
+                  key: const Key('btn-ai-assistant'),
+                  onPressed: () => AiAssistantDialog.show(context),
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  tooltip: 'Trợ lý AI',
+                  child: const Icon(Icons.psychology_outlined),
+                )),
+      appBar: layout.isWide ? null : _topBar(session: session),
+      body: mainBody,
+      bottomNavigationBar:
+          layout.isCompact ? _bottomBar(session: session) : null,
+    );
+
+    return RepositoryScope(
+      repository: _repository!,
+      child: SyncScope(
+        controller: _syncController,
+        child: _shortcutWrapper(scaffold),
+      ),
+    );
   }
 
   Widget _withLiveTicker(Widget body) {
@@ -1049,115 +1130,6 @@ class _AppShellState extends State<AppShell> {
             _openSearch,
       },
       child: Focus(autofocus: true, child: page),
-    );
-  }
-
-  Widget _wide(SessionScope? session, Widget body) {
-    return RepositoryScope(
-      repository: _repository!,
-      child: SyncScope(
-        controller: _syncController,
-        child: Scaffold(
-          floatingActionButton: _aiUnavailable
-              ? null
-              : FloatingActionButton.extended(
-            key: const Key('btn-ai-assistant'),
-            onPressed: () => AiAssistantDialog.show(context),
-            icon: const Icon(Icons.psychology_outlined),
-            label: const Text('Trợ lý AI'),
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-          ),
-          body: Row(
-            children: [
-              _navRail(width: 256, session: session),
-              const VerticalDivider(width: 8, thickness: 1),
-              Expanded(
-                child: Column(
-                  children: [
-                    OfflineBanner(pending: OfflineHub.instance.pending),
-                    _topBar(session: session),
-                    Expanded(child: body),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _medium(SessionScope? session, Widget body) {
-    return RepositoryScope(
-      repository: _repository!,
-      child: SyncScope(
-        controller: _syncController,
-        child: Scaffold(
-          floatingActionButton: _aiUnavailable
-              ? null
-              : FloatingActionButton(
-            key: const Key('btn-ai-assistant'),
-            onPressed: () => AiAssistantDialog.show(context),
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-            tooltip: 'Trợ lý AI',
-            child: const Icon(Icons.psychology_outlined),
-          ),
-          appBar: _topBar(session: session),
-          body: Stack(
-            children: [
-              Row(
-                children: [
-                  _navRail(width: 88, session: session),
-                  const VerticalDivider(width: 8, thickness: 1),
-                  Expanded(child: body),
-                ],
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: OfflineBanner(pending: OfflineHub.instance.pending),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _compact(SessionScope? session, Widget body) {
-    return RepositoryScope(
-      repository: _repository!,
-      child: SyncScope(
-        controller: _syncController,
-        child: Scaffold(
-          floatingActionButton: _aiUnavailable
-              ? null
-              : FloatingActionButton(
-            key: const Key('btn-ai-assistant'),
-            onPressed: () => AiAssistantDialog.show(context),
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-            tooltip: 'Trợ lý AI',
-            child: const Icon(Icons.psychology_outlined),
-          ),
-          appBar: _topBar(session: session),
-          body: Stack(
-            children: [
-              body,
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: OfflineBanner(pending: OfflineHub.instance.pending),
-              ),
-            ],
-          ),
-          bottomNavigationBar: _bottomBar(session: session),
-        ),
-      ),
     );
   }
 }

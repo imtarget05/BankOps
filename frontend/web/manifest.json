@@ -6,7 +6,7 @@
     "background_color": "#4A2C2A",
     "theme_color": "#4A2C2A",
     "description": "Ứng dụng quản lý nhập, xuất và tồn nguyên vật liệu cho quán trà sữa.",
-    "orientation": "portrait-primary",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

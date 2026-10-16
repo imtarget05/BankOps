@@ -154,13 +154,14 @@ async function proxyToUpstream(c: Context<AppEnv>) {
 
 // The retired boundary local health check (only used when UPSTREAM_API_URL is unset)
 app.route("/api/v1/health", healthRoutes);
+app.route("/health", healthRoutes);
 
 // If UPSTREAM_API_URL is configured, proxy /api/*, /docs, /openapi.json to canonical FastAPI
 app.all("/api/*", async (c, next) => {
   if (c.env.UPSTREAM_API_URL) {
     return proxyToUpstream(c);
   }
-  if (c.req.path.startsWith("/api/v1/health")) return next();
+  if (c.req.path.startsWith("/api/v1/health") || c.req.path.startsWith("/health")) return next();
   return gone(c);
 });
 

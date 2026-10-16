@@ -161,6 +161,14 @@
         clearInterval(checkInterval);
         removeSplash();
       }, 6000);
+
+      // Chống crash và reload trang khi xoay màn hình hoặc sleep trên mobile browsers (Safari / Zalo)
+      window.addEventListener('webglcontextlost', function(e) {
+        e.preventDefault();
+      }, true);
+      window.addEventListener('webglcontextrestored', function(e) {
+        console.log('[WebOps] WebGL context restored');
+      }, true);
     })();
   </script>
 
