@@ -44,7 +44,7 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
     # SRS §3.3: staff only enters used/count; opening is seeded by the system.
     seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=headers).json()["lines"]
     opening = float(
-        next(l for l in seeded if l["item_id"] == items[0]["id"])["opening_qty"]
+        next(line for line in seeded if line["item_id"] == items[0]["id"])["opening_qty"]
     )
 
     updated = client.put(

@@ -206,7 +206,7 @@ class TestStocktake:
             json={"lines": [{"item_id": item_id, "counted_qty": str(counted_qty)}]},
         )
         assert r.status_code == 200, r.text
-        matched = [l for l in r.json()["lines"] if l["item_id"] == item_id]
+        matched = [line for line in r.json()["lines"] if line["item_id"] == item_id]
         assert matched, "dòng kiểm kê của item phải tồn tại trong response"
         assert float(matched[0]["variance"]) < 0
         assert client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(mgr)).status_code == 200

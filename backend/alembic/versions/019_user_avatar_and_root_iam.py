@@ -3,8 +3,9 @@
 Revision ID: 019_user_avatar_and_root_iam
 Revises: 018_tea_catalog_rebuild
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "019_user_avatar_and_root_iam"
 down_revision = "018_tea_catalog_rebuild"

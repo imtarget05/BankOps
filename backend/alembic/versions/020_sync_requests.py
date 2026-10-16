@@ -3,8 +3,9 @@
 Revision ID: 020_sync_requests
 Revises: 019_user_avatar_and_root_iam
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "020_sync_requests"
 down_revision = "019_user_avatar_and_root_iam"

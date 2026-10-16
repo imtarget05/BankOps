@@ -3,9 +3,9 @@
 Revision ID: 015_tea_ingredient_catalog
 Revises: 014_etl_pipeline_models
 """
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "015_tea_ingredient_catalog"
 down_revision = "014_etl_pipeline_models"

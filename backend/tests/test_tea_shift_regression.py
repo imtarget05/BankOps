@@ -1,7 +1,7 @@
 """Tea-shift regression: shift open/carry-over, receipt lot/expiry, alerts, reports."""
 
-from datetime import date, timedelta
 import uuid
+from datetime import date, timedelta
 
 import pytest
 
@@ -30,11 +30,15 @@ def _h(client, method, path, token=None, **kw):
 def test_shift_formula_carryover_and_duplicate_guard(client, tea_tokens):
     maker, checker = tea_tokens["staff"], tea_tokens["manager"]
     locs = _h(client, "GET", "/inventory/locations", token=maker).json()["locations"]
-    loc = next((l for l in locs if l["code"] == "BAR-MAIN"), locs[0])["id"]
+    loc = next((line for line in locs if line["code"] == "BAR-MAIN"), locs[0])["id"]
     items = _h(client, "GET", "/inventory/items", token=maker).json()["items"]
     assert items, "cần seed nguyên liệu trà sữa"
     item = items[0]["id"]
-    test_date = f"2026-12-{(int(uuid.uuid4().hex[:4], 16) % 28) + 1:02d}"
+    base_date = date(2026, 12, 1)
+    offset = int(uuid.uuid4().hex[:4], 16) % 28
+    test_date = (base_date + timedelta(days=offset)).isoformat()
+    while date.fromisoformat(test_date).weekday() >= 5:  # Sat/Sun
+        test_date = (date.fromisoformat(test_date) + timedelta(days=1)).isoformat()
 
     morning = _h(client, "POST", "/inventory/stocktakes", token=maker, json={
         "location_id": loc, "shift_code": "morning", "business_date": test_date,
@@ -51,13 +55,13 @@ def test_shift_formula_carryover_and_duplicate_guard(client, tea_tokens):
     assert dup.json()["error"]["code"] == "SHIFT_ALREADY_OPEN"
 
     lines = _h(client, "GET", f"/inventory/stocktakes/{m['id']}", token=maker).json()["lines"]
-    target = next(l for l in lines if l["item_id"] == item)
+    target = next(line for line in lines if line["item_id"] == item)
     opening = float(target["opening_qty"])
     upd = _h(client, "PUT", f"/inventory/stocktakes/{m['id']}/lines", token=maker, json={
         "lines": [{"item_id": item, "used_qty": "5.000", "counted_qty": str(opening - 4)}],
     })
     assert upd.status_code == 200, upd.text
-    row = next(l for l in upd.json()["lines"] if l["item_id"] == item)
+    row = next(line for line in upd.json()["lines"] if line["item_id"] == item)
     # Còn lại = Tồn đầu + Nhập − Sử dụng; Lệch = Thực tế − Còn lại
     assert abs(float(row["theoretical_qty"]) - (opening - 5.0)) < 1e-6
     assert abs(float(row["variance"]) - 1.0) < 1e-6
@@ -79,7 +83,7 @@ def test_shift_formula_carryover_and_duplicate_guard(client, tea_tokens):
     })
     assert afternoon.status_code == 201, afternoon.text
     a_lines = _h(client, "GET", f"/inventory/stocktakes/{afternoon.json()['id']}", token=maker).json()["lines"]
-    a_row = next(l for l in a_lines if l["item_id"] == item)
+    a_row = next(line for line in a_lines if line["item_id"] == item)
     # Tồn đầu ca chiều = kiểm thực tế ca sáng đã chốt
     assert abs(float(a_row["opening_qty"]) - (opening - 4)) < 1e-6
 
@@ -95,7 +99,7 @@ def test_receipt_lot_expiry_validation(client, tea_tokens):
     items = _h(client, "GET", "/inventory/items", token=maker).json()["items"]
     locs = _h(client, "GET", "/inventory/locations", token=maker).json()["locations"]
     item = items[0]["id"]
-    loc = next((l for l in locs if l["code"] == "BAR-MAIN"), locs[0])["id"]
+    loc = next((line for line in locs if line["code"] == "BAR-MAIN"), locs[0])["id"]
     future = (date.today() + timedelta(days=30)).isoformat()
     past = (date.today() - timedelta(days=1)).isoformat()
 

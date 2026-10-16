@@ -3,9 +3,9 @@
 Revision ID: 017_tea_receipt_lot_expiry
 Revises: 016_shift_stocktake_fields
 """
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "017_tea_receipt_lot_expiry"
 down_revision = "016_shift_stocktake_fields"

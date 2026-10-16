@@ -3,9 +3,9 @@
 Revision ID: 016_shift_stocktake_fields
 Revises: 015_tea_ingredient_catalog
 """
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "016_shift_stocktake_fields"
 down_revision = "015_tea_ingredient_catalog"
