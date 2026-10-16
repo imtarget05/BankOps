@@ -11,14 +11,23 @@ import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 import 'shift_stocktake_desk.dart';
 
-/// Màn quản lý nguyên vật liệu cho quán trà sữa.
+/// Chế độ hiển thị của màn hình Kho và Ca làm việc.
+enum InventoryTabMode {
+  all,
+  stock,
+  shiftWork,
+}
+
+/// Màn quản lý nguyên vật liệu và ca làm việc cho quán trà sữa.
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({
     super.key,
+    this.mode = InventoryTabMode.all,
     this.onNavigate,
     this.onCreateStockRequest,
   });
 
+  final InventoryTabMode mode;
   final ValueChanged<int>? onNavigate;
   final VoidCallback? onCreateStockRequest;
 
@@ -1753,21 +1762,101 @@ class _InventoryScreenState extends State<InventoryScreen> {
           (sum, b) => sum + (double.tryParse(b.quantity) ?? 0),
         );
 
-        return RefreshIndicator(
-          onRefresh: _refresh,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              // Header
-              Row(
+        final isCompact = MediaQuery.sizeOf(context).width < 720;
+        final isShiftOnly = widget.mode == InventoryTabMode.shiftWork;
+        final isStockOnly = widget.mode == InventoryTabMode.stock;
+
+        final headerTitle = isShiftOnly
+            ? 'Quản Lý Ca Làm Việc & Kiểm Kê Ca Pha Chế'
+            : 'Quản Lý Nhập Xuất Tồn Nguyên Vật Liệu';
+        final headerSubtitle = isShiftOnly
+            ? 'Kiểm kê đầu ca, chốt số liệu cuối ca và đối chiếu chênh lệch định lượng nguyên liệu'
+            : 'Theo dõi nguyên liệu theo ca, định mức tồn và chênh lệch kiểm kê';
+
+        final headerActions = <Widget>[
+          if (isShiftOnly)
+            FilledButton.icon(
+              key: const Key('btn-open-shift-stocktake'),
+              onPressed: () => _showCreateStocktakeDialog(data.locations),
+              icon: const Icon(Icons.add_task_rounded, size: 18),
+              label: const Text('Mở Đợt Kiểm Kê Mới'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF0891B2),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            )
+          else ...[
+            if (canManageCatalog)
+              OutlinedButton.icon(
+                key: const Key('btn-add-item'),
+                onPressed: () => _showCreateItemDialog(),
+                icon: const Icon(Icons.add_box_outlined, size: 18),
+                label: const Text('Thêm mặt hàng'),
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            FilledButton.icon(
+              key: const Key('btn-create-stock-request'),
+              onPressed: () {
+                if (widget.onCreateStockRequest != null) {
+                  widget.onCreateStockRequest!();
+                } else if (widget.onNavigate != null) {
+                  widget.onNavigate!(3);
+                }
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Lập phiếu kho mới'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ];
+
+        Widget headerWidget = isCompact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headerTitle,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    headerSubtitle,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (headerActions.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: headerActions,
+                    ),
+                  ],
+                ],
+              )
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Quản Lý Nhập Xuất Tồn Nguyên Vật Liệu',
+                          headerTitle,
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.5,
@@ -1775,7 +1864,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Theo dõi nguyên liệu theo ca, định mức tồn và chênh lệch kiểm kê',
+                          headerSubtitle,
                           style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
                             fontSize: 13,
@@ -1784,107 +1873,152 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
+                  if (headerActions.isNotEmpty) ...[
+                    const SizedBox(width: 16),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: headerActions,
+                    ),
+                  ],
+                ],
+              );
+
+        final pendingCount = data.stocktakes
+            .where((s) => s.status == 'submitted' || s.status == 'open')
+            .length;
+        final approvedCount = data.stocktakes
+            .where((s) => s.status == 'approved' || s.status == 'completed')
+            .length;
+
+        final List<Widget> kpiCards;
+        if (isShiftOnly) {
+          kpiCards = [
+            _buildKpiCard(
+              context,
+              title: 'CA VẬN HÀNH',
+              value: 'Sáng • Chiều • Tối',
+              subtitle: 'Theo lịch phân bổ quầy',
+              icon: Icons.schedule_rounded,
+              color: const Color(0xFF2563EB),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'TỔNG ĐỢT KIỂM KÊ',
+              value: '${data.stocktakes.length} đợt',
+              subtitle: 'Đã lập trong hệ thống',
+              icon: Icons.checklist_rounded,
+              color: const Color(0xFF0891B2),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'CHỜ DUYỆT ĐỐI SOÁT',
+              value: '$pendingCount phiếu',
+              subtitle: 'Maker-Checker kiểm đếm',
+              icon: Icons.pending_actions_rounded,
+              color: const Color(0xFFF59E0B),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'ĐÃ DUYỆT HOÀN TẤT',
+              value: '$approvedCount phiếu',
+              subtitle: 'Khớp số liệu tồn kho',
+              icon: Icons.verified_rounded,
+              color: const Color(0xFF059669),
+            ),
+          ];
+        } else {
+          kpiCards = [
+            _buildKpiCard(
+              context,
+              title: 'TỔNG LƯỢNG TỒN KHO',
+              value: '${AppFormat.intFormat(totalQuantity.round())} đơn vị',
+              subtitle: 'Định mức khả dụng an toàn',
+              icon: Icons.inventory_2_rounded,
+              color: const Color(0xFF2563EB),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'CHỦNG LOẠI NGUYÊN LIỆU',
+              value: '${data.items.length} loại vật tư',
+              subtitle: 'Trà, bột sữa, topping và bao bì',
+              icon: Icons.category_rounded,
+              color: const Color(0xFF0891B2),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'ĐIỂM LƯU KHO',
+              value: '${data.locations.length} khu vực kho',
+              subtitle: 'Kho quầy và kho trung tâm',
+              icon: Icons.warehouse_rounded,
+              color: const Color(0xFF059669),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'MỤC CẦN KIỂM KÊ',
+              value: '${data.items.length} mặt hàng',
+              subtitle: 'Đối chiếu tồn lý thuyết và thực tế',
+              icon: Icons.qr_code_2_rounded,
+              color: const Color(0xFF7C3AED),
+            ),
+          ];
+        }
+
+        Widget kpiWidget = isCompact
+            ? Column(
+                children: [
+                  Row(
                     children: [
-                      if (canManageCatalog)
-                        OutlinedButton.icon(
-                          key: const Key('btn-add-item'),
-                          onPressed: () => _showCreateItemDialog(),
-                          icon: const Icon(Icons.add_box_outlined, size: 18),
-                          label: const Text('Thêm mặt hàng'),
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      FilledButton.icon(
-                        key: const Key('btn-create-stock-request'),
-                        onPressed: () {
-                          if (widget.onCreateStockRequest != null) {
-                            widget.onCreateStockRequest!();
-                          } else if (widget.onNavigate != null) {
-                            widget.onNavigate!(3);
-                          }
-                        },
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Lập phiếu kho mới'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
+                      Expanded(child: kpiCards[0]),
+                      const SizedBox(width: 12),
+                      Expanded(child: kpiCards[1]),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: kpiCards[2]),
+                      const SizedBox(width: 12),
+                      Expanded(child: kpiCards[3]),
                     ],
                   ),
                 ],
-              ),
+              )
+            : Row(
+                children: [
+                  Expanded(child: kpiCards[0]),
+                  const SizedBox(width: 14),
+                  Expanded(child: kpiCards[1]),
+                  const SizedBox(width: 14),
+                  Expanded(child: kpiCards[2]),
+                  const SizedBox(width: 14),
+                  Expanded(child: kpiCards[3]),
+                ],
+              );
+
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              headerWidget,
               const SizedBox(height: 20),
 
-              if (data.lowStockAlerts.isNotEmpty) ...[
+              if (!isShiftOnly && data.lowStockAlerts.isNotEmpty) ...[
                 _buildLowStockAlertBanner(context, data.lowStockAlerts),
                 const SizedBox(height: 20),
               ],
 
-              if (data.expiryAlerts.isNotEmpty) ...[
+              if (!isShiftOnly && data.expiryAlerts.isNotEmpty) ...[
                 _buildExpiryAlertBanner(context, data.expiryAlerts),
                 const SizedBox(height: 20),
               ],
 
-              // KPI Strip
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildKpiCard(
-                      context,
-                      title: 'TỔNG LƯỢNG TỒN KHO',
-                      value:
-                          '${AppFormat.intFormat(totalQuantity.round())} đơn vị',
-                      subtitle: 'Định mức khả dụng an toàn',
-                      icon: Icons.inventory_2_rounded,
-                      color: const Color(0xFF2563EB),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildKpiCard(
-                      context,
-                      title: 'CHỦNG LOẠI NGUYÊN LIỆU',
-                      value: '${data.items.length} loại vật tư',
-                      subtitle: 'Trà, bột sữa, topping và bao bì',
-                      icon: Icons.category_rounded,
-                      color: const Color(0xFF0891B2),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildKpiCard(
-                      context,
-                      title: 'ĐIỂM LƯU KHO',
-                      value: '${data.locations.length} khu vực kho',
-                      subtitle: 'Kho quầy và kho trung tâm',
-                      icon: Icons.warehouse_rounded,
-                      color: const Color(0xFF059669),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildKpiCard(
-                      context,
-                      title: 'MỤC CẦN KIỂM KÊ',
-                      value: '${data.items.length} mặt hàng',
-                      subtitle: 'Đối chiếu tồn lý thuyết và thực tế',
-                      icon: Icons.qr_code_2_rounded,
-                      color: const Color(0xFF7C3AED),
-                    ),
-                  ),
-                ],
-              ),
+              kpiWidget,
               const SizedBox(height: 24),
 
-              Text('Danh mục mặt hàng',
+              if (!isShiftOnly) ...[
+                Text('Danh mục mặt hàng',
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
@@ -2258,8 +2392,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ),
               ),
               const SizedBox(height: 24),
+            ],
+            if (!isStockOnly) ...[
               _buildStocktakesSection(context, data),
             ],
+          ],
           ),
         );
       },
@@ -2392,41 +2529,77 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final isCompact = MediaQuery.sizeOf(context).width < 650;
+    final header = isCompact
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Kiểm đếm thực tế, đối chiếu sổ sách và tự động sinh phiếu điều chỉnh Maker-Checker',
+                style: TextStyle(
+                    fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: () => _showCreateStocktakeDialog(data.locations),
+                icon: const Icon(Icons.add_task_rounded, size: 16),
+                label: const Text('Mở Đợt Kiểm Kê Mới'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0891B2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Kiểm đếm thực tế, đối chiếu sổ sách và tự động sinh phiếu điều chỉnh Maker-Checker',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => _showCreateStocktakeDialog(data.locations),
+                icon: const Icon(Icons.add_task_rounded, size: 16),
+                label: const Text('Mở Đợt Kiểm Kê Mới'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0891B2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Kiểm đếm thực tế, đối chiếu sổ sách và tự động sinh phiếu điều chỉnh Maker-Checker',
-                  style: TextStyle(
-                      fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-            FilledButton.icon(
-              onPressed: () => _showCreateStocktakeDialog(data.locations),
-              icon: const Icon(Icons.add_task_rounded, size: 16),
-              label: const Text('Mở Đợt Kiểm Kê Mới'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0891B2),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
+        header,
         const SizedBox(height: 12),
         _buildShiftStocktakeDesk(data),
         const SizedBox(height: 12),
@@ -2475,92 +2648,119 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       statusText = 'Đã hoàn tất (Closed)';
                     }
 
+                    final contentColumn = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Kho: $locName',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: badgeColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                statusText,
+                                style: TextStyle(
+                                    color: badgeColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Ghi chú: ${st.note ?? "Kiểm kê kho"} • Ngày tạo: ${st.createdAt.toLocal().toString().substring(0, 16)}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        if (st.adjustmentRequestId != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '⚡ Phiếu điều chỉnh tự động: #${st.adjustmentRequestId}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF059669)),
+                            ),
+                          ),
+                      ],
+                    );
+
+                    final actionBtn = OutlinedButton.icon(
+                      onPressed: () => _showStocktakeDetailDialog(
+                          st, data.items, data.locations,
+                          stockLevels: data.stockLevels),
+                      icon: const Icon(Icons.edit_note_rounded, size: 16),
+                      label: Text(st.status == 'open'
+                          ? 'Nhập Số Đếm'
+                          : 'Xem Chi Tiết'),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                    );
+
                     return Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 14),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: badgeColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(Icons.assignment_outlined,
-                                size: 20, color: badgeColor),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
+                          horizontal: 16, vertical: 14),
+                      child: isCompact
+                          ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Flexible(
-                                      child: Text(
-                                        'Kho: $locName',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 2),
+                                      padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color:
-                                            badgeColor.withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(4),
+                                        color: badgeColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
-                                      child: Text(
-                                        statusText,
-                                        style: TextStyle(
-                                            color: badgeColor,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold),
-                                      ),
+                                      child: Icon(Icons.assignment_outlined,
+                                          size: 20, color: badgeColor),
                                     ),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: contentColumn),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Ghi chú: ${st.note ?? "Kiểm kê kho"} • Ngày tạo: ${st.createdAt.toLocal().toString().substring(0, 16)}',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color:
-                                          theme.colorScheme.onSurfaceVariant),
+                                const SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: actionBtn,
                                 ),
-                                if (st.adjustmentRequestId != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      '⚡ Phiếu điều chỉnh tự động: #${st.adjustmentRequestId}',
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF059669)),
-                                    ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
+                                  child: Icon(Icons.assignment_outlined,
+                                      size: 20, color: badgeColor),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(child: contentColumn),
+                                const SizedBox(width: 12),
+                                actionBtn,
                               ],
                             ),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => _showStocktakeDetailDialog(
-                                st, data.items, data.locations,
-                                stockLevels: data.stockLevels),
-                            icon: const Icon(Icons.edit_note_rounded, size: 16),
-                            label: Text(st.status == 'open'
-                                ? 'Nhập Số Đếm'
-                                : 'Xem Chi Tiết'),
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                        ],
-                      ),
                     );
                   },
                 ),

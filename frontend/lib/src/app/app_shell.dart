@@ -331,13 +331,13 @@ class _AppShellState extends State<AppShell> {
         return DashboardScreen(onNavigate: _go);
       case 1:
         return InventoryScreen(
+          mode: InventoryTabMode.stock,
           onNavigate: _go,
           onCreateStockRequest: () => _go(3, autoOpenStock: true),
         );
       case 2:
-        // Pilot trà sữa: ẩn module Quỹ mô phỏng khỏi UI (giữ route/code
-        // để rollback). Điều hướng cũ tới tab 2 chuyển sang Kho.
         return InventoryScreen(
+          mode: InventoryTabMode.shiftWork,
           onNavigate: _go,
           onCreateStockRequest: () => _go(3, autoOpenStock: true),
         );
@@ -512,25 +512,86 @@ class _AppShellState extends State<AppShell> {
         .toList();
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const ListTile(
-              title: Text('Chọn màn'), leading: Icon(Icons.list_alt_outlined)),
-          const Divider(),
-          ...visibleItems.map((it) => ListTile(
-                leading: const Icon(Icons.arrow_forward_ios, size: 16),
-                title: Text(_titleFor(context, it.index)),
-                dense: true,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  setState(() => _index = it.index);
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (scrollContext, scrollController) => Column(
+          children: [
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(sheetContext).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.apps_rounded),
+              title: const Text(
+                'Chọn phân hệ làm việc',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Đóng',
+                onPressed: () => Navigator.of(sheetContext).pop(),
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                controller: scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: visibleItems.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 56),
+                itemBuilder: (ctx, idx) {
+                  final it = visibleItems[idx];
+                  final isCurrent = _index == it.index;
+                  return ListTile(
+                    leading: Icon(
+                      _icons[it.index],
+                      color: isCurrent
+                          ? const Color(0xFF2563EB)
+                          : Theme.of(sheetContext)
+                              .colorScheme
+                              .onSurfaceVariant,
+                    ),
+                    title: Text(
+                      _titleFor(context, it.index),
+                      style: TextStyle(
+                        fontWeight:
+                            isCurrent ? FontWeight.w700 : FontWeight.w500,
+                        color: isCurrent ? const Color(0xFF2563EB) : null,
+                      ),
+                    ),
+                    trailing: isCurrent
+                        ? const Icon(Icons.check_circle_rounded,
+                            color: Color(0xFF2563EB), size: 18)
+                        : const Icon(Icons.arrow_forward_ios,
+                            size: 14, color: Colors.grey),
+                    dense: true,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      setState(() => _index = it.index);
+                    },
+                  );
                 },
-              )),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

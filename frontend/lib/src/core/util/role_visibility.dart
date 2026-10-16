@@ -88,13 +88,13 @@ class RoleVisibility {
   /// Danh sách tab (full index theo AppShell) user được thấy.
   /// Pilot trà sữa: ẩn 2 Quỹ, 5 Tích hợp/ETL khỏi UI chính
   /// (backend giữ nguyên để rollback). Index giữ nguyên để không vỡ _go().
-  /// 0 Tổng quan, 1 Kho, 2 Quỹ (ẩn), 3 Yêu cầu, 4 Duyệt, 5 Tích hợp/ETL (ẩn),
+  /// 0 Tổng quan, 1 Kho, 2 Ca làm việc, 3 Yêu cầu, 4 Duyệt, 5 Tích hợp/ETL (ẩn),
   /// 6 Hoạt động, 7 Báo cáo, 8 Cài đặt, 9 Quản trị nhân viên.
   /// Vai trò hiển thị chuẩn SRS: Quản lý (admin/manager) và
   /// Nhân viên/Trưởng ca (staff).
-  static const hiddenPilotTabs = {2, 5};
+  static const hiddenPilotTabs = {5};
   static List<int> visibleTabs(Set<String> roles, [AppUser? user]) {
-    final list = <int>[0, 1];
+    final list = <int>[0, 1, 2];
     if (!isAuditorOnly(roles)) {
       list.addAll([3, 4]);
     }
