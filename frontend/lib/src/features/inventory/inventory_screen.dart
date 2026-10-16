@@ -2008,7 +2008,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
           (sum, b) => sum + (double.tryParse(b.quantity) ?? 0),
         );
 
-        final isCompact = MediaQuery.sizeOf(context).width < 720;
         final isShiftOnly = widget.mode == InventoryTabMode.shiftWork;
         final isStockOnly = widget.mode == InventoryTabMode.stock;
 
@@ -2076,72 +2075,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           ],
         ];
-
-        Widget headerWidget = isCompact
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    headerTitle,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    headerSubtitle,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (headerActions.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 8,
-                      children: headerActions,
-                    ),
-                  ],
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          headerTitle,
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          headerSubtitle,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (headerActions.isNotEmpty) ...[
-                    const SizedBox(width: 16),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 8,
-                      children: headerActions,
-                    ),
-                  ],
-                ],
-              );
 
         final pendingCount = data.stocktakes
             .where((s) => s.status == 'submitted' || s.status == 'open')
@@ -2223,45 +2156,120 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ];
         }
 
-        Widget kpiWidget = isCompact
-            ? Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: kpiCards[0]),
-                      const SizedBox(width: 12),
-                      Expanded(child: kpiCards[1]),
+        Widget buildHeader(bool isCompact) {
+          return isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      headerTitle,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      headerSubtitle,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (headerActions.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: headerActions,
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(child: kpiCards[2]),
-                      const SizedBox(width: 12),
-                      Expanded(child: kpiCards[3]),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            headerTitle,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            headerSubtitle,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (headerActions.isNotEmpty) ...[
+                      const SizedBox(width: 16),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: headerActions,
+                      ),
                     ],
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(child: kpiCards[0]),
-                  const SizedBox(width: 14),
-                  Expanded(child: kpiCards[1]),
-                  const SizedBox(width: 14),
-                  Expanded(child: kpiCards[2]),
-                  const SizedBox(width: 14),
-                  Expanded(child: kpiCards[3]),
-                ],
-              );
+                  ],
+                );
+        }
+
+        Widget buildKpis(bool isWideKpis) {
+          return !isWideKpis
+              ? Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: kpiCards[0]),
+                        const SizedBox(width: 12),
+                        Expanded(child: kpiCards[1]),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: kpiCards[2]),
+                        const SizedBox(width: 12),
+                        Expanded(child: kpiCards[3]),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: kpiCards[0]),
+                    const SizedBox(width: 14),
+                    Expanded(child: kpiCards[1]),
+                    const SizedBox(width: 14),
+                    Expanded(child: kpiCards[2]),
+                    const SizedBox(width: 14),
+                    Expanded(child: kpiCards[3]),
+                  ],
+                );
+        }
 
         return RefreshIndicator(
           onRefresh: _refresh,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              headerWidget,
-              const SizedBox(height: 20),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 960;
+              final isWideKpis = constraints.maxWidth >= 1080;
+
+              return ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  buildHeader(isCompact),
+                  const SizedBox(height: 20),
 
               if (!isShiftOnly && data.lowStockAlerts.isNotEmpty) ...[
                 _buildLowStockAlertBanner(context, data.lowStockAlerts),
@@ -2273,8 +2281,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 const SizedBox(height: 20),
               ],
 
-              kpiWidget,
-              const SizedBox(height: 24),
+                  buildKpis(isWideKpis),
+                  const SizedBox(height: 24),
 
               if (!isShiftOnly) ...[
                 Row(
@@ -2927,10 +2935,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
               _buildStocktakesSection(context, data),
             ],
           ],
-          ),
         );
       },
-    );
+    ),
+  );
+},
+);
   }
 
   Widget _buildLowStockAlertBanner(
@@ -2987,7 +2997,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           Column(
             children: alerts.map((al) {
               final isEmpty = al.status == 'empty';
-              final isNarrow = MediaQuery.sizeOf(context).width < 600;
+              final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
               if (isNarrow) {
                 return Container(
@@ -3128,7 +3138,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final isCompact = MediaQuery.sizeOf(context).width < 650;
+    final isCompact = MediaQuery.sizeOf(context).width < 800;
     final header = isCompact
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3484,7 +3494,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             children: alerts.map((al) {
               final isExpired = al.daysLeft <= 0;
               final isWarning = al.daysLeft <= 3 && !isExpired;
-              final isNarrow = MediaQuery.sizeOf(context).width < 600;
+              final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
               final badgeColor = isExpired
                   ? const Color(0xFFDC2626)

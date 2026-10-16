@@ -840,7 +840,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
         _employees.where((e) => e.hasPendingInvite).length;
 
     final width = MediaQuery.sizeOf(context).width;
-    final isCompact = width < 640;
+    final isCompact = width < 750;
 
     return Scaffold(
       body: RefreshIndicator(

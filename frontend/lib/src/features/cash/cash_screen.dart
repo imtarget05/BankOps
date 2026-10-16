@@ -256,7 +256,7 @@ class _CashScreenState extends State<CashScreen> {
               // Header Panel
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 640;
+                  final isCompact = constraints.maxWidth < 780;
                   final titleWidget = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -338,7 +338,7 @@ class _CashScreenState extends State<CashScreen> {
               // Metric Overview Strip
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 640;
+                  final isCompact = constraints.maxWidth < 780;
                   final box1 = _buildMetricBox(
                     context,
                     title: 'TỔNG TỒN QUỸ KHẢ DỤNG',

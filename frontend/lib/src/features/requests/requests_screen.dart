@@ -939,7 +939,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
               // Header
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 720;
+                  final isCompact = constraints.maxWidth < 900;
                   final titleWidget = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

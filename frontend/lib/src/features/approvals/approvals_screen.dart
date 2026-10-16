@@ -723,33 +723,31 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hộp Thư Phê Duyệt Kiểm Soát Kép (Maker–Checker)',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 750;
+                  final titleWidget = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hộp Thư Phê Duyệt Kiểm Soát Kép (Maker–Checker)',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Kiểm soát viên độc lập thẩm định chứng từ và quyết định phê duyệt ghi sổ',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 13,
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Kiểm soát viên độc lập thẩm định chứng từ và quyết định phê duyệt ghi sổ',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 13,
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
+                      ),
+                    ],
+                  );
+
+                  final badgeWidget = Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
@@ -775,8 +773,28 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                         ),
                       ],
                     ),
-                  ),
-                ],
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        titleWidget,
+                        const SizedBox(height: 12),
+                        badgeWidget,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: titleWidget),
+                      const SizedBox(width: 16),
+                      badgeWidget,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 16),
 
