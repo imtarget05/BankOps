@@ -205,10 +205,18 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   final _items = <InventoryItem>[];
+  bool _itemsInitialized = false;
+
+  void _ensureItemsInitialized() {
+    if (!_itemsInitialized) {
+      _itemsInitialized = true;
+      _items.addAll(_seedItems());
+    }
+  }
 
   @override
   Future<List<InventoryItem>> getItems() async {
-    if (_items.isEmpty) _items.addAll(_seedItems());
+    _ensureItemsInitialized();
     return _delay(List.of(_items));
   }
 
@@ -221,7 +229,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? category,
     String? packaging,
   }) async {
-    if (_items.isEmpty) _items.addAll(_seedItems());
+    _ensureItemsInitialized();
     final itm = InventoryItem(
       id: 'itm-000${_items.length + 1}',
       sku: sku,
@@ -239,7 +247,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<BatchItemImportResult> createItemsBatch(
     List<Map<String, dynamic>> items,
   ) async {
-    if (_items.isEmpty) _items.addAll(_seedItems());
+    _ensureItemsInitialized();
     final existingSkus = _items.map((i) => i.sku.toUpperCase()).toSet();
     final createdList = <InventoryItem>[];
     var skipped = 0;
@@ -304,7 +312,16 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   @override
   Future<void> deleteItem(String id) async {
+    _ensureItemsInitialized();
     _items.removeWhere((i) => i.id == id);
+    return _delay(null);
+  }
+
+  @override
+  Future<void> deleteItemsBatch(List<String> itemIds) async {
+    _ensureItemsInitialized();
+    final idSet = itemIds.toSet();
+    _items.removeWhere((i) => idSet.contains(i.id));
     return _delay(null);
   }
 

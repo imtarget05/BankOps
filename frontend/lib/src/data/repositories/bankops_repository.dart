@@ -110,6 +110,7 @@ abstract class BankOpsRepository {
     String? packaging,
   });
   Future<void> deleteItem(String id);
+  Future<void> deleteItemsBatch(List<String> itemIds);
 
   Future<InventoryLocation> createLocation({
     required String code,

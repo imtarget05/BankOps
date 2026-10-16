@@ -13,7 +13,7 @@ from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
@@ -563,6 +563,16 @@ async def create_item(
         raise AppError(422, "MISSING_NAME", "Tên nguyên liệu không được để trống")
     existing = (await db.execute(select(Item).where(Item.sku == sku))).scalars().first()
     if existing:
+        if not existing.active:
+            existing.active = True
+            existing.name = name
+            existing.unit = unit
+            existing.category = category
+            existing.packaging = packaging
+            existing.tracked_serial = tracked_serial
+            await db.commit()
+            await db.refresh(existing)
+            return _item_out(existing)
         raise AppError(409, "DUPLICATE_SKU", f"SKU {sku} đã tồn tại")
     item = Item(
         id=uuid.uuid4(),
@@ -591,8 +601,8 @@ async def create_items_batch(
         raise AppError(422, "EMPTY_BATCH", "Danh sách mặt hàng không được để trống")
 
     skus = [str(r.get("sku", "")).strip().upper() for r in raw_items if r.get("sku")]
-    existing_skus_res = await db.execute(select(Item.sku).where(Item.sku.in_(skus)))
-    existing_skus = set(existing_skus_res.scalars().all())
+    existing_items_res = await db.execute(select(Item).where(Item.sku.in_(skus)))
+    existing_map = {item.sku: item for item in existing_items_res.scalars().all()}
 
     created_items = []
     skipped_count = 0
@@ -608,9 +618,24 @@ async def create_items_batch(
         if not sku or not name:
             skipped_count += 1
             continue
-        if sku in existing_skus or sku in seen_in_batch:
+        if sku in seen_in_batch:
             skipped_count += 1
             continue
+
+        existing_item = existing_map.get(sku)
+        if existing_item:
+            if not existing_item.active:
+                existing_item.active = True
+                existing_item.name = name
+                existing_item.unit = unit
+                existing_item.category = category
+                existing_item.packaging = packaging
+                seen_in_batch.add(sku)
+                created_items.append(existing_item)
+                continue
+            else:
+                skipped_count += 1
+                continue
 
         seen_in_batch.add(sku)
         item = Item(
@@ -665,6 +690,38 @@ async def update_item(
     return _item_out(item)
 
 
+async def _perform_delete_item(db: AsyncSession, item: Item) -> dict:
+    iid = item.id
+    # Check if item currently has stock balance > 0 in any location
+    balances = (await db.execute(select(Balance).where(Balance.item_id == iid))).scalars().all()
+    total_qty = sum(b.quantity for b in balances if b.quantity is not None)
+    if total_qty > Decimal("0"):
+        raise AppError(
+            409,
+            "ITEM_HAS_STOCK",
+            f"Không thể xóa mặt hàng đang còn tồn kho ({_format_qty(total_qty)} {item.unit}). Vui lòng xuất kho hoặc kiểm kê cân bằng về 0 trước khi xóa.",
+        )
+
+    # Check if item has historical ledger or operational references
+    has_movements = (await db.execute(select(Movement.id).where(Movement.item_id == iid).limit(1))).scalars().first()
+    has_requests = (await db.execute(select(InventoryRequestLine.id).where(InventoryRequestLine.item_id == iid).limit(1))).scalars().first()
+    has_stocktakes = (await db.execute(select(StocktakeLine.id).where(StocktakeLine.item_id == iid).limit(1))).scalars().first()
+    has_assets = (await db.execute(select(Asset.id).where(Asset.item_id == iid).limit(1))).scalars().first()
+
+    if not has_movements and not has_requests and not has_stocktakes and not has_assets:
+        # Safe to hard delete completely
+        await db.execute(delete(Balance).where(Balance.item_id == iid))
+        await db.execute(delete(StockLevel).where(StockLevel.item_id == iid))
+        await db.delete(item)
+        mode = "hard_deleted"
+    else:
+        # Soft delete: deactivate to preserve ledger history and audit reports
+        item.active = False
+        mode = "soft_deleted"
+
+    return {"status": "deleted", "id": str(iid), "mode": mode}
+
+
 @router.delete("/inventory/items/{item_id}")
 async def delete_item(
     item_id: str,
@@ -675,9 +732,46 @@ async def delete_item(
     item = (await db.execute(select(Item).where(Item.id == iid))).scalars().first()
     if not item:
         raise AppError(404, "ITEM_NOT_FOUND", "Không tìm thấy vật tư")
-    item.active = False
+    res = await _perform_delete_item(db, item)
     await db.commit()
-    return {"status": "deleted", "id": str(item.id)}
+    return res
+
+
+@router.post("/inventory/items/batch-delete")
+async def batch_delete_items(
+    payload: dict,
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    db: AsyncSession = Depends(get_db),
+):
+    raw_ids = payload.get("item_ids", [])
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise AppError(422, "EMPTY_BATCH", "Danh sách mã mặt hàng không được để trống")
+
+    iids = [_uuid(i, "item_ids") for i in raw_ids]
+    items = (await db.execute(select(Item).where(Item.id.in_(iids)))).scalars().all()
+    found_map = {item.id: item for item in items}
+
+    deleted_ids = []
+    skipped_items = []
+
+    for iid in iids:
+        item = found_map.get(iid)
+        if not item:
+            skipped_items.append({"id": str(iid), "reason": "ITEM_NOT_FOUND"})
+            continue
+        try:
+            await _perform_delete_item(db, item)
+            deleted_ids.append(str(iid))
+        except AppError as e:
+            skipped_items.append({"id": str(iid), "reason": e.code, "message": e.message})
+
+    await db.commit()
+    return {
+        "deleted_count": len(deleted_ids),
+        "skipped_count": len(skipped_items),
+        "deleted_ids": deleted_ids,
+        "skipped_items": skipped_items,
+    }
 
 
 @router.get("/inventory/locations")

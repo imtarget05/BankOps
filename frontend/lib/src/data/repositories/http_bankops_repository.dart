@@ -525,6 +525,19 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
+  Future<void> deleteItemsBatch(List<String> itemIds) async {
+    if (itemIds.isEmpty) return;
+    try {
+      await _post('/inventory/items/batch-delete', {'item_ids': itemIds});
+    } catch (_) {
+      // Fallback sequentially in case backend does not have batch-delete endpoint yet
+      for (final id in itemIds) {
+        await deleteItem(id);
+      }
+    }
+  }
+
+  @override
   Future<InventoryLocation> createLocation({
     required String code,
     required String name,

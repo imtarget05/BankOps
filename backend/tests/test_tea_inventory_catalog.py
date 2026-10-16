@@ -101,3 +101,143 @@ def test_manager_can_batch_import_items(client):
     assert sku_new_1.upper() in created_skus
     assert sku_new_2.upper() in created_skus
 
+
+def test_manager_can_delete_unused_item(client):
+    """Deleting an item with zero balances and no transaction history performs safe cleanup and frees SKU."""
+    sku = f"DEL-TEST-{uuid.uuid4().hex[:8]}"
+    create_resp = client.post(
+        "/inventory/items",
+        headers=_manager_headers(client),
+        json={
+            "sku": sku,
+            "name": "Mặt hàng test xóa",
+            "unit": "Hộp",
+            "category": "Nhóm Khác",
+        },
+    )
+    assert create_resp.status_code == 201
+    item_id = create_resp.json()["id"]
+
+    # Delete the item
+    del_resp = client.delete(
+        f"/inventory/items/{item_id}",
+        headers=_manager_headers(client),
+    )
+    assert del_resp.status_code == 200, del_resp.text
+    assert del_resp.json()["status"] == "deleted"
+
+    # Verify not listed in active catalog
+    listed = client.get("/inventory/items", headers=_manager_headers(client))
+    assert listed.status_code == 200
+    assert not any(i["id"] == item_id for i in listed.json()["items"])
+
+    # Verify we can re-create with the same SKU without duplicate error
+    recreate_resp = client.post(
+        "/inventory/items",
+        headers=_manager_headers(client),
+        json={
+            "sku": sku,
+            "name": "Mặt hàng tái tạo",
+            "unit": "Hộp",
+            "category": "Nhóm Khác",
+        },
+    )
+    assert recreate_resp.status_code in (200, 201), recreate_resp.text
+
+
+def test_manager_can_batch_delete_items(client):
+    """Batch delete endpoint can remove multiple items in a single atomic request."""
+    sku1 = f"DEL-BATCH1-{uuid.uuid4().hex[:8]}"
+    sku2 = f"DEL-BATCH2-{uuid.uuid4().hex[:8]}"
+
+    r1 = client.post(
+        "/inventory/items",
+        headers=_manager_headers(client),
+        json={"sku": sku1, "name": "Món xóa 1", "unit": "Gói"},
+    )
+    r2 = client.post(
+        "/inventory/items",
+        headers=_manager_headers(client),
+        json={"sku": sku2, "name": "Món xóa 2", "unit": "Gói"},
+    )
+    id1 = r1.json()["id"]
+    id2 = r2.json()["id"]
+
+    batch_del_resp = client.post(
+        "/inventory/items/batch-delete",
+        headers=_manager_headers(client),
+        json={"item_ids": [id1, id2]},
+    )
+    assert batch_del_resp.status_code == 200, batch_del_resp.text
+    data = batch_del_resp.json()
+    assert data["deleted_count"] == 2
+    assert id1 in data["deleted_ids"]
+    assert id2 in data["deleted_ids"]
+
+    # Verify items are gone from active list
+    listed = client.get("/inventory/items", headers=_manager_headers(client))
+    active_ids = {i["id"] for i in listed.json()["items"]}
+    assert id1 not in active_ids
+    assert id2 not in active_ids
+
+
+def test_delete_item_blocked_when_stock_remaining(client):
+    """Deleting an item is rejected with 409 ITEM_HAS_STOCK if balance > 0."""
+    sku = f"STOCK-ITEM-{uuid.uuid4().hex[:8]}"
+    create_resp = client.post(
+        "/inventory/items",
+        headers=_manager_headers(client),
+        json={"sku": sku, "name": "Món còn tồn kho", "unit": "kg"},
+    )
+    assert create_resp.status_code == 201
+    item_id = create_resp.json()["id"]
+
+    # Get a location
+    locs_resp = client.get("/inventory/locations", headers=_manager_headers(client))
+    assert locs_resp.status_code == 200
+    loc_id = locs_resp.json()["locations"][0]["id"]
+
+    # Create a receipt request with stock
+    req_resp = client.post(
+        "/inventory/requests",
+        headers={**_manager_headers(client), "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "kind": "receipt",
+            "dest_id": loc_id,
+            "reason": "Nhập kho ban đầu",
+            "lines": [{"item_id": item_id, "quantity": "10.000"}],
+        },
+    )
+    assert req_resp.status_code in (200, 201), req_resp.text
+    req_id = req_resp.json()["id"]
+
+    # Submit request
+    client.post(
+        f"/inventory/requests/{req_id}/submit",
+        headers=_manager_headers(client),
+    )
+
+    # Login as checker and approve
+    checker_resp = client.post(
+        "/auth/login",
+        data={"username": "demo_checker", "password": DEMO_PASSWORD},
+    )
+    checker_headers = {
+        "Authorization": f"Bearer {checker_resp.json()['access_token']}",
+        "Idempotency-Key": str(uuid.uuid4()),
+    }
+    app_resp = client.post(
+        f"/inventory/requests/{req_id}/approve",
+        headers=checker_headers,
+    )
+    assert app_resp.status_code == 200, app_resp.text
+
+    # Attempt to delete the item -> should be blocked with 409
+    del_resp = client.delete(
+        f"/inventory/items/{item_id}",
+        headers=_manager_headers(client),
+    )
+    assert del_resp.status_code == 409, del_resp.text
+    assert del_resp.json()["error"]["code"] == "ITEM_HAS_STOCK"
+
+
