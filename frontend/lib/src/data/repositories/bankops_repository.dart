@@ -72,6 +72,7 @@ abstract class BankOpsRepository {
     String? email,
     String? phoneNumber,
     String? branch,
+    String? avatarUrl,
   });
 
   // GET /inventory/locations, /items, /balances, /assets

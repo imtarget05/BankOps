@@ -22,6 +22,7 @@ import '../etl/etl_studio_screen.dart';
 import 'widgets/change_password_dialog.dart';
 import 'widgets/change_pin_dialog.dart';
 import 'widgets/edit_profile_dialog.dart';
+import 'widgets/avatar_editor_sheet.dart';
 
 /// Màn Cài đặt: chọn giao diện, hồ sơ cá nhân, bảo mật tài khoản & kiểm soát viên,
 /// kiểm tra kết nối API hệ thống và đăng xuất.
@@ -117,28 +118,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               color: sc.colorScheme.primary, size: 20),
                         ),
                         const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isVi
-                                  ? 'Tùy chọn ngôn ngữ ứng dụng'
-                                  : 'Application Language',
-                              style: sc.textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            Text(
-                              isVi
-                                  ? 'Hệ thống tự động áp dụng và lưu cấu hình'
-                                  : 'Changes apply instantly and are saved',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark
-                                    ? const Color(0xFF94A3B8)
-                                    : const Color(0xFF64748B),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isVi
+                                    ? 'Tùy chọn ngôn ngữ ứng dụng'
+                                    : 'Application Language',
+                                style: sc.textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                            ),
-                          ],
+                              Text(
+                                isVi
+                                    ? 'Hệ thống tự động áp dụng và lưu cấu hình'
+                                    : 'Changes apply instantly and are saved',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? const Color(0xFF94A3B8)
+                                      : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -231,12 +234,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Icon(Icons.palette_outlined,
                             color: sc.colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          isVi
-                              ? 'Bảng màu thương hiệu Trà Sữa (Brand Themes)'
-                              : 'Brand Color Themes',
-                          style: sc.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                        Expanded(
+                          child: Text(
+                            isVi
+                                ? 'Bảng màu thương hiệu Trà Sữa (Brand Themes)'
+                                : 'Brand Color Themes',
+                            style: sc.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
                         ),
                       ],
                     ),
@@ -310,35 +315,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Icon(Icons.view_compact_outlined,
                             color: sc.colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          isVi ? 'Mật độ hiển thị giao diện' : 'Layout Density',
-                          style: sc.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                        Expanded(
+                          child: Text(
+                            isVi ? 'Mật độ hiển thị giao diện' : 'Layout Density',
+                            style: sc.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    SegmentedButton<AppDensity>(
-                      segments: [
-                        ButtonSegment<AppDensity>(
-                          value: AppDensity.comfortable,
-                          icon: const Icon(Icons.touch_app_outlined, size: 18),
-                          label: Text(isVi
-                              ? 'Tiêu chuẩn (POS/Cảm ứng)'
-                              : 'Comfortable (Touch POS)'),
-                        ),
-                        ButtonSegment<AppDensity>(
-                          value: AppDensity.compact,
-                          icon:
-                              const Icon(Icons.density_small_rounded, size: 18),
-                          label: Text(isVi
-                              ? 'Gọn gàng (Kiểm kho/Audit)'
-                              : 'Compact (Audit/Tables)'),
-                        ),
-                      ],
-                      selected: {activeDensity},
-                      onSelectionChanged: (densities) {
-                        uiSettings?.setDensity(densities.first);
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isCompactView = constraints.maxWidth < 420;
+                        return SegmentedButton<AppDensity>(
+                          segments: [
+                            ButtonSegment<AppDensity>(
+                              value: AppDensity.comfortable,
+                              icon: const Icon(Icons.touch_app_outlined, size: 18),
+                              label: Text(
+                                isVi
+                                    ? (isCompactView ? 'Tiêu chuẩn' : 'Tiêu chuẩn (POS/Cảm ứng)')
+                                    : (isCompactView ? 'Comfortable' : 'Comfortable (Touch POS)'),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            ButtonSegment<AppDensity>(
+                              value: AppDensity.compact,
+                              icon:
+                                  const Icon(Icons.density_small_rounded, size: 18),
+                              label: Text(
+                                isVi
+                                    ? (isCompactView ? 'Gọn gàng' : 'Gọn gàng (Kiểm kho/Audit)')
+                                    : (isCompactView ? 'Compact' : 'Compact (Audit/Tables)'),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                          selected: {activeDensity},
+                          onSelectionChanged: (densities) {
+                            uiSettings?.setDensity(densities.first);
+                          },
+                        );
                       },
                     ),
 
@@ -389,164 +407,248 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isMobileCard = constraints.maxWidth < 560;
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Stack(
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             UserAvatar(
                               name: user?.displayName ?? 'Khách',
-                              size: 56,
+                              email: user?.effectiveEmail,
+                              avatarUrl: user?.avatarUrl,
+                              size: isMobileCard ? 54 : 64,
+                              showEditBadge: true,
+                              onTap: () async {
+                                final updated = await AvatarEditorSheet.show(
+                                  context,
+                                  user: user,
+                                );
+                                if (updated == true && context.mounted) {
+                                  setState(() {});
+                                }
+                              },
                             ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isDark
-                                        ? const Color(0xFF1E293B)
-                                        : Colors.white,
-                                    width: 2.5,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    user?.displayName ?? 'Khách vãng lai',
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    '@${user?.username ?? 'guest'} · Mã NV: ${user?.effectiveEmployeeCode ?? 'BO-8892'}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark
+                                          ? const Color(0xFF94A3B8)
+                                          : const Color(0xFF64748B),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!isMobileCard)
+                              OutlinedButton.icon(
+                                key: const Key('settings-edit-profile-btn'),
+                                icon: const Icon(Icons.edit_outlined, size: 16),
+                                label: const Text('Chỉnh sửa hồ sơ'),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
                                   ),
                                 ),
+                                onPressed: () async {
+                                  final updated = await EditProfileDialog.show(
+                                    context,
+                                    user: user,
+                                  );
+                                  if (updated == true && context.mounted) {
+                                    AppToast.success(
+                                      context,
+                                      'Cập nhật hồ sơ cá nhân thành công!',
+                                    );
+                                    setState(() {});
+                                  }
+                                },
+                              )
+                            else
+                              IconButton.filledTonal(
+                                key: const Key('settings-edit-profile-btn'),
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                tooltip: 'Chỉnh sửa hồ sơ',
+                                onPressed: () async {
+                                  final updated = await EditProfileDialog.show(
+                                    context,
+                                    user: user,
+                                  );
+                                  if (updated == true && context.mounted) {
+                                    AppToast.success(
+                                      context,
+                                      'Cập nhật hồ sơ cá nhân thành công!',
+                                    );
+                                    setState(() {});
+                                  }
+                                },
                               ),
-                            ),
                           ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user?.displayName ?? 'Khách vãng lai',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.2,
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            for (final role in _uniqueDisplayRoles(
+                                user?.roles ?? ['staff']))
+                              _RoleBadge(role: role),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: 0.3),
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '@${user?.username ?? 'guest'} · Mã NV: ${user?.effectiveEmployeeCode ?? 'BO-8892'}',
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? const Color(0xFF94A3B8)
-                                      : const Color(0xFF64748B),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  for (final role in _uniqueDisplayRoles(
-                                      user?.roles ?? ['staff']))
-                                    _RoleBadge(role: role),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981)
-                                          .withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: const Color(0xFF10B981)
-                                            .withValues(alpha: 0.3),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.check_circle_rounded,
-                                            size: 12, color: Color(0xFF059669)),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Hoạt động',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF059669),
-                                          ),
-                                        ),
-                                      ],
+                                  Icon(Icons.check_circle_rounded,
+                                      size: 12, color: Color(0xFF059669)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Hoạt động',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF059669),
                                     ),
                                   ),
                                 ],
                               ),
+                            ),
+                          ],
+                        ),
+                        if (isMobileCard) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  key: const Key(
+                                      'settings-edit-profile-mobile-btn'),
+                                  icon: const Icon(Icons.edit_outlined,
+                                      size: 16),
+                                  label: const Text('Chỉnh sửa hồ sơ cá nhân'),
+                                  style: OutlinedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8),
+                                  ),
+                                  onPressed: () async {
+                                    final updated =
+                                        await EditProfileDialog.show(
+                                      context,
+                                      user: user,
+                                    );
+                                    if (updated == true && context.mounted) {
+                                      AppToast.success(
+                                        context,
+                                        'Cập nhật hồ sơ cá nhân thành công!',
+                                      );
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                key: const Key('settings-change-avatar-btn'),
+                                icon: const Icon(Icons.camera_alt_outlined,
+                                    size: 16),
+                                label: const Text('Đổi avatar'),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 8),
+                                ),
+                                onPressed: () async {
+                                  final updated =
+                                      await AvatarEditorSheet.show(
+                                    context,
+                                    user: user,
+                                  );
+                                  if (updated == true && context.mounted) {
+                                    setState(() {});
+                                  }
+                                },
+                              ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          key: const Key('settings-edit-profile-btn'),
-                          icon: const Icon(Icons.edit_outlined, size: 16),
-                          label: const Text('Chỉnh sửa hồ sơ'),
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        ],
+                        const SizedBox(height: 16),
+                        const Divider(height: 1),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 24,
+                          runSpacing: 16,
+                          children: [
+                            _ProfileInfoItem(
+                              icon: Icons.email_outlined,
+                              label: 'Email liên hệ',
+                              value: user?.effectiveEmail ??
+                                  'demo@khotrasua.local',
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
+                            _ProfileInfoItem(
+                              icon: Icons.phone_outlined,
+                              label: 'Số điện thoại',
+                              value: user?.effectivePhone ?? '0901 234 567',
                             ),
-                          ),
-                          onPressed: () async {
-                            final updated = await EditProfileDialog.show(
-                              context,
-                              user: user,
-                            );
-                            if (updated == true && context.mounted) {
-                              AppToast.success(
-                                context,
-                                'Cập nhật hồ sơ cá nhân thành công!',
-                              );
-                            }
-                          },
+                            _ProfileInfoItem(
+                              icon: Icons.business_outlined,
+                              label: 'Chi nhánh công tác',
+                              value: user?.effectiveBranch ??
+                                  'Chi nhánh Bến Thành (Hội sở)',
+                            ),
+                            const _ProfileInfoItem(
+                              icon: Icons.shield_outlined,
+                              label: 'Tiêu chuẩn bảo mật',
+                              value: 'ISO 27001 · Dual Control Active',
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 20),
-                    const Divider(height: 1),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 24,
-                      runSpacing: 16,
-                      children: [
-                        _ProfileInfoItem(
-                          icon: Icons.email_outlined,
-                          label: 'Email liên hệ',
-                          value: user?.effectiveEmail ?? 'demo@khotrasua.local',
-                        ),
-                        _ProfileInfoItem(
-                          icon: Icons.phone_outlined,
-                          label: 'Số điện thoại',
-                          value: user?.effectivePhone ?? '0901 234 567',
-                        ),
-                        _ProfileInfoItem(
-                          icon: Icons.business_outlined,
-                          label: 'Chi nhánh công tác',
-                          value: user?.effectiveBranch ??
-                              'Chi nhánh Bến Thành (Hội sở)',
-                        ),
-                        const _ProfileInfoItem(
-                          icon: Icons.shield_outlined,
-                          label: 'Tiêu chuẩn bảo mật',
-                          value: 'ISO 27001 · Dual Control Active',
-                        ),
-                      ],
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -952,16 +1054,19 @@ class _ColorPresetCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              name,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? (isDark ? Colors.white : primaryColor)
-                    : (isDark
-                        ? const Color(0xFFE2E8F0)
-                        : const Color(0xFF334155)),
+            Flexible(
+              child: Text(
+                name,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? (isDark ? Colors.white : primaryColor)
+                      : (isDark
+                          ? const Color(0xFFE2E8F0)
+                          : const Color(0xFF334155)),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (isSelected) ...[

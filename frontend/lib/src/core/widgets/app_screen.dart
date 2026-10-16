@@ -22,21 +22,27 @@ class AppScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget content = Column(
+      children: [
+        if (header != null) ...[
+          header!,
+          const SizedBox(height: AppSpacing.xxl),
+        ],
+        Expanded(child: body),
+      ],
+    );
+
+    if (onRefresh != null) {
+      content = RefreshIndicator(
+        onRefresh: onRefresh!,
+        child: content,
+      );
+    }
+
     return Container(
       constraints: const BoxConstraints(maxWidth: 1120),
       padding: context.pagePadding,
-      child: RefreshIndicator(
-        onRefresh: onRefresh ?? () async {},
-        child: Column(
-          children: [
-            if (header != null) ...[
-              header!,
-              const SizedBox(height: AppSpacing.xxl),
-            ],
-            Expanded(child: body),
-          ],
-        ),
-      ),
+      child: content,
     );
   }
 }

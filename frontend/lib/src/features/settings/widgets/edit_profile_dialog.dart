@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/app_shell.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../../data/models/dtos.dart';
 import '../../../data/repositories/bankops_repository.dart';
 import '../../../data/repositories/http_bankops_repository.dart';
 import '../../auth/auth_service.dart';
+import 'avatar_editor_sheet.dart';
 
 /// Hộp thoại Chỉnh sửa hồ sơ cá nhân (Họ tên, Email, Số điện thoại, Chi nhánh).
 class EditProfileDialog extends StatefulWidget {
@@ -214,6 +216,49 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
                 ),
                 const SizedBox(height: 16),
               ],
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    UserAvatar(
+                      name: widget.currentUser?.displayName ?? 'Khách',
+                      email: widget.currentUser?.effectiveEmail,
+                      avatarUrl: widget.currentUser?.avatarUrl,
+                      size: 56,
+                      showEditBadge: true,
+                      onTap: () async {
+                        final updated = await AvatarEditorSheet.show(
+                          context,
+                          user: widget.currentUser,
+                        );
+                        if (updated == true && context.mounted) {
+                          setState(() {});
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 14),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                      label: const Text('Đổi ảnh đại diện',
+                          style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                      ),
+                      onPressed: () async {
+                        final updated = await AvatarEditorSheet.show(
+                          context,
+                          user: widget.currentUser,
+                        );
+                        if (updated == true && context.mounted) {
+                          setState(() {});
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 'Họ và tên hiển thị *',
                 style: TextStyle(

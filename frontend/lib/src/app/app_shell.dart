@@ -556,17 +556,6 @@ class _AppShellState extends State<AppShell> {
         expand: false,
         builder: (scrollContext, scrollController) => Column(
           children: [
-            const SizedBox(height: 10),
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(sheetContext).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             ListTile(
               leading: const Icon(Icons.apps_rounded),
               title: const Text(
@@ -1033,7 +1022,12 @@ class _AppShellState extends State<AppShell> {
               PopupMenuButton<String>(
                 key: const Key('topbar-user-menu'),
                 icon: user != null
-                    ? UserAvatar(name: user.displayName, size: 26)
+                    ? UserAvatar(
+                        name: user.displayName,
+                        email: user.effectiveEmail,
+                        avatarUrl: user.avatarUrl,
+                        size: 26,
+                      )
                     : const UserAvatar(size: 26),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -1109,7 +1103,6 @@ class _AppShellState extends State<AppShell> {
         ),
       ),
       header: _index == 0 ? const _DashboardHeader() : null,
-      onRefresh: _reload,
     );
 
     final bodyWithTicker = _withLiveTicker(body);

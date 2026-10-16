@@ -19,6 +19,7 @@ class AiAssistantDialog extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      showDragHandle: false,
       backgroundColor: Colors.transparent,
       elevation: 0,
       builder: (_) {

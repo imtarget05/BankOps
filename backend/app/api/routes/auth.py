@@ -382,6 +382,7 @@ async def get_current_user_info(
         "email": current_user.email,
         "phone_number": current_user.phone_number,
         "branch": current_user.branch,
+        "avatar_url": getattr(current_user, "avatar_url", None),
         "roles": roles,
         "capabilities": capabilities,
     }
@@ -392,6 +393,7 @@ class UpdateProfileRequest(BaseModel):
     email: str | None = None
     phone_number: str | None = None
     branch: str | None = None
+    avatar_url: str | None = None
 
 
 @router.put("/me")
@@ -415,6 +417,8 @@ async def update_profile(
         current_user.phone_number = body.phone_number.strip() or None
     if body.branch is not None:
         current_user.branch = body.branch.strip() or None
+    if body.avatar_url is not None:
+        current_user.avatar_url = body.avatar_url.strip() or None
 
     db.add(current_user)
     await db.commit()
@@ -430,6 +434,7 @@ async def update_profile(
         "email": current_user.email,
         "phone_number": current_user.phone_number,
         "branch": current_user.branch,
+        "avatar_url": getattr(current_user, "avatar_url", None),
         "roles": roles,
         "capabilities": capabilities,
         "message": "Cập nhật hồ sơ thành công.",

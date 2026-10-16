@@ -41,6 +41,7 @@ class User(Base, TimestampMixin):
     phone_number: str | None = Column(String(32), nullable=True)
     branch: str | None = Column(String(256), nullable=True)
     branch_id: str | None = Column(UUID(as_uuid=True), ForeignKey("org_branches.id", ondelete="SET NULL"), nullable=True)
+    avatar_url: str | None = Column(String(2048), nullable=True)
 
     # User provisioning & session controls
     must_change_password: bool = Column(Boolean, default=False, nullable=False)

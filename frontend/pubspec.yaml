@@ -22,6 +22,7 @@ dependencies:
   # Offline outbox cho nghiệp vụ chốt ca tại quầy (SRS §4.2).
   shared_preferences: ^2.3.0
   qr_flutter: ^4.1.0
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

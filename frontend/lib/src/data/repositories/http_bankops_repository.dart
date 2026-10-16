@@ -362,12 +362,14 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? email,
     String? phoneNumber,
     String? branch,
+    String? avatarUrl,
   }) async {
     final res = await _put('/auth/me', {
       'display_name': displayName.trim(),
       if (email != null) 'email': email.trim(),
       if (phoneNumber != null) 'phone_number': phoneNumber.trim(),
       if (branch != null) 'branch': branch.trim(),
+      if (avatarUrl != null) 'avatar_url': avatarUrl.trim(),
     });
     final u = (res['user'] is Map) ? res['user'] as Map : res;
     return AppUser(
@@ -377,6 +379,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
       email: u['email']?.toString(),
       phoneNumber: u['phone_number']?.toString(),
       branch: u['branch']?.toString(),
+      avatarUrl: u['avatar_url']?.toString() ?? avatarUrl?.trim(),
       roles: (u['roles'] is List ? u['roles'] as List : const [])
           .map((r) => r.toString())
           .toList(),

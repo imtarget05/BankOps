@@ -138,6 +138,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? email,
     String? phoneNumber,
     String? branch,
+    String? avatarUrl,
   }) async {
     if (displayName.trim().isEmpty) {
       throw ApiException('VALIDATION_ERROR', 'Họ và tên không được để trống.');
@@ -150,6 +151,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
       email: email?.trim(),
       phoneNumber: phoneNumber?.trim(),
       branch: branch?.trim(),
+      avatarUrl: avatarUrl?.trim(),
     );
     if (idx >= 0) {
       _users[idx] = updated;
