@@ -81,11 +81,32 @@ class _InventoryScreenState extends State<InventoryScreen> {
     });
   }
 
+  String _slugSku(String name) {
+    var s = name.trim().toLowerCase();
+    const map = {
+      'à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ': 'a',
+      'è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ': 'e',
+      'ì|í|ị|ỉ|ĩ': 'i',
+      'ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ': 'o',
+      'ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ': 'u',
+      'ỳ|ý|ỵ|ỷ|ỹ': 'y',
+      'đ': 'd',
+    };
+    for (final entry in map.entries) {
+      s = s.replaceAll(RegExp(entry.key), entry.value);
+    }
+    s = s.replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    if (s.isEmpty) {
+      s = 'SP-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    }
+    return s.toUpperCase();
+  }
+
   Future<void> _showCreateItemDialog() async {
     final skuCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
-    final unitCtrl = TextEditingController(text: 'Gói');
-    final categoryCtrl = TextEditingController();
+    final unitCtrl = TextEditingController(text: 'gói');
+    final categoryCtrl = TextEditingController(text: 'Nguyên liệu');
     final packagingCtrl = TextEditingController();
 
     final ok = await showDialog<bool>(
@@ -109,7 +130,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 TextField(
                   controller: skuCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Mã SKU *',
+                    labelText: 'Mã SKU (tự sinh nếu để trống)',
                     hintText: 'Ví dụ: TRA-OLONG-500G',
                     border: OutlineInputBorder(),
                   ),
@@ -119,7 +140,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   controller: nameCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Tên nguyên vật liệu *',
-                    hintText: 'Ví dụ: Trà ô long',
+                    hintText: 'Ví dụ: Trà ô long đặc biệt',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -128,7 +149,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   controller: unitCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Đơn Vị Tính',
-                    hintText: 'Gói / Túi / Kg / Hộp / Viên',
+                    hintText: 'Gói / Túi / Kg / Hộp / Chai',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -137,7 +158,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   controller: categoryCtrl,
                   decoration: const InputDecoration(
                       labelText: 'Nhóm nguyên liệu',
-                      hintText: 'Ví dụ: Nhóm Trà',
+                      hintText: 'Ví dụ: Nhóm Trà / Topping / Sữa',
                       border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 14),
@@ -158,8 +179,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
             FilledButton(
               onPressed: () {
-                if (skuCtrl.text.trim().isEmpty || nameCtrl.text.trim().isEmpty)
-                  return;
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                if (skuCtrl.text.trim().isEmpty) {
+                  skuCtrl.text = _slugSku(name);
+                }
                 Navigator.of(ctx).pop(true);
               },
               child: const Text('Thêm mới'),
@@ -170,21 +194,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
 
     if (ok == true && mounted) {
+      final finalName = nameCtrl.text.trim();
+      final finalSku = (skuCtrl.text.trim().isEmpty ? _slugSku(finalName) : skuCtrl.text.trim()).toUpperCase();
       try {
         final repo = RepositoryScope.of(context);
         await repo.createItem(
-          sku: skuCtrl.text.trim(),
-          name: nameCtrl.text.trim(),
-          unit: unitCtrl.text.trim().isEmpty ? 'Cái' : unitCtrl.text.trim(),
+          sku: finalSku,
+          name: finalName,
+          unit: unitCtrl.text.trim().isEmpty ? 'gói' : unitCtrl.text.trim(),
           trackedSerial: false,
-          category: categoryCtrl.text.trim(),
+          category: categoryCtrl.text.trim().isEmpty ? 'Nguyên liệu' : categoryCtrl.text.trim(),
           packaging: packagingCtrl.text.trim(),
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'Đã thêm mặt hàng "${nameCtrl.text.trim()}" thành công!'),
+                  'Đã thêm mặt hàng "$finalName" ($finalSku) thành công!'),
               behavior: SnackBarBehavior.floating,
             ),
           );

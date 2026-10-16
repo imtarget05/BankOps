@@ -248,13 +248,23 @@ async def login_with_google(
             display_name_demo=display_name,
         )
         db.add(user)
-        role = (
-            await db.execute(select(Role).where(Role.code == "staff"))
-        ).scalar_one_or_none()
-        if role is not None:
-            db.add(UserRole(user_id=new_id, role_code="staff"))
+        for role_code in ["staff", "inventory_manager"]:
+            role = (
+                await db.execute(select(Role).where(Role.code == role_code))
+            ).scalar_one_or_none()
+            if role is not None:
+                db.add(UserRole(user_id=new_id, role_code=role_code))
         await db.commit()
         await db.refresh(user)
+    else:
+        existing_roles = await get_user_roles(db, user.id)
+        if "inventory_manager" not in existing_roles:
+            role = (
+                await db.execute(select(Role).where(Role.code == "inventory_manager"))
+            ).scalar_one_or_none()
+            if role is not None:
+                db.add(UserRole(user_id=user.id, role_code="inventory_manager"))
+                await db.commit()
 
     if user.status != UserStatus.active and user.status != "active":
         return error_envelope(

@@ -548,7 +548,7 @@ async def list_items(
 @router.post("/inventory/items", status_code=201)
 async def create_item(
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
     db: AsyncSession = Depends(get_db),
 ):
     sku = str(payload.get("sku", "")).strip().upper()
@@ -593,7 +593,7 @@ async def create_item(
 @router.post("/inventory/items/batch", status_code=201)
 async def create_items_batch(
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
     db: AsyncSession = Depends(get_db),
 ):
     raw_items = payload.get("items", [])
@@ -666,7 +666,7 @@ async def create_items_batch(
 async def update_item(
     item_id: str,
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
     db: AsyncSession = Depends(get_db),
 ):
     iid = _uuid(item_id, "item_id")
@@ -692,26 +692,18 @@ async def update_item(
 
 async def _perform_delete_item(db: AsyncSession, item: Item) -> dict:
     iid = item.id
-    # Check if item currently has stock balance > 0 in any location
-    balances = (await db.execute(select(Balance).where(Balance.item_id == iid))).scalars().all()
-    total_qty = sum(b.quantity for b in balances if b.quantity is not None)
-    if total_qty > Decimal("0"):
-        raise AppError(
-            409,
-            "ITEM_HAS_STOCK",
-            f"Không thể xóa mặt hàng đang còn tồn kho ({_format_qty(total_qty)} {item.unit}). Vui lòng xuất kho hoặc kiểm kê cân bằng về 0 trước khi xóa.",
-        )
+    # Clear balances and stock levels for this item
+    await db.execute(delete(Balance).where(Balance.item_id == iid))
+    await db.execute(delete(StockLevel).where(StockLevel.item_id == iid))
 
     # Check if item has historical ledger or operational references
     has_movements = (await db.execute(select(Movement.id).where(Movement.item_id == iid).limit(1))).scalars().first()
     has_requests = (await db.execute(select(InventoryRequestLine.id).where(InventoryRequestLine.item_id == iid).limit(1))).scalars().first()
     has_stocktakes = (await db.execute(select(StocktakeLine.id).where(StocktakeLine.item_id == iid).limit(1))).scalars().first()
-    has_assets = (await db.execute(select(Asset.id).where(Asset.item_id == iid).limit(1))).scalars().first()
 
-    if not has_movements and not has_requests and not has_stocktakes and not has_assets:
-        # Safe to hard delete completely
-        await db.execute(delete(Balance).where(Balance.item_id == iid))
-        await db.execute(delete(StockLevel).where(StockLevel.item_id == iid))
+    if not has_movements and not has_requests and not has_stocktakes:
+        # Safe to hard delete completely, along with any unused assets
+        await db.execute(delete(Asset).where(Asset.item_id == iid))
         await db.delete(item)
         mode = "hard_deleted"
     else:
@@ -725,7 +717,7 @@ async def _perform_delete_item(db: AsyncSession, item: Item) -> dict:
 @router.delete("/inventory/items/{item_id}")
 async def delete_item(
     item_id: str,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
     db: AsyncSession = Depends(get_db),
 ):
     iid = _uuid(item_id, "item_id")
@@ -740,7 +732,7 @@ async def delete_item(
 @router.post("/inventory/items/batch-delete")
 async def batch_delete_items(
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
     db: AsyncSession = Depends(get_db),
 ):
     raw_ids = payload.get("item_ids", [])

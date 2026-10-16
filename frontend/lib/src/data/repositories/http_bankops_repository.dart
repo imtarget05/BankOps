@@ -528,8 +528,19 @@ class HttpBankOpsRepository implements BankOpsRepository {
   Future<void> deleteItemsBatch(List<String> itemIds) async {
     if (itemIds.isEmpty) return;
     try {
-      await _post('/inventory/items/batch-delete', {'item_ids': itemIds});
-    } catch (_) {
+      final res = await _post('/inventory/items/batch-delete', {'item_ids': itemIds});
+      if (res is Map &&
+          res['skipped_items'] is List &&
+          (res['skipped_items'] as List).isNotEmpty &&
+          res['deleted_count'] == 0) {
+        final firstReason = (res['skipped_items'] as List).first;
+        final msg = firstReason is Map && firstReason['message'] != null
+            ? firstReason['message'] as String
+            : 'Không thể xóa các mặt hàng đã chọn';
+        throw ApiException('BATCH_DELETE_FAILED', msg);
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
       // Fallback sequentially in case backend does not have batch-delete endpoint yet
       for (final id in itemIds) {
         await deleteItem(id);

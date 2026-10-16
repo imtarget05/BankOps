@@ -93,6 +93,7 @@ async def seed_demo():
         # --- Role-Capability mappings ---
         mappings = [
             RoleCapability(role_code="staff", capability_code="inventory:create_request"),
+            RoleCapability(role_code="staff", capability_code="inventory:manage_catalog"),
             RoleCapability(role_code="approver", capability_code="inventory:approve_request"),
             RoleCapability(role_code="inventory_manager", capability_code="inventory:approve_request"),
             RoleCapability(role_code="admin", capability_code="inventory:approve_request"),
@@ -261,7 +262,7 @@ async def seed_demo():
                 existing.unit = item["unit"]
                 existing.category = item.get("category")
                 existing.packaging = item.get("packaging")
-                existing.active = True
+                # Giữ nguyên trạng thái active người dùng đã thiết lập (nếu đã xóa/ẩn thì không tự kích hoạt lại)
         if new_items:
             db.add_all(new_items)
         await db.commit()

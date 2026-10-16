@@ -181,8 +181,8 @@ def test_manager_can_batch_delete_items(client):
     assert id2 not in active_ids
 
 
-def test_delete_item_blocked_when_stock_remaining(client):
-    """Deleting an item is rejected with 409 ITEM_HAS_STOCK if balance > 0."""
+def test_delete_item_with_stock_and_movements_deactivates_and_clears_balance(client):
+    """Deleting an item with stock balance clears balances and safely deactivates the item."""
     sku = f"STOCK-ITEM-{uuid.uuid4().hex[:8]}"
     create_resp = client.post(
         "/inventory/items",
@@ -232,12 +232,24 @@ def test_delete_item_blocked_when_stock_remaining(client):
     )
     assert app_resp.status_code == 200, app_resp.text
 
-    # Attempt to delete the item -> should be blocked with 409
+    # Delete the item -> succeeds, clears balance, and deactivates (soft delete)
     del_resp = client.delete(
         f"/inventory/items/{item_id}",
         headers=_manager_headers(client),
     )
-    assert del_resp.status_code == 409, del_resp.text
-    assert del_resp.json()["error"]["code"] == "ITEM_HAS_STOCK"
+    assert del_resp.status_code == 200, del_resp.text
+    assert del_resp.json()["status"] == "deleted"
+    assert del_resp.json()["mode"] == "soft_deleted"
+
+    # Verify not listed in active catalog
+    listed = client.get("/inventory/items", headers=_manager_headers(client))
+    assert listed.status_code == 200
+    assert not any(i["id"] == item_id for i in listed.json()["items"])
+
+    # Verify balance is cleared
+    bals = client.get("/inventory/balances", headers=_manager_headers(client))
+    assert bals.status_code == 200
+    assert not any(b.get("item_id") == item_id for b in bals.json().get("balances", []))
+
 
 

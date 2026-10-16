@@ -211,6 +211,27 @@ class _ImportItemsDialogState extends State<ImportItemsDialog>
     super.dispose();
   }
 
+  String _generateSku(String name) {
+    var s = name.trim().toLowerCase();
+    const map = {
+      'à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ': 'a',
+      'è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ': 'e',
+      'ì|í|ị|ỉ|ĩ': 'i',
+      'ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ': 'o',
+      'ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ': 'u',
+      'ỳ|ý|ỵ|ỷ|ỹ': 'y',
+      'đ': 'd',
+    };
+    for (final entry in map.entries) {
+      s = s.replaceAll(RegExp(entry.key), entry.value);
+    }
+    s = s.replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    if (s.isEmpty) {
+      s = 'SP-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    }
+    return s.toUpperCase();
+  }
+
   void _parsePastedText(String raw) {
     final lines = raw.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty).toList();
     if (lines.isEmpty) {
@@ -227,8 +248,10 @@ class _ImportItemsDialogState extends State<ImportItemsDialog>
         parts = line.split('\t');
       } else if (line.contains(';')) {
         parts = line.split(';');
-      } else {
+      } else if (line.contains(',')) {
         parts = line.split(',');
+      } else {
+        parts = [line];
       }
 
       if (parts.isEmpty) continue;
@@ -236,6 +259,7 @@ class _ImportItemsDialogState extends State<ImportItemsDialog>
       // Skip header row if detected (e.g. "SKU, Tên mặt hàng, ...")
       final firstCol = parts[0].trim().toLowerCase();
       if (i == 0 &&
+          parts.length > 1 &&
           (firstCol == 'sku' ||
               firstCol == 'mã' ||
               firstCol == 'mã sku' ||
@@ -243,11 +267,51 @@ class _ImportItemsDialogState extends State<ImportItemsDialog>
               firstCol == 'code')) {
         continue;
       }
-      final sku = parts[0].trim().toUpperCase();
-      final name = parts.length > 1 ? parts[1].trim() : '';
-      final unit = parts.length > 2 && parts[2].trim().isNotEmpty ? parts[2].trim() : 'gói';
-      final category = parts.length > 3 ? parts[3].trim() : 'Nguyên liệu';
-      final packaging = parts.length > 4 ? parts[4].trim() : '';
+
+      String sku;
+      String name;
+      String unit = 'gói';
+      String category = 'Nguyên liệu';
+      String packaging = '';
+
+      if (parts.length == 1) {
+        // Single item line (e.g. "Trà đào" or "TRA-DAO-500G")
+        final candidate = parts[0].trim();
+        final isLikelySku = RegExp(r'^[A-Z0-9_\-]+$').hasMatch(candidate);
+        if (isLikelySku) {
+          sku = candidate.toUpperCase();
+          name = candidate;
+        } else {
+          name = candidate;
+          sku = _generateSku(candidate);
+        }
+      } else if (parts.length == 2) {
+        final p0 = parts[0].trim();
+        final p1 = parts[1].trim();
+        final p0IsSku = RegExp(r'^[A-Z0-9_\-]+$').hasMatch(p0);
+        if (p0IsSku) {
+          sku = p0.toUpperCase();
+          name = p1;
+        } else {
+          // e.g. "Trà đào, gói" or "Trà đào, Topping"
+          name = p0;
+          sku = _generateSku(p0);
+          unit = p1.isNotEmpty ? p1 : 'gói';
+        }
+      } else {
+        sku = parts[0].trim().toUpperCase();
+        name = parts[1].trim();
+        unit = parts.length > 2 && parts[2].trim().isNotEmpty ? parts[2].trim() : 'gói';
+        category = parts.length > 3 && parts[3].trim().isNotEmpty ? parts[3].trim() : 'Nguyên liệu';
+        packaging = parts.length > 4 ? parts[4].trim() : '';
+      }
+
+      if (sku.isEmpty && name.isNotEmpty) {
+        sku = _generateSku(name);
+      }
+      if (name.isEmpty && sku.isNotEmpty) {
+        name = sku;
+      }
 
       if (sku.isNotEmpty && name.isNotEmpty) {
         rows.add({
