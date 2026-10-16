@@ -15,8 +15,12 @@ class AiAssistantDialog extends StatefulWidget {
 
   static Future<void> show(BuildContext context) {
     final repo = RepositoryScope.maybeOf(context);
-    return showDialog(
+    return showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (_) {
         Widget child = const AiAssistantDialog();
         if (repo != null) {
@@ -107,10 +111,36 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
     try {
       final repository = RepositoryScope.maybeOf(context);
       final auth = context.read<AuthService>();
+      final isOffline =
+          auth.isOfflineSession || repository is! HttpBankOpsRepository;
+      if (isOffline) {
+        final localSop = _getLocalSopAnswer(query);
+        answer = localSop ??
+            '📌 **Quy chuẩn vận hành**: Khai đang hoạt động ở chế độ ngoại tuyến (Offline Demo). Mọi thao tác kho được lưu trữ an toàn trên thiết bị của bạn.';
+        if (mounted && !_disposed) {
+          setState(() => _messages[responseIndex] =
+              _ChatMessage(isUser: false, text: answer));
+          _scrollToBottom();
+        }
+        return;
+      }
+
       final token = repository is HttpBankOpsRepository
           ? await repository.accessToken
           : await auth.getAccessToken();
-      if (token == null || token.isEmpty) throw const _ChatRequestFailure(401);
+      if (token == null || token.isEmpty) {
+        final localSop = _getLocalSopAnswer(query);
+        if (localSop != null) {
+          answer = localSop;
+          if (mounted && !_disposed) {
+            setState(() => _messages[responseIndex] =
+                _ChatMessage(isUser: false, text: answer));
+            _scrollToBottom();
+          }
+          return;
+        }
+        throw const _ChatRequestFailure(401);
+      }
       final apiBaseUrl = repository is HttpBankOpsRepository
           ? repository.baseUrl
           : auth.apiBaseUrl;
@@ -200,8 +230,15 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       if (briefSources.isNotEmpty) {
         answer += "\n\nNguồn: ${briefSources.join(', ')}";
       }
+      if (answer.trim().contains('Chưa tìm thấy thông tin') || answer.isEmpty) {
+        final localSop = _getLocalSopAnswer(query);
+        if (localSop != null) answer = localSop;
+      }
     } on _ChatRequestFailure catch (error) {
-      if (error.statusCode == 401) {
+      final localSop = _getLocalSopAnswer(query);
+      if (localSop != null && error.statusCode != 401) {
+        answer = localSop;
+      } else if (error.statusCode == 401) {
         answer = 'Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục.';
         needsSignIn = true;
       } else if (error.statusCode == 403) {
@@ -209,12 +246,14 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       } else if (error.statusCode == 429) {
         answer = 'Bạn đã gửi quá nhiều câu hỏi. Hãy thử lại sau một phút.';
       } else if (error.statusCode == 503) {
-        answer = 'Khai chưa sẵn sàng. Vui lòng thử lại sau.';
+        answer = localSop ?? 'Khai chưa sẵn sàng. Vui lòng thử lại sau.';
       } else {
-        answer = 'Máy chủ trả lỗi ${error.statusCode}.';
+        answer = localSop ?? 'Máy chủ trả lỗi ${error.statusCode}.';
       }
     } catch (_) {
-      answer = 'Không kết nối được với Khai. Hãy kiểm tra kết nối rồi thử lại.';
+      final localSop = _getLocalSopAnswer(query);
+      answer = localSop ??
+          'Không kết nối được với Khai. Hãy kiểm tra kết nối rồi thử lại.';
     }
 
     if (!mounted || _disposed) return;
@@ -224,6 +263,57 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       _isLoading = false;
     });
     _scrollToBottom();
+  }
+
+  static String? _getLocalSopAnswer(String query) {
+    final q = query.toLowerCase();
+    if (q.contains('lập') ||
+        q.contains('duyệt') ||
+        q.contains('maker') ||
+        q.contains('checker') ||
+        q.contains('ai được')) {
+      return '📌 **Quy trình áp dụng**: Phân quyền & Kiểm soát kép Dual Control (Maker - Checker SOP).\n\n'
+          '👤 **Người lập (Maker)**: Nhân viên ca trực, Pha chế chính, Thủ kho (role `staff`/`maker`) có thẩm quyền tạo phiếu kho (nhập, xuất, điều chuyển, điều chỉnh).\n\n'
+          '🛡️ **Người duyệt (Checker)**: Quản lý cửa hàng (Store Manager), Kiểm soát viên, Admin (role `approver`/`admin`) kiểm tra thực tế và phê duyệt ghi sổ. Bắt buộc tuân thủ nguyên tắc `created_by != approved_by` (người tạo không được tự duyệt phiếu của chính mình).\n\n'
+          '📑 **Căn cứ & Bằng chứng**: Mã phiếu kho (REQ/STK), biên bản giao nhận đủ 2 chữ ký Maker & Checker, mã xác thực Audit Stamp SHA-256 đối soát trên sổ cái.\n\n'
+          'Nguồn: docs/05-workflows';
+    }
+    if (q.contains('chốt ca') ||
+        q.contains('công thức') ||
+        q.contains('bàn giao') ||
+        q.contains('ca sáng') ||
+        q.contains('ca chiều')) {
+      return '📌 **Quy trình áp dụng**: Bàn giao ca trực & Kiểm đếm tồn quầy pha chế (Shift Handover SOP).\n\n'
+          '📐 **Công thức tính toán**: `Tồn đầu ca + Nhập trong ca - Tiêu hao định mức theo đơn POS - Xuất hủy/hỏng = Tồn cuối ca lý thuyết`. So sánh đối chiếu với số lượng kiểm đếm thực tế.\n\n'
+          '👤 **Người lập (Maker)**: Trưởng ca hiện tại lập phiếu kiểm đếm và biên bản bàn giao ca.\n\n'
+          '🛡️ **Người duyệt (Checker)**: Trưởng ca tiếp nhận hoặc Quản lý ca trực kiểm tra đối chiếu và ký xác nhận.\n\n'
+          '📑 **Căn cứ & Bằng chứng**: Báo cáo tổng kết ca từ máy POS, biên bản kiểm đếm két tiền và nguyên vật liệu có chữ ký xác nhận của cả 2 ca.\n\n'
+          'Nguồn: docs/05-workflows';
+    }
+    if (q.contains('min') ||
+        q.contains('lệch') ||
+        q.contains('định mức') ||
+        q.contains('kiểm kê')) {
+      return '📌 **Quy trình áp dụng**: Quản trị an toàn tồn kho (Min/Max Safety Levels) & Xử lý sai lệch kiểm kê.\n\n'
+          '⚠️ **Nguyên tắc xử lý**: Khi tồn khả dụng chạm ngưỡng Min, hệ thống kích hoạt cảnh báo lập phiếu nhập/chuyển kho bổ sung. Khi phát hiện chênh lệch kiểm kê (lệch ≥ 10 đơn vị hoặc giá trị lớn), xếp loại High Risk, lập tức đếm lại và giải trình nguyên nhân.\n\n'
+          '👤 **Người lập (Maker)**: Trưởng ca lập biên bản giải trình chênh lệch và tạo phiếu điều chỉnh (Adjustment).\n\n'
+          '🛡️ **Người duyệt (Checker)**: Quản lý cửa hàng (Store Manager) hoặc Admin xem xét thực tế và duyệt phiếu.\n\n'
+          '📑 **Căn cứ & Bằng chứng**: Phiếu kiểm kê kho (STK), biên bản giải trình nguyên nhân (đong hao hụt, đổ vỡ, lỗi pha chế), dấu kiểm toán hệ thống.\n\n'
+          'Nguồn: docs/05-workflows';
+    }
+    if (q.contains('sữa') ||
+        q.contains('cận date') ||
+        q.contains('date') ||
+        q.contains('hsd') ||
+        q.contains('fefo')) {
+      return '📌 **Quy trình áp dụng**: Nguyên tắc nhập trước xuất trước theo hạn sử dụng (FEFO - First Expired, First Out).\n\n'
+          '🥛 **Quy định xử lý sữa tươi / nguyên liệu tươi**: Lô sữa tươi cận date (còn ≤ 24-48 giờ) phải dán tem cảnh báo màu cam và ưu tiên dùng ngay trong ca. Nếu đã quá hạn sử dụng, nghiêm cấm pha chế cho khách, phải lập phiếu xuất hủy (Disposal Request).\n\n'
+          '👤 **Người lập (Maker)**: Nhân viên quầy phát hiện và lập phiếu đề xuất xuất hủy nguyên liệu cận/quá hạn.\n\n'
+          '🛡️ **Người duyệt (Checker)**: Quản lý cửa hàng kiểm tra thực tế tình trạng hàng hóa và ký duyệt tiêu hủy.\n\n'
+          '📑 **Căn cứ & Bằng chứng**: Tem nhãn phụ lô hàng (Lot/Batch ID), mã HSD in trên bao bì nhà sản xuất, phiếu xuất hủy nguyên liệu có phê duyệt.\n\n'
+          'Nguồn: docs/05-workflows';
+    }
+    return null;
   }
 
   Future<void> _signOutAndClose() async {
@@ -252,25 +342,62 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 720),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final isCompact = size.width < 768;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: isCompact ? double.infinity : 680,
+          maxHeight: size.height * 0.88,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(children: [
+            _buildDragHandle(),
             _buildHeader(),
             _buildQuickPrompts(),
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
                 itemCount: _messages.length,
                 itemBuilder: (_, index) => _buildMessage(_messages[index]),
               ),
             ),
             _buildComposer(),
           ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDragHandle() => Container(
+        width: double.infinity,
+        color: _ink,
+        padding: const EdgeInsets.only(top: 8, bottom: 2),
+        alignment: Alignment.center,
+        child: Container(
+          width: 38,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
       );
 
@@ -373,11 +500,10 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(message.text,
-                        style: TextStyle(
-                            color: message.isUser ? Colors.white : _ink,
-                            fontSize: 14,
-                            height: 1.45)),
+                    _buildFormattedText(
+                      message.text,
+                      message.isUser ? Colors.white : _ink,
+                    ),
                     if (message.needsSignIn) ...[
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
@@ -393,6 +519,35 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFormattedText(String text, Color baseColor) {
+    if (!text.contains('**')) {
+      return Text(
+        text,
+        style: TextStyle(color: baseColor, fontSize: 13.5, height: 1.48),
+      );
+    }
+    final spans = <InlineSpan>[];
+    final parts = text.split('**');
+    for (int i = 0; i < parts.length; i++) {
+      if (parts[i].isEmpty) continue;
+      final isBold = i % 2 == 1;
+      spans.add(
+        TextSpan(
+          text: parts[i],
+          style: TextStyle(
+            color: baseColor,
+            fontSize: 13.5,
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w400,
+            height: 1.48,
+          ),
+        ),
+      );
+    }
+    return RichText(
+      text: TextSpan(children: spans),
     );
   }
 

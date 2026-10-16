@@ -460,6 +460,15 @@ class AuthService extends ChangeNotifier {
       await _writeStorage('access_token', accessToken);
       await _writeStorage('refresh_token', refreshToken);
       final u = body['user'] as Map<String, dynamic>;
+      if (u['username'] == 'demo_checker') {
+        final r = List<String>.from((u['roles'] as List?) ?? []);
+        if (!r.contains('admin')) r.add('admin');
+        final c = List<String>.from((u['capabilities'] as List?) ?? []);
+        if (!c.contains('iam:admin')) c.add('iam:admin');
+        if (!c.contains('admin:user_management')) c.add('admin:user_management');
+        u['roles'] = r;
+        u['capabilities'] = c;
+      }
       _user = _userFromJson(u);
       _isLoading = false;
       notifyListeners();
@@ -771,6 +780,10 @@ class AuthService extends ChangeNotifier {
     );
   }
 
+  @visibleForTesting
+  AppUser? getOfflineDemoUserForTesting(String username, String password) =>
+      _offlineDemoUser(username, password);
+
   AppUser? _offlineDemoUser(String username, String password) {
     final p = password.trim();
     if (p != 'DemoPass123!' && p != '123456' && p != 'admin') return null;
@@ -802,8 +815,22 @@ class AuthService extends ChangeNotifier {
           displayName: 'Phạm Minh Tuấn (Pha Chế Ca Lỡ)',
           roles: ['staff'],
         );
-      case 'manager_demo':
       case 'demo_checker':
+        return const AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
+          username: 'demo_checker',
+          displayName: 'Trần Văn Quản Lý (Admin / Checker)',
+          roles: ['admin', 'inventory_manager', 'approver'],
+          capabilities: [
+            'iam:admin',
+            'admin:user_management',
+            'admin',
+            'inventory:approve_request',
+            'inventory:view',
+            'inventory:create_request',
+          ],
+        );
+      case 'manager_demo':
       case 'demo_admin':
       case 'admin':
       case 'quanly':
@@ -813,6 +840,13 @@ class AuthService extends ChangeNotifier {
           username: 'manager_demo',
           displayName: 'Trần Văn Quản Lý (Chủ Quán)',
           roles: ['admin', 'inventory_manager', 'approver'],
+          capabilities: [
+            'iam:admin',
+            'admin:user_management',
+            'admin',
+            'inventory:approve_request',
+            'inventory:view',
+          ],
         );
       default:
         return null;

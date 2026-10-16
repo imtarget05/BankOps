@@ -11,8 +11,10 @@ RUN pip install --no-cache-dir poetry poetry-plugin-export && \
     poetry export -o requirements.txt --without-hashes && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code and documents
 COPY app ./app
+COPY docs ./docs
+COPY sample-data ./sample-data
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY entrypoint.sh ./entrypoint.sh

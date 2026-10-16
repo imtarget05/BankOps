@@ -82,6 +82,7 @@ async def seed_demo():
             Capability(code="integration:manage", name="Manage integrations"),
             Capability(code="audit:view", name="View audit logs"),
             Capability(code="admin:user_management", name="Manage users"),
+            Capability(code="iam:admin", name="Full IAM Administration"),
         ]
         existing_cap_codes = {code for (code,) in (await db.execute(select(Capability.code))).all()}
         new_caps = [c for c in caps if c.code not in existing_cap_codes]
@@ -123,8 +124,10 @@ async def seed_demo():
             RoleCapability(role_code="approver", capability_code="cash:view_balances"),
             RoleCapability(role_code="approver", capability_code="cash:reconcile"),
             RoleCapability(role_code="admin", capability_code="admin:user_management"),
+            RoleCapability(role_code="admin", capability_code="iam:admin"),
             RoleCapability(role_code="admin", capability_code="integration:manage"),
             RoleCapability(role_code="system_admin", capability_code="admin:user_management"),
+            RoleCapability(role_code="system_admin", capability_code="iam:admin"),
         ]
         existing_pairs = set(
             (

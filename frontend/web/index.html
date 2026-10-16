@@ -179,6 +179,21 @@
         console.log('[PWA] beforeinstallprompt captured');
       });
 
+      // Tự động kiểm tra và cập nhật Service Worker khi có bản mới được push
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          console.log('[PWA] Service worker controller changed. Phiên bản mới đã kích hoạt.');
+        });
+        window.addEventListener('focus', function() {
+          navigator.serviceWorker.getRegistration().then(function(reg) {
+            if (reg) {
+              reg.update();
+              console.log('[PWA] Đã kiểm tra cập nhật phiên bản mới.');
+            }
+          });
+        });
+      }
+
       window.promptPwaInstall = function() {
         if (deferredPrompt) {
           deferredPrompt.prompt();

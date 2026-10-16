@@ -987,8 +987,6 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
 
   static const String appUrl =
       'https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev';
-  static const String apkDownloadUrl =
-      'https://github.com/mainguyenbinhtan/BankOps/releases/latest';
 
   @override
   Widget build(BuildContext context) {
@@ -1073,14 +1071,14 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Cài đặt Ứng dụng Di động',
+                            'Cài đặt & Tự động Đồng bộ Ứng dụng',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                           Text(
-                            'Tự động cài đặt PWA hoặc tải APK chạy độc lập mượt mà như app gốc',
+                            'Quét mã mở trên mọi điện thoại (iOS, Android). Tự động đồng bộ và nạp phiên bản mới nhất.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -1091,55 +1089,49 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.sync_rounded, size: 16, color: Color(0xFF059669)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Tự động đồng bộ: Khi hệ thống cập nhật trên Cloudflare, ứng dụng trên điện thoại sẽ tự động nạp phiên bản mới mà không cần cài đặt lại.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF065F46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      key: const Key('btn-install-pwa'),
-                      onPressed: () {
-                        promptPwaInstall();
-                        AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
-                      },
-                      icon: const Icon(Icons.download_for_offline_rounded, size: 18),
-                      label: const Text('Cài đặt Web App (1-Click PWA)'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0284C7),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
+                FilledButton.icon(
+                  key: const Key('btn-install-pwa'),
+                  onPressed: () {
+                    promptPwaInstall();
+                    AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
+                  },
+                  icon: const Icon(Icons.download_for_offline_rounded, size: 18),
+                  label: const Text('Cài đặt Ứng dụng Di động (1-Click PWA)'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0284C7),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    OutlinedButton.icon(
-                      key: const Key('btn-download-apk'),
-                      onPressed: () => openWebUrl(apkDownloadUrl),
-                      icon: const Icon(Icons.android_rounded, size: 18, color: Color(0xFF059669)),
-                      label: const Text(
-                        'Tải File APK (Android)',
-                        style: TextStyle(color: Color(0xFF059669), fontWeight: FontWeight.w700),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF6EE7B7)),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      key: const Key('btn-copy-install-link'),
-                      onPressed: () async {
-                        await Clipboard.setData(const ClipboardData(text: appUrl));
-                        if (context.mounted) {
-                          AppToast.success(context, 'Đã sao chép liên kết ứng dụng: $appUrl');
-                        }
-                      },
-                      icon: const Icon(Icons.copy_rounded, size: 16),
-                      label: const Text('Sao chép link web'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 14),
                 const Divider(height: 1),

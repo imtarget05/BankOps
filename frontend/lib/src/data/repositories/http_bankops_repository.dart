@@ -266,10 +266,16 @@ class HttpBankOpsRepository implements BankOpsRepository {
         roles: ['maker', 'inventory_custodian', 'cash_simulated_custodian'],
       ),
       AppUser(
-        id: 'u_checker',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
         username: 'demo_checker',
-        displayName: 'Trần Thị B (Duyệt phiếu)',
-        roles: ['checker', 'inventory_custodian', 'cash_simulated_custodian'],
+        displayName: 'Trần Văn Quản Lý (Admin / Checker)',
+        roles: ['admin', 'checker', 'approver', 'inventory_manager'],
+        capabilities: [
+          'iam:admin',
+          'admin:user_management',
+          'admin',
+          'inventory:approve_request',
+        ],
       ),
       AppUser(
         id: 'u_auditor',

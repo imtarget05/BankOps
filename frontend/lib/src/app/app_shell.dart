@@ -367,6 +367,38 @@ class _AppShellState extends State<AppShell> {
       case 8:
         return const SettingsScreen();
       case 9:
+        if (!RoleVisibility.canManageEmployees(session?.user)) {
+          return Center(
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.gpp_bad_outlined,
+                      size: 64, color: Color(0xFFEF4444)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Từ chối quyền truy cập',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Phân hệ Quản trị nhân viên chỉ dành riêng cho Quản trị viên (Admin).',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Quay lại Tổng quan'),
+                    onPressed: () => setState(() => _index = 0),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return const EmployeeManagementScreen();
       default:
         return const SizedBox.shrink();
@@ -1205,16 +1237,60 @@ class _DashboardHeader extends StatelessWidget {
 }
 
 /// Thanh trạng thái thao tác nhanh tại quầy. Người dùng có thể tắt trong
-/// Cài đặt; không tự nhận là dữ liệu thời gian thực khi API chưa trả cảnh báo.
-class _TeaOpsTicker extends StatelessWidget {
+/// Thanh trạng thái thao tác nhanh tại quầy, cập nhật ca trực động theo thời gian thực (Giờ:Phút).
+class _TeaOpsTicker extends StatefulWidget {
   const _TeaOpsTicker();
+
+  @override
+  State<_TeaOpsTicker> createState() => _TeaOpsTickerState();
+}
+
+class _TeaOpsTickerState extends State<_TeaOpsTicker> {
+  Timer? _timer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _getShiftAlertText(Locale locale) {
+    final isVi = locale.languageCode == 'vi';
+    final hour = _now.hour;
+    final timeStr =
+        '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}';
+
+    if (hour >= 6 && hour < 14) {
+      return isVi
+          ? '⚡ Ca Sáng ($timeStr) · Kiểm kê mở quầy & sẵn sàng pha chế · 3 nguyên liệu FEFO'
+          : '⚡ Morning Shift ($timeStr) · Opening stocktake & preparation · 3 FEFO items';
+    } else if (hour >= 14 && hour < 22) {
+      return isVi
+          ? '⚡ Ca Chiều/Tối ($timeStr) · Theo dõi tồn quầy cao điểm & xuất huỷ ca · Giám sát định mức'
+          : '⚡ Afternoon/Evening Shift ($timeStr) · Peak inventory monitoring & shift disposal';
+    } else {
+      return isVi
+          ? '🌙 Ca Đêm / Chốt Sổ ($timeStr) · Đối soát doanh thu & kiểm kê cuối ngày · Sẵn sàng ca sáng mai'
+          : '🌙 Night / Closing Shift ($timeStr) · Daily reconciliation & closing stocktake';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final locale =
         Provider.of<LocaleController?>(context)?.locale ?? const Locale('vi');
-    final text = AppI18n(locale).tr('quick_shift_alert');
+    final text = _getShiftAlertText(locale);
     return Semantics(
       liveRegion: true,
       label: text,

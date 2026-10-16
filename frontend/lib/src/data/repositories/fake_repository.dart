@@ -1735,8 +1735,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       displayName: 'Trần Tuấn Bình (KSV)',
       email: 'checker@bankops.vn',
       status: 'active',
-      roles: ['approver'],
-      capabilities: ['inventory:approve_request', 'etl:review'],
+      roles: ['admin', 'approver', 'inventory_manager'],
+      capabilities: ['iam:admin', 'admin:user_management', 'admin', 'inventory:approve_request', 'etl:review'],
     ),
   ];
 
