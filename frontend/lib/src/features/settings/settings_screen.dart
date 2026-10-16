@@ -1176,14 +1176,14 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Cài đặt & Tự động Đồng bộ Ứng dụng',
+                            'Cài đặt ứng dụng',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                           Text(
-                            'Quét mã mở trên mọi điện thoại (iOS, Android). Tự động đồng bộ và nạp phiên bản mới nhất.',
+                            'Quét mã mở trên iOS & Android. Tự động đồng bộ phiên bản mới nhất.',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -1195,44 +1195,17 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.sync_rounded, size: 16, color: Color(0xFF059669)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Tự động đồng bộ: Khi hệ thống cập nhật trên Cloudflare, ứng dụng trên điện thoại sẽ tự động nạp phiên bản mới mà không cần cài đặt lại.',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF065F46),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
                 FilledButton.icon(
                   key: const Key('btn-install-pwa'),
                   onPressed: () {
                     promptPwaInstall();
                     AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
                   },
-                  icon: const Icon(Icons.download_for_offline_rounded, size: 18),
-                  label: const Text('Cài đặt Ứng dụng Di động (1-Click PWA)'),
+                  icon: const Icon(Icons.install_mobile_rounded, size: 18),
+                  label: const Text('Cài đặt ứng dụng'),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF0284C7),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1242,7 +1215,7 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                 const Divider(height: 1),
                 const SizedBox(height: 12),
                 Text(
-                  'Hướng dẫn thêm vào màn hình chính (Home Screen):',
+                  'Hướng dẫn thêm vào màn hình chính:',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
