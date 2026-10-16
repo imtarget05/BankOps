@@ -548,7 +548,7 @@ async def list_items(
 @router.post("/inventory/items", status_code=201)
 async def create_item(
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     sku = str(payload.get("sku", "")).strip().upper()
@@ -593,7 +593,7 @@ async def create_item(
 @router.post("/inventory/items/batch", status_code=201)
 async def create_items_batch(
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     raw_items = payload.get("items", [])
@@ -666,7 +666,7 @@ async def create_items_batch(
 async def update_item(
     item_id: str,
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     iid = _uuid(item_id, "item_id")
@@ -717,7 +717,7 @@ async def _perform_delete_item(db: AsyncSession, item: Item) -> dict:
 @router.delete("/inventory/items/{item_id}")
 async def delete_item(
     item_id: str,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     iid = _uuid(item_id, "item_id")
@@ -732,7 +732,7 @@ async def delete_item(
 @router.post("/inventory/items/batch-delete")
 async def batch_delete_items(
     payload: dict,
-    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management", "inventory:create_request")),
+    current_user=Depends(require_any_capability("inventory:manage_catalog", "admin:user_management")),
     db: AsyncSession = Depends(get_db),
 ):
     raw_ids = payload.get("item_ids", [])
