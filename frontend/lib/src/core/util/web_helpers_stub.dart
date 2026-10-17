@@ -5,3 +5,6 @@ void promptPwaInstall() {}
 void openWebUrl(String url) {}
 
 bool isPwaInstallSupported() => false;
+
+bool isIosWeb() => false;
+

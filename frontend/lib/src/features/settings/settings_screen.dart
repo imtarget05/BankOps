@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -864,6 +865,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 80),
           ],
         ),
       ),
@@ -1088,10 +1090,46 @@ class _AppDownloadCard extends StatefulWidget {
 }
 
 class _AppDownloadCardState extends State<_AppDownloadCard> {
-  int _selectedPlatformTab = 0;
+  int _selectedPlatformTab = 0; // 0: Android, 1: iPhone, 2: Zalo/QR
 
   static const String appUrl =
       'https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev';
+
+  bool get _isIosDevice =>
+      defaultTargetPlatform == TargetPlatform.iOS || isIosWeb();
+
+  @override
+  void initState() {
+    super.initState();
+    // Tự động phát hiện thiết bị: nếu là iPhone/iPad thì mặc định chọn hướng dẫn iOS
+    _selectedPlatformTab = _isIosDevice ? 1 : 0;
+  }
+
+  void _handleInstall() {
+    if (_isIosDevice) {
+      _showInstallModal(context, isIos: true);
+      return;
+    }
+    if (isPwaInstallSupported()) {
+      promptPwaInstall();
+      AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
+    } else {
+      _showInstallModal(context, isIos: false);
+    }
+  }
+
+  void _showInstallModal(BuildContext context, {required bool isIos}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _InstallGuideModal(initialIsIos: isIos),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1132,7 +1170,7 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                   child: QrImageView(
                     data: appUrl,
                     version: QrVersions.auto,
-                    size: isCompact ? 140 : 160,
+                    size: isCompact ? 130 : 150,
                     backgroundColor: Colors.white,
                     eyeStyle: const QrEyeStyle(
                       eyeShape: QrEyeShape.square,
@@ -1159,105 +1197,163 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
             final actionsAndGuides = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0284C7).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.install_mobile_rounded,
-                          color: Color(0xFF0284C7), size: 20),
+                // Khối banner Cài đặt ứng dụng PWA
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                          : [const Color(0xFFF8FAFC), const Color(0xFFF0FDF4)],
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFBAE6FD).withValues(alpha: 0.6),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          const Text(
-                            'Cài đặt ứng dụng',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0284C7),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.install_mobile_rounded,
+                              color: Colors.white,
+                              size: 20,
                             ),
                           ),
-                          Text(
-                            'Quét mã mở trên iOS & Android. Tự động đồng bộ phiên bản mới nhất.',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: theme.colorScheme.onSurfaceVariant,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Cài đặt ứng dụng (PWA)',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                Text(
+                                  'Tự động đồng bộ phiên bản mới nhất • Hoạt động offline',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  key: const Key('btn-install-pwa'),
-                  onPressed: () {
-                    promptPwaInstall();
-                    AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
-                  },
-                  icon: const Icon(Icons.install_mobile_rounded, size: 18),
-                  label: const Text('Cài đặt ứng dụng'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0284C7),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: ElevatedButton.icon(
+                          key: const Key('btn-install-pwa'),
+                          onPressed: _handleInstall,
+                          icon: Icon(
+                            _isIosDevice ? Icons.apple : Icons.download_rounded,
+                            size: 19,
+                          ),
+                          label: Text(
+                            _isIosDevice
+                                ? 'Cài đặt trên iPhone (Safari)'
+                                : 'Cài đặt ứng dụng ngay',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 14),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Text(
                   'Hướng dẫn thêm vào màn hình chính:',
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: theme.colorScheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
-                SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 0,
-                      label: Text('Android / Chrome'),
-                      icon: Icon(Icons.android, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: 1,
-                      label: Text('iPhone / Safari'),
-                      icon: Icon(Icons.apple, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: 2,
-                      label: Text('Zalo / Quét QR'),
-                      icon: Icon(Icons.qr_code_scanner, size: 16),
-                    ),
-                  ],
-                  selected: {_selectedPlatformTab},
-                  onSelectionChanged: (val) {
-                    setState(() => _selectedPlatformTab = val.first);
-                  },
-                ),
                 const SizedBox(height: 10),
+                // Thanh chọn nền tảng dạng pill không bị vỡ chữ
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildPlatformPill(
+                        index: 1,
+                        icon: Icons.apple,
+                        label: 'iPhone / Safari',
+                        isSelected: _selectedPlatformTab == 1,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildPlatformPill(
+                        index: 0,
+                        icon: Icons.android_rounded,
+                        label: 'Android / Chrome',
+                        isSelected: _selectedPlatformTab == 0,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildPlatformPill(
+                        index: 2,
+                        icon: Icons.qr_code_scanner_rounded,
+                        label: 'Zalo / Quét QR',
+                        isSelected: _selectedPlatformTab == 2,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  child: _buildGuideContent(_selectedPlatformTab),
+                  child: _buildGuideContent(_selectedPlatformTab, theme),
                 ),
               ],
             );
@@ -1288,49 +1384,504 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
     );
   }
 
-  Widget _buildGuideContent(int tabIndex) {
+  Widget _buildPlatformPill({
+    required int index,
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedPlatformTab = index),
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF0284C7).withValues(alpha: isDark ? 0.25 : 0.12)
+                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF0284C7)
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? const Color(0xFF0284C7)
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? (isDark ? Colors.white : const Color(0xFF0369A1))
+                      : theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuideContent(int tabIndex, ThemeData theme) {
     switch (tabIndex) {
-      case 0:
-        return const Column(
+      case 1:
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '1. Mở website bằng trình duyệt Google Chrome trên điện thoại.\n'
-              '2. Nhấn nút 3 chấm dọc (⋮) ở góc trên bên phải màn hình.\n'
-              '3. Chọn "Cài đặt ứng dụng" (hoặc "Thêm vào màn hình chính").\n'
-              '4. Biểu tượng ứng dụng Quản Lý Kho Trà Sữa sẽ xuất hiện ngay trên màn hình chính của bạn.',
-              style: TextStyle(fontSize: 12.5, height: 1.5),
+            _buildStepRow(
+              number: '1',
+              icon: Icons.open_in_browser_rounded,
+              title: 'Mở bằng trình duyệt Safari',
+              description: 'Truy cập website trên iPhone/iPad bằng Safari (không dùng trình duyệt nhúng trong Zalo hay Facebook).',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '2',
+              icon: Icons.ios_share,
+              title: 'Nhấn nút Chia sẻ (Share ⎋)',
+              description: 'Ở thanh công cụ dưới đáy Safari, nhấn biểu tượng hình vuông có mũi tên chỉ lên.',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '3',
+              icon: Icons.add_box_outlined,
+              title: 'Chọn "Thêm vào MH chính"',
+              description: 'Cuộn danh sách tác vụ xuống và chọn mục "Thêm vào MH chính" (Add to Home Screen).',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '4',
+              icon: Icons.check_circle_rounded,
+              title: 'Nhấn "Thêm" ở góc trên bên phải',
+              description: 'Biểu tượng ứng dụng Kho Trà Sữa sẽ xuất hiện ngay trên màn hình chính như app tải từ App Store!',
+              theme: theme,
+              isLast: true,
             ),
           ],
         );
-      case 1:
-        return const Column(
+      case 0:
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '1. Mở website bằng trình duyệt Safari trên iPhone / iPad.\n'
-              '2. Nhấn vào nút Chia sẻ (biểu tượng hình vuông có mũi tên chỉ lên ⎋ ở thanh dưới).\n'
-              '3. Cuộn xuống và chọn "Thêm vào MH chính" (Add to Home Screen).\n'
-              '4. Nhấn "Thêm" ở góc trên bên phải để hoàn tất.',
-              style: TextStyle(fontSize: 12.5, height: 1.5),
+            _buildStepRow(
+              number: '1',
+              icon: Icons.open_in_browser_rounded,
+              title: 'Mở bằng Google Chrome',
+              description: 'Truy cập đường dẫn website trên trình duyệt Chrome điện thoại.',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '2',
+              icon: Icons.more_vert_rounded,
+              title: 'Nhấn menu 3 chấm (⋮)',
+              description: 'Ở góc trên bên phải màn hình Chrome, nhấn vào biểu tượng 3 chấm dọc.',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '3',
+              icon: Icons.add_to_home_screen_rounded,
+              title: 'Chọn "Cài đặt ứng dụng"',
+              description: 'Chọn mục "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính".',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '4',
+              icon: Icons.check_circle_rounded,
+              title: 'Xác nhận cài đặt',
+              description: 'Ứng dụng sẽ được cài đặt ra màn hình chính và tự động đồng bộ mỗi khi có phiên bản mới.',
+              theme: theme,
+              isLast: true,
             ),
           ],
         );
       case 2:
       default:
-        return const Column(
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '1. Dùng ứng dụng Camera, Zalo hoặc ZaloPay để quét mã QR bên cạnh.\n'
-              '2. Khi Zalo mở liên kết, hãy nhấn vào biểu tượng 3 chấm (⋯) ở góc trên bên phải.\n'
-              '3. Chọn "Mở bằng trình duyệt" (Chrome / Safari).\n'
-              '4. Sau đó tiến hành thêm vào màn hình chính theo hướng dẫn của hệ điều hành.',
-              style: TextStyle(fontSize: 12.5, height: 1.5),
+            _buildStepRow(
+              number: '1',
+              icon: Icons.qr_code_scanner_rounded,
+              title: 'Quét mã QR bằng Camera / Zalo',
+              description: 'Dùng Camera điện thoại hoặc tính năng Quét mã trong Zalo để quét mã QR bên cạnh.',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '2',
+              icon: Icons.more_horiz_rounded,
+              title: 'Mở menu 3 chấm (⋯) trong Zalo',
+              description: 'Khi Zalo mở liên kết web, hãy nhấn vào biểu tượng 3 chấm (⋯) ở góc trên bên phải.',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '3',
+              icon: Icons.open_in_browser_rounded,
+              title: 'Chọn "Mở bằng trình duyệt"',
+              description: 'Chọn mở bằng Safari (nếu dùng iPhone) hoặc Google Chrome (nếu dùng Android).',
+              theme: theme,
+            ),
+            _buildStepRow(
+              number: '4',
+              icon: Icons.install_mobile_rounded,
+              title: 'Thêm vào màn hình chính',
+              description: 'Tiến hành các bước thêm vào màn hình chính theo tab iPhone hoặc Android tương ứng.',
+              theme: theme,
+              isLast: true,
             ),
           ],
         );
     }
   }
+
+  Widget _buildStepRow({
+    required String number,
+    required IconData icon,
+    required String title,
+    required String description,
+    required ThemeData theme,
+    bool isLast = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0284C7),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 14, color: const Color(0xFF0284C7)),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+/// Modal hướng dẫn trực quan từng bước cài đặt ứng dụng
+class _InstallGuideModal extends StatefulWidget {
+  const _InstallGuideModal({required this.initialIsIos});
+
+  final bool initialIsIos;
+
+  @override
+  State<_InstallGuideModal> createState() => _InstallGuideModalState();
+}
+
+class _InstallGuideModalState extends State<_InstallGuideModal> {
+  late bool _isIos;
+
+  @override
+  void initState() {
+    super.initState();
+    _isIos = widget.initialIsIos;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Text(
+              _isIos
+                  ? 'Cài đặt trên iPhone / iPad (Safari)'
+                  : 'Cài đặt trên Android (Chrome)',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'Thêm ứng dụng ra màn hình chính để dùng mượt mà toàn màn hình',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Toggle chuyển nhanh nền tảng
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _modalTabButton(
+                    label: 'iPhone (Safari)',
+                    icon: Icons.apple,
+                    isSelected: _isIos,
+                    onTap: () => setState(() => _isIos = true),
+                  ),
+                  _modalTabButton(
+                    label: 'Android (Chrome)',
+                    icon: Icons.android_rounded,
+                    isSelected: !_isIos,
+                    onTap: () => setState(() => _isIos = false),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Nội dung hướng dẫn
+          if (_isIos) ...[
+            _modalStep(
+              step: '1',
+              icon: Icons.open_in_browser_rounded,
+              title: 'Mở bằng Safari',
+              desc: 'Chắc chắn bạn đang mở website này trong trình duyệt Safari.',
+            ),
+            _modalStep(
+              step: '2',
+              icon: Icons.ios_share,
+              title: 'Bấm nút Chia sẻ (⎋)',
+              desc: 'Biểu tượng ô vuông có mũi tên chỉ lên ở thanh công cụ dưới đáy màn hình.',
+            ),
+            _modalStep(
+              step: '3',
+              icon: Icons.add_box_outlined,
+              title: 'Chọn "Thêm vào MH chính"',
+              desc: 'Cuộn xuống danh sách tùy chọn và chọn "Thêm vào MH chính" (Add to Home Screen).',
+            ),
+            _modalStep(
+              step: '4',
+              icon: Icons.check_circle_rounded,
+              title: 'Bấm "Thêm" để hoàn tất',
+              desc: 'Icon Kho Trà Sữa sẽ xuất hiện ngay trên màn hình chính của iPhone/iPad!',
+              isLast: true,
+            ),
+          ] else ...[
+            _modalStep(
+              step: '1',
+              icon: Icons.open_in_browser_rounded,
+              title: 'Mở bằng Google Chrome',
+              desc: 'Mở trang web bằng trình duyệt Google Chrome trên điện thoại Android.',
+            ),
+            _modalStep(
+              step: '2',
+              icon: Icons.more_vert_rounded,
+              title: 'Bấm nút Menu 3 chấm (⋮)',
+              desc: 'Nhấn vào biểu tượng 3 chấm dọc ở góc trên bên phải màn hình.',
+            ),
+            _modalStep(
+              step: '3',
+              icon: Icons.add_to_home_screen_rounded,
+              title: 'Chọn "Cài đặt ứng dụng"',
+              desc: 'Chọn mục "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính".',
+            ),
+            _modalStep(
+              step: '4',
+              icon: Icons.check_circle_rounded,
+              title: 'Xác nhận cài đặt',
+              desc: 'Ứng dụng sẽ được cài đặt và tự động đồng bộ dữ liệu mỗi khi mở.',
+              isLast: true,
+            ),
+          ],
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF0284C7),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Đã hiểu, tiến hành ngay',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modalTabButton({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0284C7) : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modalStep({
+    required String step,
+    required IconData icon,
+    required String title,
+    required String desc,
+    bool isLast = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0284C7),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              step,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 15, color: const Color(0xFF0284C7)),
+                    const SizedBox(width: 5),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  desc,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 

@@ -22,3 +22,15 @@ bool isPwaInstallSupported() {
     return false;
   }
 }
+
+bool isIosWeb() {
+  try {
+    final ua = html.window.navigator.userAgent.toLowerCase();
+    final isIos = ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
+    final isIpadOs = ua.contains('macintosh') && (html.window.navigator.maxTouchPoints ?? 0) > 1;
+    return isIos || isIpadOs;
+  } catch (_) {
+    return false;
+  }
+}
+
