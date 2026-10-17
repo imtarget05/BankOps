@@ -68,12 +68,28 @@ jobs:
           # FastAPI trên Modal (xem `env.API_BASE_URL` ở đầu workflow).
           API_BASE_URL: ${{ env.API_BASE_URL }}
         run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Building Web with commit SHA: ${SHORT_SHA} at ${BUILD_TIME}"
           flutter build web \
             --release \
             --tree-shake-icons \
+            --build-number="${SHORT_SHA}" \
+            --build-name="0.1.0" \
+            --dart-define=APP_BUILD_COMMIT="${SHORT_SHA}" \
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
             --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
             --dart-define=APP_ENV=production
+
+          cat <<EOF > build/web/version.json
+          {
+            "app_name": "kho_tra_sua",
+            "version": "0.1.0",
+            "build_number": "${SHORT_SHA}",
+            "build_time": "${BUILD_TIME}",
+            "package_name": "kho_tra_sua"
+          }
+          EOF
 
 
       - name: Deploy to Cloudflare Workers Assets

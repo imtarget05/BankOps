@@ -843,11 +843,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: Column(
                 children: [
-                  const ListTile(
-                    leading: Icon(Icons.shield_outlined),
-                    title: Text('Quản Lý Kho Trà Sữa v1.0.0'),
-                    subtitle: Text(
+                  ListTile(
+                    leading: const Icon(Icons.shield_outlined),
+                    title: Text(
+                      'Quản Lý Kho Trà Sữa v1.0.0${getAppBuildNumber() != null ? ' (Build: ${getAppBuildNumber()})' : ''}',
+                    ),
+                    subtitle: const Text(
                       'Hệ thống quản lý nhập, xuất và tồn nguyên vật liệu quán trà sữa.',
+                    ),
+                    trailing: IconButton(
+                      key: const Key('btn-sync-app-version'),
+                      tooltip: 'Đồng bộ phiên bản mới & Xóa cache',
+                      icon: const Icon(Icons.sync_rounded,
+                          color: Color(0xFF0284C7)),
+                      onPressed: () {
+                        AppToast.info(context,
+                            'Đang làm sạch bộ nhớ tạm và nạp phiên bản mới...');
+                        forceAppUpdate();
+                      },
                     ),
                   ),
                   const Divider(height: 1),
@@ -1291,6 +1304,40 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 38,
+                        child: OutlinedButton.icon(
+                          key: const Key('btn-force-sync-app'),
+                          onPressed: () {
+                            AppToast.info(context,
+                                'Đang đồng bộ và nạp phiên bản mới nhất từ máy chủ...');
+                            forceAppUpdate();
+                          },
+                          icon: const Icon(Icons.sync_rounded, size: 16),
+                          label: const Text(
+                            'Đồng bộ phiên bản mới (Xóa cache)',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isDark
+                                ? const Color(0xFF38BDF8)
+                                : const Color(0xFF0369A1),
+                            side: BorderSide(
+                              color: isDark
+                                  ? const Color(0xFF0284C7)
+                                  : const Color(0xFFBAE6FD),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
                         ),

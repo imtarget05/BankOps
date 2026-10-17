@@ -34,3 +34,35 @@ bool isIosWeb() {
   }
 }
 
+void forceAppUpdate() {
+  try {
+    js.context.callMethod('forceAppUpdate');
+  } catch (_) {
+    html.window.location.reload();
+  }
+}
+
+bool isAppUpdateAvailable() {
+  try {
+    return js.context['isAppUpdateAvailable'] == true;
+  } catch (_) {
+    return false;
+  }
+}
+
+String? getAppBuildNumber() {
+  try {
+    final build = js.context['appCurrentBuild'];
+    if (build != null) return build.toString();
+  } catch (_) {}
+  return null;
+}
+
+void onAppUpdateAvailable(void Function() callback) {
+  try {
+    html.window.addEventListener('app-update-available', (_) {
+      callback();
+    });
+  } catch (_) {}
+}
+

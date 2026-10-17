@@ -49,7 +49,9 @@ class AppToast {
     required Color backgroundColor,
     required IconData icon,
   }) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
         backgroundColor: backgroundColor,
         behavior: SnackBarBehavior.floating,

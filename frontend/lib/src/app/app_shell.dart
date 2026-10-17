@@ -16,6 +16,7 @@ import '../core/i18n/locale_controller.dart';
 import '../core/util/role_visibility.dart';
 import '../core/widgets/app_screen.dart';
 import '../core/offline/offline_ui.dart';
+import '../core/util/web_helpers.dart';
 import '../core/widgets/app_toast.dart';
 import '../core/widgets/global_search.dart';
 import '../core/widgets/user_avatar.dart';
@@ -85,12 +86,18 @@ class _AppShellState extends State<AppShell> {
   bool _autoOpenStockRequest = false;
   bool _autoOpenCashRequest = false;
   bool _aiUnavailable = false;
+  bool _isUpdateAvailable = false;
   Timer? _offlinePingTimer;
 
   @override
   void initState() {
     super.initState();
     _syncController.addListener(_onSyncSignal);
+    onAppUpdateAvailable(() {
+      if (mounted) {
+        setState(() => _isUpdateAvailable = true);
+      }
+    });
   }
 
   void _onSyncSignal() {
@@ -1196,9 +1203,11 @@ class _AppShellState extends State<AppShell> {
         context.watch<AuthService?>()?.isOfflineSession ?? false;
     final showTicker =
         context.watch<AppUiSettingsController?>()?.showLiveTicker ?? true;
-    if (!isOfflineDemo && !showTicker) return body;
+    if (!isOfflineDemo && !showTicker && !_isUpdateAvailable) return body;
     return Column(
       children: [
+        if (_isUpdateAvailable)
+          _AppUpdateBanner(onUpdate: forceAppUpdate),
         if (isOfflineDemo)
           const _OfflineDemoBanner()
         else if (showTicker)
@@ -1363,6 +1372,55 @@ class _OfflineDemoBanner extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AppUpdateBanner extends StatelessWidget {
+  const _AppUpdateBanner({required this.onUpdate});
+  final VoidCallback onUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0284C7),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.system_update_rounded,
+              size: 16, color: Colors.white),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Đã có bản cập nhật mới trên máy chủ',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            key: const Key('btn-banner-update-app'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF0284C7),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              elevation: 0,
+            ),
+            onPressed: onUpdate,
+            child: const Text(
+              'Cập nhật ngay',
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
       ),
     );
   }

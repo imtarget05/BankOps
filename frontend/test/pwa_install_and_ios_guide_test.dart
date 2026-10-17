@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kho_tra_sua/src/app/app_shell.dart';
@@ -110,6 +109,62 @@ void main() {
       // Ensure no overflow errors occurred
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('btn-install-pwa')), findsOneWidget);
+    });
+
+    testWidgets('Settings screen provides force sync & clear cache buttons', (tester) async {
+      final repo = FakeBankOpsRepository(latency: Duration.zero);
+      final auth = AuthService();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthService>.value(value: auth),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: RepositoryScope(
+              repository: repo,
+              child: const Scaffold(
+                body: SettingsScreen(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('btn-force-sync-app')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      final forceSyncBtn = find.byKey(const Key('btn-force-sync-app'));
+      expect(forceSyncBtn, findsOneWidget);
+
+      await tester.tap(forceSyncBtn);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.textContaining('Đang đồng bộ'), findsOneWidget);
+      
+      // Clear snackbars so the next button tap can show its own toast
+      ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first)).clearSnackBars();
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('btn-sync-app-version')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      final versionSyncBtn = find.byKey(const Key('btn-sync-app-version'));
+      expect(versionSyncBtn, findsOneWidget);
+
+      await tester.tap(versionSyncBtn);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.textContaining('Đang làm sạch bộ nhớ tạm'), findsOneWidget);
+      await tester.pumpAndSettle();
     });
   });
 }

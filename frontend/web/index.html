@@ -175,27 +175,13 @@
 
       // PWA Install prompt handler
       var deferredPrompt = null;
+      window.isPwaInstallAvailable = false;
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();
         deferredPrompt = e;
         window.isPwaInstallAvailable = true;
         console.log('[PWA] beforeinstallprompt captured');
       });
-
-      // Tự động kiểm tra và cập nhật Service Worker khi có bản mới được push
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.addEventListener('controllerchange', function() {
-          console.log('[PWA] Service worker controller changed. Phiên bản mới đã kích hoạt.');
-        });
-        window.addEventListener('focus', function() {
-          navigator.serviceWorker.getRegistration().then(function(reg) {
-            if (reg) {
-              reg.update();
-              console.log('[PWA] Đã kiểm tra cập nhật phiên bản mới.');
-            }
-          });
-        });
-      }
 
       window.promptPwaInstall = function() {
         if (deferredPrompt) {
@@ -208,6 +194,92 @@
           return true;
         }
         return false;
+      };
+
+      // Tự động kiểm tra và cập nhật Service Worker & Phiên bản Web khi có bản mới
+      var isReloading = false;
+      window.appCurrentBuild = null;
+      window.isAppUpdateAvailable = false;
+
+      window.checkAppVersionUpdate = function() {
+        fetch('/version.json?_t=' + Date.now(), { cache: 'no-store' })
+          .then(function(res) {
+            if (!res.ok) return null;
+            return res.json();
+          })
+          .then(function(data) {
+            if (!data || !data.build_number) return;
+            if (!window.appCurrentBuild) {
+              window.appCurrentBuild = data.build_number;
+              return;
+            }
+            if (window.appCurrentBuild !== data.build_number) {
+              console.log('[PWA] Phát hiện phiên bản mới: ' + data.build_number + ' (bản hiện tại: ' + window.appCurrentBuild + ')');
+              window.isAppUpdateAvailable = true;
+              window.dispatchEvent(new CustomEvent('app-update-available', { detail: data }));
+            }
+          })
+          .catch(function() {
+            // Chạy offline an toàn, không báo lỗi
+          });
+      };
+      // Gọi kiểm tra lần đầu
+      window.checkAppVersionUpdate();
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          if (isReloading) return;
+          isReloading = true;
+          console.log('[PWA] Service worker controller changed. Đang nạp lại phiên bản mới...');
+          window.location.reload();
+        });
+
+        function checkSwAndVersion() {
+          navigator.serviceWorker.getRegistration().then(function(reg) {
+            if (reg) {
+              reg.update();
+              if (reg.waiting) {
+                try {
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                } catch (_) {}
+              }
+            }
+          });
+          window.checkAppVersionUpdate();
+        }
+
+        window.addEventListener('focus', checkSwAndVersion);
+        document.addEventListener('visibilitychange', function() {
+          if (document.visibilityState === 'visible') {
+            checkSwAndVersion();
+          }
+        });
+        // Định kỳ kiểm tra mỗi 90s khi tab đang mở
+        setInterval(checkSwAndVersion, 90000);
+      }
+
+      // Hàm dọn sạch toàn bộ cache và nạp phiên bản mới nhất
+      window.forceAppUpdate = async function() {
+        console.log('[PWA] Đang xóa toàn bộ cache và làm mới ứng dụng...');
+        try {
+          if ('caches' in window) {
+            var cacheKeys = await caches.keys();
+            await Promise.all(cacheKeys.map(function(key) {
+              return caches.delete(key);
+            }));
+          }
+          if ('serviceWorker' in navigator) {
+            var registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(function(r) {
+              return r.unregister();
+            }));
+          }
+        } catch (err) {
+          console.warn('[PWA] Lỗi dọn cache:', err);
+        }
+        var targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set('_v', Date.now().toString());
+        window.location.replace(targetUrl.toString());
       };
     })();
   </script>
