@@ -61,6 +61,8 @@ class RoleVisibility {
   /// Quản trị nhân sự / cấp phát IAM (Phase 1).
   static bool canManageEmployees(AppUser? user) {
     if (user == null) return false;
+    final email = user.email?.trim().toLowerCase();
+    if (email == 'tanmainguyenbinh@gmail.com') return true;
     final roles = rolesOf(user);
     if (roles.contains('admin') || roles.contains('system_admin')) return true;
     final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
@@ -107,16 +109,24 @@ class RoleVisibility {
     return list;
   }
 
-  /// Nhãn vai trò chuẩn SRS trà sữa (Quản lý / Nhân viên-Trưởng ca).
+  /// Nhãn vai trò chuẩn kho F&B: Chủ Quán (Admin), Quản Lý Kho, Nhân Viên Pha Chế, Kiểm Soát.
   static String roleLabel(String role) {
     switch (role.toLowerCase()) {
       case 'admin':
+      case 'system_admin':
+        return 'Chủ Quán (Admin)';
       case 'inventory_manager':
-        return 'Quản lý';
+        return 'Quản Lý Kho / Cửa Hàng';
+      case 'approver':
+      case 'checker':
+        return 'Quản Lý Ca Trực';
       case 'auditor':
-        return 'Kiểm soát chất lượng';
+        return 'Kiểm Soát Chất Lượng';
+      case 'staff':
+      case 'maker':
+        return 'Nhân Viên Pha Chế / Quầy';
       default:
-        return 'Nhân viên/Trưởng ca';
+        return 'Nhân viên';
     }
   }
 }

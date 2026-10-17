@@ -51,14 +51,14 @@ async def seed_demo():
         # inserted a subset, so "insert only when the table is empty" would
         # silently drop the rest of the catalog on a fresh database.
         roles = [
-            Role(code="admin", name="Admin", description="Full access"),
-            Role(code="staff", name="Staff (Maker)", description="Creates requests"),
-            Role(code="approver", name="Approver (Checker)", description="Approves requests"),
-            Role(code="inventory_manager", name="Inventory Manager", description="Manages catalog and stocktakes"),
-            Role(code="cash_sim_operator", name="Cash Simulation Operator", description="Reconciles cash ledger"),
-            Role(code="integration_admin", name="Integration Admin", description="Manages connectors"),
-            Role(code="auditor", name="Auditor", description="Read-only access"),
-            Role(code="system_admin", name="System Admin", description="User and config management"),
+            Role(code="admin", name="Chủ Quán / Quản Trị Viên (Admin)", description="Toàn quyền hệ thống, giá vốn, giá bán và phân quyền"),
+            Role(code="staff", name="Nhân Viên Pha Chế / Quầy (Staff)", description="Tạo phiếu yêu cầu xuất/nhập nguyên liệu và kiểm kê"),
+            Role(code="approver", name="Quản Lý Cửa Hàng / Thủ Kho (Approver)", description="Phê duyệt phiếu xuất nhập kho và kiểm kê"),
+            Role(code="inventory_manager", name="Quản Lý Danh Mục Kho (Inventory Manager)", description="Quản lý danh mục nguyên liệu, định mức và tồn kho"),
+            Role(code="cash_sim_operator", name="Quản Lý Két Tiền Mặt", description="Quản lý sổ quỹ tiền mặt và két sắt"),
+            Role(code="integration_admin", name="Quản Trị Tích Hợp", description="Quản lý kết nối hệ thống"),
+            Role(code="auditor", name="Kiểm Soát Chất Lượng (Auditor)", description="Đối soát số lượng, hạn sử dụng FEFO và cảnh báo cận date"),
+            Role(code="system_admin", name="Quản Trị Hệ Thống (System Admin)", description="Quản trị tài khoản và cấu hình hệ thống"),
         ]
         existing_role_codes = {code for (code,) in (await db.execute(select(Role.code))).all()}
         new_roles = [r for r in roles if r.code not in existing_role_codes]
@@ -152,7 +152,7 @@ async def seed_demo():
             {
                 "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5",
                 "username": "demo_approver2",
-                "display_name_demo": "Hoàng Quốc Việt (Trưởng KSV)",
+                "display_name_demo": "Hoàng Quốc Việt (Quản Lý Ca)",
                 "roles": ["approver"],
             },
         ]
@@ -163,13 +163,18 @@ async def seed_demo():
             "auditor": "auditor",
             "admin": "admin",
             "inventory_manager": "inventory_manager",
+            "system_admin": "system_admin",
         }
         existing_usernames = set(
             (await db.execute(select(User.username))).scalars().all()
         )
-        missing_specs = [
-            u for u in all_users_spec if u["username"] not in existing_usernames
-        ]
+        seen_usernames = set()
+        missing_specs = []
+        for u in all_users_spec:
+            uname = u["username"]
+            if uname not in existing_usernames and uname not in seen_usernames:
+                seen_usernames.add(uname)
+                missing_specs.append(u)
         if missing_specs:
             password_hash = get_password_hash(DEMO_PASSWORD)
             default_pin_hash = get_password_hash("123456")
@@ -183,6 +188,7 @@ async def seed_demo():
                     pin_hash=default_pin_hash,
                     status="active",
                     display_name_demo=u["display_name_demo"],
+                    email=u.get("email"),
                 )
                 users.append(user)
                 for role_key in u.get("roles", []):

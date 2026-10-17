@@ -1837,25 +1837,27 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
     if (lower.contains('admin')) {
       bg = const Color(0xFFFEF2F2);
       fg = const Color(0xFFDC2626);
-    } else if (lower.contains('checker') || lower.contains('approver')) {
+    } else if (lower.contains('manager') ||
+        lower.contains('approver') ||
+        lower.contains('checker')) {
       bg = const Color(0xFFFAF5FF);
       fg = const Color(0xFF7C3AED);
-    } else if (lower.contains('maker') || lower.contains('staff')) {
+    } else if (lower.contains('staff') || lower.contains('maker')) {
       bg = const Color(0xFFEFF6FF);
       fg = const Color(0xFF2563EB);
-    } else if (lower.contains('custodian')) {
+    } else if (lower.contains('auditor')) {
       bg = const Color(0xFFECFDF5);
       fg = const Color(0xFF059669);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
-        role.toUpperCase(),
+        RoleVisibility.roleLabel(role).toUpperCase(),
         style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: fg),
       ),
     );

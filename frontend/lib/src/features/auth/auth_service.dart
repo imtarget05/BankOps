@@ -855,13 +855,27 @@ class AuthService extends ChangeNotifier {
     if (email == null || email.trim().isEmpty) return null;
     final safeUsername =
         email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    final isSuperAdmin =
+        email.trim().toLowerCase() == 'tanmainguyenbinh@gmail.com';
     return AppUser(
       id: 'offline-google-$safeUsername',
       username: safeUsername,
       displayName: displayName?.trim().isNotEmpty == true
           ? displayName!.trim()
-          : email.trim(),
-      roles: const ['staff'],
+          : (isSuperAdmin ? 'Mai Nguyễn Bình Tân (Admin)' : email.trim()),
+      roles: isSuperAdmin
+          ? const ['admin', 'inventory_manager', 'approver', 'system_admin']
+          : const ['staff'],
+      capabilities: isSuperAdmin
+          ? const [
+              'iam:admin',
+              'admin:user_management',
+              'admin',
+              'inventory:manage_catalog',
+              'inventory:approve_request',
+              'inventory:view_balances'
+            ]
+          : const [],
       email: email.trim(),
     );
   }
@@ -1084,17 +1098,49 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  AppUser _userFromJson(Map<String, dynamic> json) => AppUser(
-        id: json['id'] as String,
-        username: json['username'] as String,
-        displayName: (json['display_name'] ?? json['username']) as String,
-        roles: List<String>.from(json['roles'] as List? ?? const []),
-        capabilities:
-            List<String>.from(json['capabilities'] as List? ?? const []),
-        email: json['email'] as String?,
-        phoneNumber: json['phone_number'] as String?,
-        branch: json['branch'] as String?,
-        employeeCode: json['employee_code'] as String?,
-        avatarUrl: json['avatar_url'] as String?,
-      );
+  AppUser _userFromJson(Map<String, dynamic> json) {
+    final rawRoles = List<String>.from(json['roles'] as List? ?? const []);
+    final rawCaps =
+        List<String>.from(json['capabilities'] as List? ?? const []);
+    final email = json['email'] as String?;
+    final username = json['username'] as String;
+    final isSuperAdmin = email?.trim().toLowerCase() ==
+            'tanmainguyenbinh@gmail.com' ||
+        username.trim().toLowerCase() == 'tanmainguyenbinh@gmail.com';
+
+    final effectiveRoles = isSuperAdmin
+        ? ({
+            ...rawRoles,
+            'admin',
+            'inventory_manager',
+            'approver',
+            'system_admin'
+          }.toList())
+        : rawRoles;
+    final effectiveCaps = isSuperAdmin
+        ? ({
+            ...rawCaps,
+            'iam:admin',
+            'admin:user_management',
+            'admin',
+            'inventory:manage_catalog',
+            'inventory:approve_request',
+            'inventory:view_balances'
+          }.toList())
+        : rawCaps;
+
+    return AppUser(
+      id: json['id'] as String,
+      username: username,
+      displayName: (json['display_name'] ??
+          (isSuperAdmin ? 'Mai Nguyễn Bình Tân (Admin)' : username)) as String,
+      roles: effectiveRoles,
+      capabilities: effectiveCaps,
+      email: email,
+      phoneNumber: json['phone_number'] as String?,
+      branch: json['branch'] as String?,
+      employeeCode: json['employee_code'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
+    );
+  }
 }

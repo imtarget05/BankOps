@@ -1,5 +1,17 @@
 [
   {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "username": "tanmainguyenbinh",
+    "email": "tanmainguyenbinh@gmail.com",
+    "display_name_demo": "Bình Tân (Chủ Quán / Admin)",
+    "roles": [
+      "admin",
+      "inventory_manager",
+      "approver",
+      "system_admin"
+    ]
+  },
+  {
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
     "username": "demo_maker",
     "display_name_demo": "Nguyễn Thị Mai (Trưởng Ca Sáng - Staff)",
@@ -20,7 +32,7 @@
   {
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
     "username": "demo_auditor",
-    "display_name_demo": "Lê Khánh Chi (Kiểm Soát Viên Chất Lượng - Auditor)",
+    "display_name_demo": "Lê Khánh Chi (Kiểm Soát Chất Lượng - Auditor)",
     "roles": [
       "auditor"
     ]
@@ -52,7 +64,7 @@
   {
     "id": "aaaaaaaa-aaaa-4aaa-8aaa-bbbbbbbbbbb4",
     "username": "manager_demo",
-    "display_name_demo": "Trần Văn Quản Lý (Chủ Quán / Quản Lý)",
+    "display_name_demo": "Lê Hoàng Nam (Quản Lý Cửa Hàng)",
     "roles": [
       "admin",
       "inventory_manager",

@@ -369,6 +369,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
     _stocktakes.clear();
     _assetLogs.clear();
     _assets.clear();
+    _events.clear();
+    _cashRequests.clear();
     if (!keepCatalog) {
       _items.clear();
       _itemsInitialized = true;
@@ -455,7 +457,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
         toAssignee: toAssignee ?? cur.assignee,
         statusBefore: cur.status.name,
         statusAfter: newStatus.name,
-        actorName: 'Trần Tuấn Bình (KSV)',
+        actorName: 'Trần Văn Quản Lý (Quản Lý)',
         notes: notes,
         createdAt: DateTime.now().toUtc(),
       ),
@@ -901,8 +903,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
       kind: kind,
       status: RequestStatus.draft,
       version: 1,
-      createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
-      createdByName: 'Nguyễn An (giả)',
+      createdBy: '00000000-0000-4000-8000-000000000001',
+      createdByName: 'Bình Tân (Chủ Quán / Admin)',
       locationId: sourceLocationId ??
           destLocationId ??
           'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
@@ -981,7 +983,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
             ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
             : r.approvedBy,
         approvedByName: to == RequestStatus.posted
-            ? 'Trần Tuấn Bình (KSV)'
+            ? 'Trần Văn Quản Lý (Quản Lý)'
             : r.approvedByName,
         rejectReason: to == RequestStatus.rejected
             ? (reason ?? r.rejectReason)
@@ -1141,7 +1143,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
           ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
           : r.approvedBy,
       approvedByName: to == RequestStatus.posted
-          ? 'Trần Tuấn Bình (KSV)'
+          ? 'Trần Văn Quản Lý (Quản Lý)'
           : r.approvedByName,
       rejectReason: to == RequestStatus.rejected
           ? (reason ?? r.rejectReason)
@@ -1224,14 +1226,14 @@ class FakeBankOpsRepository implements BankOpsRepository {
         recs.add(
             'Kiểm đếm tiền mặt thực tế tại két và đối chiếu phiếu rút/nộp tiền gốc.');
         recs.add(
-            'Yêu cầu 2 chữ ký Maker và Checker trên biên bản bàn giao tiền mặt.');
+            'Yêu cầu xác nhận bàn giao tiền mặt giữa nhân viên và quản lý ca.');
       } else if (val >= 200000000) {
         riskLevel = 'medium';
         riskScore = 58;
         flagged.add(
             'Giao dịch giá trị trung bình lớn (200.000.000 - 500.000.000 VND).');
         recs.add(
-            'Đối chiếu chứng từ ký nhận của khách hàng/GDV trước khi duyệt.');
+            'Đối chiếu hóa đơn chứng từ bán hàng / nhập hàng trước khi duyệt.');
       } else {
         riskLevel = 'low';
         riskScore = 20;
@@ -1244,13 +1246,13 @@ class FakeBankOpsRepository implements BankOpsRepository {
         flagged
             .add('Số lượng nhập/xuất nguyên liệu vượt hạn mức (≥ 50 đơn vị).');
         flagged.add(
-            'Nguy cơ thất thoát phôi bảo mật (thẻ chip EMV, sổ séc trắng).');
+            'Nguy cơ thất thoát hoặc hư hỏng nguyên liệu giá trị cao.');
         recs.add(
-            'Kiểm đếm dải số serial và niêm phong hộp phôi trước khi ký nhận.');
+            'Kiểm tra hạn sử dụng (FEFO) và bao bì niêm phong trước khi nhận.');
       } else if (val >= 20) {
         riskLevel = 'medium';
         riskScore = 52;
-        flagged.add('Số lượng phôi xuất kho trung bình (20 - 50 đơn vị).');
+        flagged.add('Số lượng nguyên liệu xuất kho trung bình (20 - 50 đơn vị).');
         recs.add('Kiểm tra kế hoạch nhập nguyên liệu định kỳ của cửa hàng.');
       } else {
         riskLevel = 'low';
@@ -1264,7 +1266,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
           'Lý do giao dịch quá ngắn hoặc không nêu rõ mục đích (< 5 ký tự).');
       riskScore = min(98, riskScore + 15);
       if (riskLevel == 'low') riskLevel = 'medium';
-      recs.add('Yêu cầu Maker bổ sung diễn giải chi tiết mục đích nghiệp vụ.');
+      recs.add('Yêu cầu người tạo phiếu bổ sung diễn giải chi tiết mục đích nghiệp vụ.');
     }
 
     final stampSeed = '${item.id}:${item.maker}:${item.impact}:$riskScore';
@@ -1277,7 +1279,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
     final summary =
         'Đánh giá rủi ro: Mức độ ${riskLevel.toUpperCase()} ($riskScore/100) cho phiếu ${item.id}. '
-        '${riskLevel == 'high' ? 'Cần kiểm soát kép và nhập PIN KSV.' : 'Đủ điều kiện xem xét phê duyệt.'}';
+        '${riskLevel == 'high' ? 'Cần quản lý ca kiểm tra trực tiếp.' : 'Đủ điều kiện xem xét phê duyệt.'}';
 
     return _delay(AiRiskAssessment(
       requestId: item.id,
@@ -1531,8 +1533,8 @@ class FakeBankOpsRepository implements BankOpsRepository {
         kind: RequestKind.receipt,
         status: RequestStatus.draft,
         version: 1,
-        createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
-        createdByName: 'Nguyễn An (giả)',
+        createdBy: '00000000-0000-4000-8000-000000000001',
+        createdByName: 'Bình Tân (Chủ Quán / Admin)',
         locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
         items: const [
           StockRequestLine(
@@ -1751,7 +1753,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
   final List<RoleDto> _roles = [
     const RoleDto(
       code: 'admin',
-      name: 'Chủ quán / Quản lý hệ thống (Admin)',
+      name: 'Chủ Quán / Quản Trị Viên (Admin)',
       capabilities: [
         'iam:admin',
         'admin:user_management',
@@ -1765,7 +1767,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     ),
     const RoleDto(
       code: 'staff',
-      name: 'Nhân viên pha chế / Thu ngân (Staff)',
+      name: 'Nhân Viên Pha Chế / Quầy (Staff)',
       capabilities: [
         'inventory:create_request',
         'inventory:view_balances',
@@ -1775,9 +1777,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
     ),
     const RoleDto(
       code: 'approver',
-      name: 'Quản lý ca trực (Checker)',
+      name: 'Quản Lý Cửa Hàng / Thủ Kho (Manager)',
       capabilities: [
         'inventory:approve_request',
+        'inventory:manage_catalog',
         'inventory:view_balances',
         'cash:approve_request',
         'cash:view_balances',
@@ -1785,7 +1788,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
     ),
     const RoleDto(
       code: 'auditor',
-      name: 'Kiểm soát chất lượng (Auditor)',
+      name: 'Kiểm Soát Chất Lượng (Auditor)',
       capabilities: [
         'audit:view',
         'inventory:view_balances',
@@ -1796,9 +1799,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
   final List<EmployeeUserDto> _employees = [
     const EmployeeUserDto(
       id: 'emp_1',
-      username: 'demo_admin',
-      displayName: 'Phạm Minh Trị (Admin)',
-      email: 'admin@khotrasua.vn',
+      username: 'tanmainguyenbinh',
+      displayName: 'Bình Tân (Chủ Quán / Admin)',
+      email: 'tanmainguyenbinh@gmail.com',
       status: 'active',
       roles: ['admin'],
       capabilities: [
@@ -1812,9 +1815,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
     ),
     const EmployeeUserDto(
       id: 'emp_2',
-      username: 'demo_maker',
-      displayName: 'Nguyễn Hoàng An (GDV)',
-      email: 'maker@khotrasua.vn',
+      username: 'staff_morning',
+      displayName: 'Nguyễn Thị Mai (Pha Chế Ca Sáng)',
+      email: 'mai.nguyen@khotrasua.vn',
       status: 'active',
       roles: ['staff'],
       capabilities: [
@@ -1826,9 +1829,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
     ),
     const EmployeeUserDto(
       id: 'emp_3',
-      username: 'demo_checker',
-      displayName: 'Trần Tuấn Bình (KSV)',
-      email: 'checker@khotrasua.vn',
+      username: 'manager_demo',
+      displayName: 'Lê Hoàng Nam (Quản Lý Cửa Hàng)',
+      email: 'nam.le@khotrasua.vn',
       status: 'active',
       roles: ['admin', 'approver', 'inventory_manager'],
       capabilities: [

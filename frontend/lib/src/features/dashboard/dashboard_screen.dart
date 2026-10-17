@@ -1040,7 +1040,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
-                          'Chờ KSV duyệt',
+                          'Chờ quản lý duyệt',
                           style: TextStyle(
                             color: Color(0xFFB45309),
                             fontSize: 11,
@@ -1307,20 +1307,14 @@ class SummaryCard extends StatelessWidget {
             context,
             key: const Key('kpi-cash-card'),
             tabIndex: 2,
-            title: 'QUỸ TIỀN MẶT CA TRỰC',
-            value: data.cashboxes.isEmpty
-                ? '—'
-                : AppFormat.money(totalCashAmount.toStringAsFixed(0)),
-            subtext: data.cashboxes.isEmpty
-                ? 'Chưa mở ca trực hoặc nhận số dư'
-                : '${data.cashboxes.length} quầy • ${data.cashBalances.length} quỹ đã mở',
-            icon: Icons.account_balance_wallet_rounded,
-            color: stateColor(trust.cashState.tone, const Color(0xFF059669)),
-            badgeText: trust.cashState.label,
-            trendText: trust.cashCoverage == null
-                ? 'Không hiển thị tiến độ khi chưa có nguồn dữ liệu'
-                : '${(trust.cashCoverage! * 100).round()}% quỹ có số dư đối chiếu',
-            progressRatio: trust.cashCoverage,
+            title: 'CA LÀM VIỆC & ĐỐI SOÁT',
+            value: '3 ca trực',
+            subtext: 'Ca Sáng · Ca Chiều · Ca Đêm • Kiểm kê định lượng',
+            icon: Icons.schedule_rounded,
+            color: const Color(0xFF0891B2),
+            badgeText: 'Đang hoạt động',
+            trendText: 'Kiểm kê đầu ca, chốt tồn cuối ca và đối chiếu hao hụt',
+            progressRatio: 1.0,
           ),
           _buildExecutiveStatCard(
             context,

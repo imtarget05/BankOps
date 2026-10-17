@@ -260,16 +260,31 @@ class HttpBankOpsRepository implements BankOpsRepository {
     } catch (_) {}
     return const [
       AppUser(
+        id: '00000000-0000-4000-8000-000000000001',
+        username: 'tanmainguyenbinh',
+        email: 'tanmainguyenbinh@gmail.com',
+        displayName: 'Bình Tân (Chủ Quán / Admin)',
+        roles: ['admin', 'inventory_manager', 'approver', 'system_admin'],
+        capabilities: [
+          'iam:admin',
+          'admin:user_management',
+          'admin',
+          'inventory:approve_request',
+          'catalog:manage',
+          'price:view',
+        ],
+      ),
+      AppUser(
         id: 'u_maker',
         username: 'demo_maker',
-        displayName: 'Nguyễn Văn A (Tạo phiếu)',
-        roles: ['maker', 'inventory_custodian', 'cash_simulated_custodian'],
+        displayName: 'Nguyễn Thị Mai (Pha Chế / Bán Hàng)',
+        roles: ['staff', 'inventory_manager'],
       ),
       AppUser(
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
         username: 'demo_checker',
-        displayName: 'Trần Văn Quản Lý (Admin / Checker)',
-        roles: ['admin', 'checker', 'approver', 'inventory_manager'],
+        displayName: 'Trần Văn Quản Lý (Quản Lý Cửa Hàng)',
+        roles: ['admin', 'approver', 'inventory_manager'],
         capabilities: [
           'iam:admin',
           'admin:user_management',
@@ -280,7 +295,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
       AppUser(
         id: 'u_auditor',
         username: 'demo_auditor',
-        displayName: 'Lê Văn C (Kiểm toán)',
+        displayName: 'Lê Khánh Chi (Kiểm Soát Chất Lượng)',
         roles: ['auditor'],
       ),
     ];
@@ -1341,7 +1356,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
         flaggedRules: isHigh
             ? ['Giao dịch vượt hạn mức kiểm soát kép (≥ 500 triệu VND)']
             : [],
-        recommendations: ['Kiểm tra đối chiếu chứng từ gốc và nhập PIN KSV'],
+        recommendations: ['Kiểm tra đối chiếu chứng từ gốc và xác nhận của quản lý'],
         auditStamp: 'offline-audit-stamp-${item.id}',
         assessmentSource: 'offline_fallback',
       );

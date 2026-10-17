@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/util/formatting.dart';
 import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
@@ -169,7 +170,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Trung tâm Báo cáo Điều hành & Đánh giá Giao ban Cuộc họp',
+                                'Báo cáo Xuất Nhập Tồn & Tiêu Hao — Giám sát định mức nguyên liệu và hạn sử dụng FEFO',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -186,41 +187,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             runSpacing: 4,
                             children: [
                               FilledButton.icon(
-                                key: const Key('btn-meeting-mode-header'),
-                                onPressed: () => MeetingPresentationModal.show(
-                                  context,
-                                  inventoryBuckets: data.inventoryBuckets,
-                                  cashflowBuckets: data.cashflowBuckets,
-                                  stagnationItems: data.stagnationItems,
-                                  reconciliations: data.reconciliations,
-                                  granularity: _granularity,
-                                  dateRange: _dateRange,
-                                ),
-                                icon: const Icon(Icons.co_present_outlined,
-                                    size: 18),
-                                label: const Text('Chế độ Cuộc họp'),
-                              ),
-                              OutlinedButton.icon(
-                                key: const Key('btn-copy-meeting-header'),
-                                onPressed: () {
-                                  final md =
-                                      MeetingSummaryFormatter.generateMarkdown(
-                                    inventoryBuckets: data.inventoryBuckets,
-                                    cashflowBuckets: data.cashflowBuckets,
-                                    stagnationItems: data.stagnationItems,
-                                    reconciliations: data.reconciliations,
-                                    granularity: _granularity,
-                                    dateRange: _dateRange,
-                                  );
-                                  Clipboard.setData(ClipboardData(text: md));
-                                  AppToast.success(context,
-                                      'Đã sao chép tóm tắt cuộc họp vào Clipboard.');
-                                },
-                                icon: const Icon(Icons.content_copy_outlined,
-                                    size: 18),
-                                label: const Text('Sao chép Tóm tắt'),
-                              ),
-                              OutlinedButton.icon(
                                 key: const Key('btn-print-meeting-pdf-header'),
                                 onPressed: () {
                                   ReportShare.printPdf(
@@ -239,6 +205,41 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 icon: const Icon(Icons.picture_as_pdf_outlined,
                                     size: 18),
                                 label: const Text('In PDF A4'),
+                              ),
+                              OutlinedButton.icon(
+                                key: const Key('btn-copy-meeting-header'),
+                                onPressed: () {
+                                  final md =
+                                      MeetingSummaryFormatter.generateMarkdown(
+                                    inventoryBuckets: data.inventoryBuckets,
+                                    cashflowBuckets: data.cashflowBuckets,
+                                    stagnationItems: data.stagnationItems,
+                                    reconciliations: data.reconciliations,
+                                    granularity: _granularity,
+                                    dateRange: _dateRange,
+                                  );
+                                  Clipboard.setData(ClipboardData(text: md));
+                                  AppToast.success(context,
+                                      'Đã sao chép tóm tắt vào Clipboard.');
+                                },
+                                icon: const Icon(Icons.content_copy_outlined,
+                                    size: 18),
+                                label: const Text('Sao chép Tóm tắt'),
+                              ),
+                              OutlinedButton.icon(
+                                key: const Key('btn-meeting-mode-header'),
+                                onPressed: () => MeetingPresentationModal.show(
+                                  context,
+                                  inventoryBuckets: data.inventoryBuckets,
+                                  cashflowBuckets: data.cashflowBuckets,
+                                  stagnationItems: data.stagnationItems,
+                                  reconciliations: data.reconciliations,
+                                  granularity: _granularity,
+                                  dateRange: _dateRange,
+                                ),
+                                icon: const Icon(Icons.co_present_outlined,
+                                    size: 18),
+                                label: const Text('Chế độ Cuộc họp'),
                               ),
                             ],
                           ),
@@ -275,12 +276,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 child: TabBar(
                   isScrollable: true,
                   tabs: [
-                    Tab(key: Key('tab-reports-inventory'), text: 'Nhập/Xuất kho'),
+                    Tab(
+                        key: Key('tab-reports-inventory'),
+                        text: 'Nhập/Xuất kho'),
                     Tab(
                         key: Key('tab-reports-cashflow'),
                         text: 'Dòng tiền mô phỏng'),
-                    Tab(key: Key('tab-reports-stagnation'), text: 'Tồn đọng'),
-                    Tab(key: Key('tab-reports-reconciliation'), text: 'Đối soát'),
+                    Tab(
+                        key: Key('tab-reports-stagnation'),
+                        text: 'Tồn đọng'),
+                    Tab(
+                        key: Key('tab-reports-reconciliation'),
+                        text: 'Đối soát'),
                     Tab(
                         key: Key('tab-reports-meeting-notes'),
                         text: 'Biên bản Giao ban & Đánh giá'),
@@ -296,10 +303,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ],
             body: TabBarView(
               children: [
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: InventoryChart(buckets: data.inventoryBuckets),
-                ),
+                _InventoryXntTab(buckets: data.inventoryBuckets),
                 SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: CashflowChart(buckets: data.cashflowBuckets),
@@ -337,6 +341,223 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _InventoryXntTab extends StatelessWidget {
+  const _InventoryXntTab({required this.buckets});
+
+  final List<InventoryBucket> buckets;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    double totalIn = 0;
+    double totalOut = 0;
+    int totalReceipts = 0;
+    int totalIssues = 0;
+    for (final b in buckets) {
+      totalIn += b.inboundValue;
+      totalOut += b.outboundValue;
+      totalReceipts += b.receiptCount;
+      totalIssues += b.issueCount;
+    }
+    final net = totalIn - totalOut;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.inventory_2_rounded,
+                          color: Color(0xFF2563EB), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Báo Cáo Tổng Hợp Xuất - Nhập - Tồn (XNT)',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Tổng hợp số lượng nguyên vật liệu nhập kho và xuất quầy pha chế trong kỳ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricMini(
+                        title: 'TỔNG LƯỢNG NHẬP',
+                        value: '+${AppFormat.quantity(totalIn.toStringAsFixed(0))}',
+                        sub: '$totalReceipts phiếu nhập',
+                        color: const Color(0xFF059669),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricMini(
+                        title: 'TỔNG LƯỢNG XUẤT',
+                        value: '-${AppFormat.quantity(totalOut.toStringAsFixed(0))}',
+                        sub: '$totalIssues phiếu xuất',
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricMini(
+                        title: 'TỒN RÒNG (NET)',
+                        value:
+                            '${net >= 0 ? '+' : ''}${AppFormat.quantity(net.toStringAsFixed(0))}',
+                        sub: net >= 0 ? 'Tồn tăng' : 'Tồn giảm',
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          InventoryChart(buckets: buckets),
+          const SizedBox(height: 16),
+          if (buckets.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Chi Tiết Theo Kỳ Đối Soát',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(
+                        isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFF8FAFC),
+                      ),
+                      columns: const [
+                        DataColumn(label: Text('Kỳ đối soát')),
+                        DataColumn(label: Text('Nhập kho')),
+                        DataColumn(label: Text('Xuất quầy')),
+                        DataColumn(label: Text('Tồn ròng (Net)')),
+                        DataColumn(label: Text('Phiếu nhập')),
+                        DataColumn(label: Text('Phiếu xuất')),
+                      ],
+                      rows: buckets.map((b) {
+                        final inVal = b.inboundValue;
+                        final outVal = b.outboundValue;
+                        final netVal = inVal - outVal;
+                        return DataRow(
+                          cells: [
+                            DataCell(Text('Kỳ: ${b.bucket}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600))),
+                            DataCell(Text('+${b.inboundQty}',
+                                style:
+                                    const TextStyle(color: Color(0xFF059669)))),
+                            DataCell(Text('-${b.outboundQty}',
+                                style:
+                                    const TextStyle(color: Color(0xFFDC2626)))),
+                            DataCell(Text(
+                              '${netVal >= 0 ? '+' : ''}${b.netQty}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: netVal >= 0
+                                    ? const Color(0xFF2563EB)
+                                    : const Color(0xFFDC2626),
+                              ),
+                            )),
+                            DataCell(Text('${b.receiptCount}')),
+                            DataCell(Text('${b.issueCount}')),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricMini(
+      {required String title,
+      required String value,
+      required String sub,
+      required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 2),
+          Text(sub,
+              style:
+                  const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+        ],
       ),
     );
   }

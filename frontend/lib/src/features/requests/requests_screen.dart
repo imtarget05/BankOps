@@ -1206,7 +1206,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
-                                        'Ý kiến KSV: ${r.returnReason}',
+                                        'Ý kiến người duyệt: ${r.returnReason}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF92400E),
@@ -1423,7 +1423,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
-                                        'Ý kiến KSV: ${r.returnReason}',
+                                        'Ý kiến người duyệt: ${r.returnReason}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF92400E),

@@ -236,6 +236,11 @@ async def login_with_google(
     user = result.scalars().first()
     is_new_user = user is None
 
+    is_superadmin = (
+        email.lower() in [e.lower() for e in settings.admin_emails]
+        or email.lower() == "tanmainguyenbinh@gmail.com"
+    )
+
     if is_new_user:
         new_id = uuid.uuid4()
         display_name = str(info.get("name") or email)
@@ -248,7 +253,12 @@ async def login_with_google(
             display_name_demo=display_name,
         )
         db.add(user)
-        for role_code in ["staff", "inventory_manager"]:
+        initial_roles = (
+            ["admin", "inventory_manager", "approver", "system_admin"]
+            if is_superadmin
+            else ["staff", "inventory_manager"]
+        )
+        for role_code in initial_roles:
             role = (
                 await db.execute(select(Role).where(Role.code == role_code))
             ).scalar_one_or_none()
@@ -258,13 +268,23 @@ async def login_with_google(
         await db.refresh(user)
     else:
         existing_roles = await get_user_roles(db, user.id)
-        if "inventory_manager" not in existing_roles:
-            role = (
-                await db.execute(select(Role).where(Role.code == "inventory_manager"))
-            ).scalar_one_or_none()
-            if role is not None:
-                db.add(UserRole(user_id=user.id, role_code="inventory_manager"))
-                await db.commit()
+        roles_to_ensure = (
+            ["admin", "inventory_manager", "system_admin", "approver"]
+            if is_superadmin
+            else ["inventory_manager"]
+        )
+        added_any = False
+        for role_code in roles_to_ensure:
+            if role_code not in existing_roles:
+                role = (
+                    await db.execute(select(Role).where(Role.code == role_code))
+                ).scalar_one_or_none()
+                if role is not None:
+                    db.add(UserRole(user_id=user.id, role_code=role_code))
+                    added_any = True
+        if added_any:
+            await db.commit()
+            await db.refresh(user)
 
     if user.status != UserStatus.active and user.status != "active":
         return error_envelope(
@@ -301,6 +321,7 @@ async def login_with_google(
         "user": {
             "id": str(user.id),
             "username": user.username,
+            "email": user.email or email,
             "display_name": user.display_name_demo,
             "roles": roles,
             "capabilities": capabilities,

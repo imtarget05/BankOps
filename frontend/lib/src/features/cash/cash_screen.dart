@@ -72,7 +72,7 @@ class _CashScreenState extends State<CashScreen> {
               controller: nameCtrl,
               decoration: const InputDecoration(
                 labelText: 'Tên Két Sắt *',
-                hintText: 'Ví dụ: Két Quầy GDV 3',
+                hintText: 'Ví dụ: Két Quầy Thu Ngân 1',
                 border: OutlineInputBorder(),
               ),
             ),

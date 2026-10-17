@@ -102,6 +102,12 @@ class Settings(BaseSettings):
         default="1070073470852-apcl0c8sgvt9c4f6qscpjgcrgtje4tjn.apps.googleusercontent.com"
     )
 
+    admin_emails: list[str] = Field(
+        default=[
+            "tanmainguyenbinh@gmail.com",
+        ]
+    )
+
     @property
     def is_demo(self) -> bool:
         return self.app_env == "demo"

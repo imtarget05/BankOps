@@ -91,6 +91,7 @@ async def reset_demo_database():
 
         # 3. Cập nhật tên hiển thị của Users
         user_names = {
+            "tanmainguyenbinh": "Bình Tân (Chủ Quán / Admin)",
             "demo_maker": "Nguyễn Thị Mai (Pha Chế)",
             "demo_checker": "Trần Văn Quản Lý (Quản Lý Cửa Hàng)",
             "demo_auditor": "Lê Khánh Chi (Kiểm Soát Vận Hành)",
@@ -177,7 +178,7 @@ async def reset_demo_database():
             await db.commit()
             print("Đã nạp ETL Pipeline và Mapping Version mẫu.")
 
-    print("--- Hoàn tất reset và re-seed dữ liệu ngân hàng sạch! ---")
+    print("--- Hoàn tất reset và re-seed dữ liệu cửa hàng trà sữa sạch! ---")
 
 
 if __name__ == "__main__":

@@ -1059,7 +1059,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   key: const Key('handover-assignee-input'),
                   controller: assigneeCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Cán bộ / GDV tiếp nhận *',
+                    labelText: 'Nhân viên tiếp nhận / Pha chế *',
                     hintText: 'Nhập tên hoặc mã nhân viên',
                     border: OutlineInputBorder(),
                   ),
@@ -1096,7 +1096,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   maxLines: 2,
                   decoration: const InputDecoration(
                     labelText: 'Nội dung biên bản bàn giao / Ghi chú',
-                    hintText: 'Bàn giao phôi séc/thẻ cho GDV quầy...',
+                    hintText: 'Bàn giao công cụ / nguyên liệu cho nhân viên...',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -3955,7 +3955,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Kiểm đếm thực tế, đối chiếu sổ sách và tự động sinh phiếu điều chỉnh Maker-Checker',
+                'Kiểm đếm thực tế, đối chiếu định mức và tự động sinh phiếu điều chỉnh',
                 style: TextStyle(
                     fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -3987,7 +3987,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Kiểm đếm thực tế, đối chiếu sổ sách và tự động sinh phiếu điều chỉnh Maker-Checker',
+                      'Kiểm đếm thực tế, đối chiếu định mức và tự động sinh phiếu điều chỉnh',
                       style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurfaceVariant),
@@ -4055,7 +4055,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       statusText = 'Đang kiểm đếm (Open)';
                     } else if (st.status == 'submitted') {
                       badgeColor = const Color(0xFFD97706);
-                      statusText = 'Chờ Checker duyệt (Submitted)';
+                      statusText = 'Chờ Quản lý duyệt (Submitted)';
                     } else {
                       badgeColor = const Color(0xFF059669);
                       statusText = 'Đã hoàn tất (Closed)';

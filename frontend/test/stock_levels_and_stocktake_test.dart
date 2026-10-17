@@ -85,7 +85,7 @@ void main() {
       await tester.tap(find.text('Gửi Duyệt Đối Soát'));
       await tester.pumpAndSettle();
 
-      final submittedText = find.textContaining('Chờ Checker duyệt');
+      final submittedText = find.textContaining('Chờ Quản lý duyệt');
       await tester.scrollUntilVisible(submittedText, 500,
           scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();

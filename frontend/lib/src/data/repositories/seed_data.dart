@@ -5,6 +5,12 @@ part of 'fake_repository.dart';
 
 List<AppUser> _seedUsers() => const [
       AppUser(
+          id: '00000000-0000-4000-8000-000000000001',
+          username: 'tanmainguyenbinh',
+          email: 'tanmainguyenbinh@gmail.com',
+          displayName: 'Bình Tân (Chủ Quán / Admin)',
+          roles: ['admin', 'inventory_manager', 'approver', 'system_admin']),
+      AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
           username: 'admin',
           displayName: 'Trần Văn Quản Lý (Chủ Cửa Hàng - Admin)',
@@ -12,27 +18,27 @@ List<AppUser> _seedUsers() => const [
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
           username: 'staff',
-          displayName: 'Nguyễn Thị Mai (Nhân Viên Bán Hàng & Kho)',
+          displayName: 'Nguyễn Thị Mai (Nhân Viên Pha Chế & Quầy)',
           roles: ['staff']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
           username: 'demo_checker',
-          displayName: 'Trần Văn Quản Lý (Quản Lý Cửa Hàng - Admin)',
+          displayName: 'Trần Văn Quản Lý (Quản Lý Cửa Hàng)',
           roles: ['approver', 'inventory_manager', 'admin']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
           username: 'demo_maker',
-          displayName: 'Nguyễn Thị Mai (Trưởng Ca Sáng - Staff)',
+          displayName: 'Nguyễn Thị Mai (Trưởng Ca Sáng - Pha Chế)',
           roles: ['staff']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3',
           username: 'demo_auditor',
-          displayName: 'Lê Khánh Chi (Kiểm Soát Viên - Auditor)',
+          displayName: 'Lê Khánh Chi (Kiểm Soát Chất Lượng)',
           roles: ['auditor']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
           username: 'manager_demo',
-          displayName: 'Trần Văn Quản Lý (Chủ Quán / Quản Lý)',
+          displayName: 'Lê Hoàng Nam (Quản Lý Cửa Hàng)',
           roles: ['admin', 'inventory_manager']),
     ];
 
@@ -360,7 +366,7 @@ List<ReconciliationRun> _seedReconciliations() => [
           id: 'rr-0001',
           status: 'completed',
           startedAt: DateTime.utc(2026, 10, 8, 7, 0),
-          exceptions: const ['DEMO-ASSET-0001']),
+          exceptions: const ['CHENH-LECH-CA-01']),
     ];
 
 List<InventoryBucket> _seedInventoryDaily() => const [

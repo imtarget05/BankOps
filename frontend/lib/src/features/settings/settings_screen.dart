@@ -17,6 +17,7 @@ import '../../core/widgets/store_logo.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../admin/employee_management_screen.dart';
 import '../auth/auth_service.dart';
+import '../cash/cash_screen.dart';
 import 'widgets/change_password_dialog.dart';
 import 'widgets/edit_profile_dialog.dart';
 import 'widgets/avatar_editor_sheet.dart';
@@ -763,12 +764,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                         },
                       ),
-                    if (RoleVisibility.canManageEmployees(user) &&
-                        (RoleVisibility.rolesOf(user).contains('admin') ||
-                            RoleVisibility.rolesOf(user).contains('system_admin')))
-                      const Divider(height: 1),
                     if (RoleVisibility.rolesOf(user).contains('admin') ||
-                        RoleVisibility.rolesOf(user).contains('system_admin'))
+                        RoleVisibility.rolesOf(user).contains('system_admin')) ...[
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const Key('btn-manage-cashboxes'),
+                        leading: const Icon(Icons.savings_outlined,
+                            color: Color(0xFF059669)),
+                        title: const Text('Két tiền mặt & Quầy thu ngân'),
+                        subtitle: const Text(
+                            'Tùy chỉnh két tiền quầy, số dư đầu ca và két sắt dự phòng'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => Scaffold(
+                                appBar: AppBar(
+                                  title: const Text('Quản Lý Két Tiền Mặt'),
+                                ),
+                                body: RepositoryScope(
+                                  repository: RepositoryScope.of(context),
+                                  child: const CashScreen(),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
                       ListTile(
                         key: const Key('btn-reset-store-data'),
                         leading: const Icon(Icons.cleaning_services_outlined,
@@ -780,6 +803,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _showResetStoreDataDialog(context),
                       ),
+                    ],
                   ],
                 ),
               ),

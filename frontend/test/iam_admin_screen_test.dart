@@ -81,9 +81,9 @@ void main() {
       expect(find.text('Đang hoạt động'), findsOneWidget);
 
       // Verify seeded employees appear
-      expect(find.text('Phạm Minh Trị (Admin)'), findsOneWidget);
-      expect(find.text('Nguyễn Hoàng An (GDV)'), findsOneWidget);
-      expect(find.text('Trần Tuấn Bình (KSV)'), findsOneWidget);
+      expect(find.text('Bình Tân (Chủ Quán / Admin)'), findsOneWidget);
+      expect(find.text('Nguyễn Thị Mai (Pha Chế Ca Sáng)'), findsOneWidget);
+      expect(find.text('Lê Hoàng Nam (Quản Lý Cửa Hàng)'), findsOneWidget);
 
       // Test create employee dialog
       await tester.tap(find.byKey(const Key('admin-create-employee-btn')));
