@@ -23,6 +23,6 @@ patches:
 images:
 - name: ghcr.io/imtarget05/bankops-api
   newName: ghcr.io/imtarget05/bankops-api
-  newTag: sha-e458649
+  newTag: sha-9cf12b6
 - name: ghcr.io/imtarget05/bankops-frontend
   newTag: v1.0.0
