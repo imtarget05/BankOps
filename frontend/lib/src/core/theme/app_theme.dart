@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_tokens.dart';
 import 'app_ui_settings_controller.dart';
@@ -76,7 +77,7 @@ class AppStatusColors extends ThemeExtension<AppStatusColors> {
 
 abstract final class AppTheme {
   /// Màu thương hiệu lịch sử (giữ tương thích ngược)
-  static const Color navy = Color(0xFF4A2C2A);
+  static const Color navy = Color(0xFF0F172A);
   static const Color teal = Color(0xFF3F7A5A);
   static const Color surface = Color(0xFFFFFBF5);
 
@@ -168,12 +169,25 @@ abstract final class AppTheme {
         ? AppStatusColors.light
         : AppStatusColors.dark;
 
+    final statusOverlay = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isLight ? Brightness.dark : Brightness.light,
+      statusBarBrightness: isLight ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isLight ? Brightness.dark : Brightness.light,
+      systemNavigationBarContrastEnforced: false,
+      systemStatusBarContrastEnforced: false,
+    );
+
     return base.copyWith(
       extensions: [status],
       visualDensity: visualDensity,
       // Typography scale 12/14/16/20/20/28 theo docs/07:9.
       textTheme: textTheme(brightness),
       appBarTheme: AppBarThemeData(
+        systemOverlayStyle: statusOverlay,
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -294,6 +308,26 @@ abstract final class AppTheme {
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: scheme.primary,
         linearMinHeight: 4,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: scheme.primary.withValues(alpha: 0.12),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final isSelected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final isSelected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
+          );
+        }),
       ),
     );
   }

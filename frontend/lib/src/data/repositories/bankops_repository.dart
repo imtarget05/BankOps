@@ -98,6 +98,9 @@ abstract class BankOpsRepository {
     bool trackedSerial = false,
     String? category,
     String? packaging,
+    double? costPrice,
+    double? sellingPrice,
+    double? minStock,
   });
   Future<BatchItemImportResult> createItemsBatch(
     List<Map<String, dynamic>> items,
@@ -109,9 +112,13 @@ abstract class BankOpsRepository {
     bool? trackedSerial,
     String? category,
     String? packaging,
+    double? costPrice,
+    double? sellingPrice,
+    double? minStock,
   });
   Future<void> deleteItem(String id);
   Future<void> deleteItemsBatch(List<String> itemIds);
+  Future<void> resetStoreData({bool keepCatalog = true});
 
   Future<InventoryLocation> createLocation({
     required String code,

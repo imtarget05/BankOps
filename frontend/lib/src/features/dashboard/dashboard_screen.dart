@@ -300,7 +300,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'Tỷ trọng được tính từ số dư đã đồng bộ của từng két',
+                            'Tỷ trọng được tính từ số dư đã đồng bộ của từng quỹ',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -340,9 +340,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (!hasCashSource)
             const _DashboardEmptyState(
               icon: Icons.account_balance_wallet_outlined,
-              title: 'Chưa có két sắt hoặc số dư để phân bổ',
+              title: 'Chưa có quỹ tiền mặt hoặc số dư để phân bổ',
               message:
-                  'Thanh tỷ trọng sẽ chỉ xuất hiện sau khi hệ thống nhận được dữ liệu quỹ.',
+                  'Thanh tỷ trọng sẽ xuất hiện sau khi mở ca trực và có số dư.',
             )
           else ...[
             ClipRRect(
@@ -373,8 +373,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 8),
             Text(
               totalCash > 0
-                  ? 'Tỷ trọng được tính từ số dư hiện có của từng két.'
-                  : 'Đã nhận dữ liệu ${data.cashboxes.length} két, nhưng chưa phát sinh số dư.',
+                  ? 'Tỷ trọng được tính từ số dư hiện có của từng quỹ.'
+                  : 'Đã nhận dữ liệu ${data.cashboxes.length} quỹ, nhưng chưa phát sinh số dư.',
               style: TextStyle(
                   fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -1307,19 +1307,19 @@ class SummaryCard extends StatelessWidget {
             context,
             key: const Key('kpi-cash-card'),
             tabIndex: 2,
-            title: 'TỔNG TỒN NGUYÊN LIỆU',
+            title: 'QUỸ TIỀN MẶT CA TRỰC',
             value: data.cashboxes.isEmpty
                 ? '—'
                 : AppFormat.money(totalCashAmount.toStringAsFixed(0)),
             subtext: data.cashboxes.isEmpty
-                ? 'Chưa cấu hình két sắt hoặc nhận số dư'
-                : '${data.cashboxes.length} két • ${data.cashBalances.length} số dư nhận được',
+                ? 'Chưa mở ca trực hoặc nhận số dư'
+                : '${data.cashboxes.length} quầy • ${data.cashBalances.length} quỹ đã mở',
             icon: Icons.account_balance_wallet_rounded,
             color: stateColor(trust.cashState.tone, const Color(0xFF059669)),
             badgeText: trust.cashState.label,
             trendText: trust.cashCoverage == null
                 ? 'Không hiển thị tiến độ khi chưa có nguồn dữ liệu'
-                : '${(trust.cashCoverage! * 100).round()}% két có số dư đối chiếu',
+                : '${(trust.cashCoverage! * 100).round()}% quỹ có số dư đối chiếu',
             progressRatio: trust.cashCoverage,
           ),
           _buildExecutiveStatCard(

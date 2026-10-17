@@ -370,6 +370,92 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Kích hoạt tài khoản nhân viên từ link mời / mã mời và đặt mật khẩu mới.
+  /// Tự động đăng nhập và cập nhật trạng thái session nếu thành công.
+  Future<bool> acceptInvite({
+    required String inviteToken,
+    required String newPassword,
+    String? pin,
+  }) async {
+    _lastError = null;
+    _isLoading = true;
+    notifyListeners();
+
+    final cleanToken = inviteToken.trim();
+    if (cleanToken.isEmpty) {
+      _lastError = 'Mã mời kích hoạt không được để trống.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    if (newPassword.length < 6) {
+      _lastError = 'Mật khẩu mới phải có ít nhất 6 ký tự.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    final cleanPin = pin?.trim();
+    if (cleanPin != null &&
+        cleanPin.isNotEmpty &&
+        (cleanPin.length != 6 || int.tryParse(cleanPin) == null)) {
+      _lastError = 'Mã PIN bảo mật phải gồm đúng 6 chữ số.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    if (_baseUrl.isEmpty) {
+      _lastError = 'Chưa cấu hình API endpoint máy chủ.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final resp = await _http
+          .post(
+            Uri.parse('$_baseUrl/auth/accept-invite'),
+            headers: const {'Content-Type': 'application/json'},
+            body: json.encode({
+              'invite_token': cleanToken,
+              'new_password': newPassword,
+              if (cleanPin != null && cleanPin.isNotEmpty) 'pin': cleanPin,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      _isLoading = false;
+
+      if (resp.statusCode != 200) {
+        _lastError = _serverMessage(resp.body);
+        notifyListeners();
+        return false;
+      }
+
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      final accessToken = body['access_token'] as String;
+      final refreshToken = body['refresh_token'] as String?;
+      _memoryToken = accessToken;
+      _isOfflineSession = false;
+      _needsOfflineRelogin = false;
+      _offlineReloginMessage = null;
+      await _writeStorage(_offlineSessionKey, null);
+      await _writeStorage('access_token', accessToken);
+      await _writeStorage('refresh_token', refreshToken);
+      final u = body['user'] as Map<String, dynamic>;
+      _user = _userFromJson(u);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _lastError = friendlyError(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Đăng ký tài khoản mới và tự động đăng nhập.
   Future<bool> register({
     required String username,

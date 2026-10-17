@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:qr_flutter/qr_flutter.dart';
@@ -14,14 +13,11 @@ import '../../core/util/web_helpers.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/section_header.dart';
 import '../../core/util/role_visibility.dart';
-import '../../data/repositories/bankops_repository.dart';
+import '../../core/widgets/store_logo.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../admin/employee_management_screen.dart';
 import '../auth/auth_service.dart';
-import '../etl/etl_run_screen.dart';
-import '../etl/etl_studio_screen.dart';
 import 'widgets/change_password_dialog.dart';
-import 'widgets/change_pin_dialog.dart';
 import 'widgets/edit_profile_dialog.dart';
 import 'widgets/avatar_editor_sheet.dart';
 
@@ -35,30 +31,86 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  Future<HealthStatus>? _healthFuture;
+  Future<void> _showResetStoreDataDialog(BuildContext context) async {
+    bool keepCatalog = true;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.cleaning_services_rounded, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Khởi tạo lại hệ thống'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Thao tác này sẽ xóa sạch toàn bộ các phiếu yêu cầu, đối soát kiểm kê, giao dịch tiền mặt và dải serial thử nghiệm.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                RadioListTile<bool>(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Giữ danh mục mẫu quán thật (19 mặt hàng F&B)',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  subtitle: const Text('Bao gồm giá vốn, giá bán, tồn kho tối thiểu chuẩn',
+                      style: TextStyle(fontSize: 12)),
+                  value: true,
+                  groupValue: keepCatalog,
+                  onChanged: (val) => setDlgState(() => keepCatalog = val ?? true),
+                ),
+                RadioListTile<bool>(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Xóa sạch hoàn toàn (Cửa hàng trắng)',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  subtitle: const Text('Không có mặt hàng nào để bắt đầu nhập từ đầu',
+                      style: TextStyle(fontSize: 12)),
+                  value: false,
+                  groupValue: keepCatalog,
+                  onChanged: (val) => setDlgState(() => keepCatalog = val ?? false),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Hủy'),
+              ),
+              FilledButton.icon(
+                key: const Key('btn-confirm-reset-store-data'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                icon: const Icon(Icons.delete_forever, size: 16),
+                label: const Text('Xác nhận làm sạch'),
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+            ],
+          );
+        },
+      ),
+    );
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final repo = RepositoryScope.maybeOf(context);
-    if (repo != null) {
-      _healthFuture ??= repo.getHealth();
+    if (confirmed == true && context.mounted) {
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.resetStoreData(keepCatalog: keepCatalog);
+        if (context.mounted) {
+          AppToast.success(
+            context,
+            'Đã làm sạch và khởi tạo lại dữ liệu cửa hàng thành công!',
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          AppToast.error(context, 'Lỗi: $e');
+        }
+      }
     }
-  }
-
-  void _refreshHealth() {
-    final repo = RepositoryScope.maybeOf(context);
-    if (repo != null) {
-      setState(() {
-        _healthFuture = repo.getHealth();
-      });
-    }
-  }
-
-  Future<void> _copy(String label, String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    AppToast.success(context, 'Đã sao chép $label');
   }
 
   @override
@@ -76,13 +128,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final activeDensity = uiSettings?.density ?? AppDensity.comfortable;
     final isVi = localeController?.isVietnamese ?? true;
 
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+    final pagePadding = isMobile
+        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12)
+        : const EdgeInsets.all(AppSpacing.lg);
+    final cardPadding = isMobile
+        ? const EdgeInsets.all(12)
+        : const EdgeInsets.all(AppSpacing.lg);
+    final sectionGap = SizedBox(height: isMobile ? 12 : AppSpacing.lg);
+    final titleGap = SizedBox(height: isMobile ? 8 : AppSpacing.md);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(isVi ? 'Cài đặt' : 'Settings'),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: pagePadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -91,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: isVi ? 'Ngôn ngữ hiển thị' : 'Display Language',
               showCount: false,
             ),
-            const SizedBox(height: AppSpacing.md),
+            titleGap,
             Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -102,7 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: cardPadding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -169,11 +231,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            sectionGap,
 
             // Section Giao diện
             const SectionHeader(title: 'Giao diện', showCount: false),
-            const SizedBox(height: AppSpacing.md),
+            titleGap,
             Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -184,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: cardPadding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -225,9 +287,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
 
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.md),
                     const Divider(height: 1),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.md),
 
                     // 2. Màu sắc thương hiệu
                     Row(
@@ -238,7 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Expanded(
                           child: Text(
                             isVi
-                                ? 'Bảng màu thương hiệu Trà Sữa (Brand Themes)'
+                                ? 'Bảng màu thương hiệu (Brand Themes)'
                                 : 'Brand Color Themes',
                             style: sc.textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.w700),
@@ -249,8 +311,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 6),
                     Text(
                       isVi
-                          ? 'Tùy chỉnh sắc thái đại diện cho chuỗi quán trà sữa của bạn'
-                          : 'Choose the visual personality for your tea franchise',
+                          ? 'Tùy chỉnh sắc thái màu sắc đại diện cho thương hiệu của bạn'
+                          : 'Choose the visual personality for your business',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark
@@ -394,9 +456,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            sectionGap,
             const SectionHeader(title: 'Hồ Sơ Của Tôi', showCount: false),
-            const SizedBox(height: AppSpacing.md),
+            titleGap,
             Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -407,7 +469,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: cardPadding,
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final isMobileCard = constraints.maxWidth < 560;
@@ -451,7 +513,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    '@${user?.username ?? 'guest'} · Mã NV: ${user?.effectiveEmployeeCode ?? 'BO-8892'}',
+                                    '@${user?.username ?? 'guest'} · Mã NV: ${user?.effectiveEmployeeCode ?? 'NV-082'}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
@@ -635,10 +697,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               value: user?.effectivePhone ?? '0901 234 567',
                             ),
                             _ProfileInfoItem(
-                              icon: Icons.business_outlined,
-                              label: 'Chi nhánh công tác',
+                              icon: Icons.storefront_outlined,
+                              label: 'Cơ sở làm việc',
                               value: user?.effectiveBranch ??
-                                  'Chi nhánh Bến Thành (Hội sở)',
+                                  'Cửa hàng Trà Sữa Quận 1',
                             ),
                             const _ProfileInfoItem(
                               icon: Icons.shield_outlined,
@@ -653,117 +715,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            sectionGap,
             const SectionHeader(title: 'Tài khoản & Bảo mật', showCount: false),
-            const SizedBox(height: AppSpacing.md),
+            titleGap,
             Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    key: const Key('settings-change-password-tile'),
-                    leading: const Icon(Icons.lock_outline),
-                    title: const Text('Đổi mật khẩu đăng nhập'),
-                    subtitle:
-                        const Text('Cập nhật mật khẩu tài khoản hiện tại'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () async {
-                      final updated = await ChangePasswordDialog.show(context);
-                      if (updated == true && context.mounted) {
-                        AppToast.success(context, 'Đổi mật khẩu thành công!');
-                      }
-                    },
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    key: const Key('settings-change-pin-tile'),
-                    leading: const Icon(Icons.pin_outlined),
-                    title: const Text('Đổi mã PIN kiểm soát viên'),
-                    subtitle: const Text(
-                        'Mã PIN 6 số dùng để duyệt phiếu quỹ và kho'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () async {
-                      final updated = await ChangePinDialog.show(context);
-                      if (updated == true && context.mounted) {
-                        AppToast.success(
-                            context, 'Đổi mã PIN kiểm soát viên thành công!');
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(
-                title: 'Hệ thống & Cổng kết nối API', showCount: false),
-            const SizedBox(height: AppSpacing.md),
-            Card(
-              child: FutureBuilder<HealthStatus>(
-                future: _healthFuture,
-                builder: (context, snapshot) {
-                  final apiUrl = auth.apiBaseUrl;
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const ListTile(
-                      leading: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      title: Text('Đang kiểm tra kết nối API…'),
-                    );
+              child: ListTile(
+                key: const Key('settings-change-password-tile'),
+                leading: const Icon(Icons.lock_outline),
+                title: const Text('Đổi mật khẩu đăng nhập'),
+                subtitle: const Text('Cập nhật mật khẩu tài khoản hiện tại'),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () async {
+                  final updated = await ChangePasswordDialog.show(context);
+                  if (updated == true && context.mounted) {
+                    AppToast.success(context, 'Đổi mật khẩu thành công!');
                   }
-                  final health = snapshot.data;
-                  final alive = health?.alive ?? false;
-                  final dotColor =
-                      alive ? const Color(0xFF10B981) : const Color(0xFFB42318);
-                  final statusText = alive
-                      ? 'API hoạt động · v${health!.version} · ${health.latencyMs}ms'
-                      : 'Không kết nối được API';
-                  return ListTile(
-                    leading: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    title: Text(statusText),
-                    subtitle: Text(
-                      alive
-                          ? apiUrl
-                          : '${health?.error ?? 'Lỗi không xác định'} · $apiUrl',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          key: const Key('settings-copy-api-url-btn'),
-                          icon:
-                              const Icon(Icons.content_copy_outlined, size: 20),
-                          tooltip: 'Sao chép địa chỉ API',
-                          onPressed: () => _copy('địa chỉ API', apiUrl),
-                        ),
-                        IconButton(
-                          key: const Key('settings-health-refresh-btn'),
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: 'Kiểm tra lại',
-                          onPressed: _refreshHealth,
-                        ),
-                      ],
-                    ),
-                  );
                 },
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            sectionGap,
             if (RoleVisibility.canManageEmployees(user) ||
-                RoleVisibility.canAccessEtlStudio(user) ||
-                RoleVisibility.canRunEtl(user)) ...[
+                RoleVisibility.rolesOf(user).contains('admin') ||
+                RoleVisibility.rolesOf(user).contains('system_admin')) ...[
               const SectionHeader(
                   title: 'IAM & Quản trị Hệ thống', showCount: false),
-              const SizedBox(height: AppSpacing.md),
+              titleGap,
               Card(
                 child: Column(
                   children: [
@@ -787,80 +763,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                         },
                       ),
-                    if (RoleVisibility.canAccessEtlStudio(user)) ...[
+                    if (RoleVisibility.canManageEmployees(user) &&
+                        (RoleVisibility.rolesOf(user).contains('admin') ||
+                            RoleVisibility.rolesOf(user).contains('system_admin')))
                       const Divider(height: 1),
+                    if (RoleVisibility.rolesOf(user).contains('admin') ||
+                        RoleVisibility.rolesOf(user).contains('system_admin'))
                       ListTile(
-                        key: const Key('settings-goto-etl-studio-tile'),
-                        leading: const Icon(Icons.tune_outlined,
-                            color: Color(0xFF059669)),
-                        title: const Text('ETL Studio & Thiết kế Pipeline'),
+                        key: const Key('btn-reset-store-data'),
+                        leading: const Icon(Icons.cleaning_services_outlined,
+                            color: Colors.red),
+                        title: const Text(
+                            'Khởi tạo lại hệ thống / Xóa sạch dữ liệu (Reset Data)'),
                         subtitle: const Text(
-                            'Cấu hình kết nối, pipeline nghiệp vụ, mapping version và lịch chạy'),
+                            'Xóa dữ liệu cũ, làm sạch phiếu giao dịch và đưa về danh mục chuẩn quán thật'),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => RepositoryScope(
-                                repository: RepositoryScope.of(context),
-                                child: const EtlStudioScreen(),
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: () => _showResetStoreDataDialog(context),
                       ),
-                    ],
-                    if (RoleVisibility.canRunEtl(user)) ...[
-                      const Divider(height: 1),
-                      ListTile(
-                        key: const Key('settings-goto-etl-run-tile'),
-                        leading: const Icon(Icons.play_circle_outline,
-                            color: Color(0xFF7C3AED)),
-                        title: const Text('Chạy Nhập Liệu ETL'),
-                        subtitle: const Text(
-                            'Nạp dữ liệu nguồn, chạy staging và kiểm tra kết quả'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => RepositoryScope(
-                                repository: RepositoryScope.of(context),
-                                child: const EtlRunScreen(),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              sectionGap,
             ],
             const SectionHeader(title: 'Ứng dụng', showCount: false),
-            const SizedBox(height: AppSpacing.md),
+            titleGap,
             const _AppDownloadCard(),
-            const SizedBox(height: AppSpacing.lg),
+            sectionGap,
             Card(
               child: Column(
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.shield_outlined),
+                  const ListTile(
+                    leading: StoreLogo(size: 28),
                     title: Text(
-                      'Quản Lý Kho Trà Sữa v1.0.0${getAppBuildNumber() != null ? ' (Build: ${getAppBuildNumber()})' : ''}',
+                      'Quản lý kho',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: const Text(
-                      'Hệ thống quản lý nhập, xuất và tồn nguyên vật liệu quán trà sữa.',
-                    ),
-                    trailing: IconButton(
-                      key: const Key('btn-sync-app-version'),
-                      tooltip: 'Đồng bộ phiên bản mới & Xóa cache',
-                      icon: const Icon(Icons.sync_rounded,
-                          color: Color(0xFF0284C7)),
-                      onPressed: () {
-                        AppToast.info(context,
-                            'Đang làm sạch bộ nhớ tạm và nạp phiên bản mới...');
-                        forceAppUpdate();
-                      },
+                    subtitle: Text(
+                      'Hệ thống quản lý bán hàng và kho hàng',
                     ),
                   ),
                   const Divider(height: 1),
@@ -904,11 +843,13 @@ class _RoleBadge extends StatelessWidget {
   final String role;
 
   static String roleLabel(String role) => switch (role.toUpperCase()) {
-        'MAKER' || 'STAFF' => 'GIAO DỊCH VIÊN (MAKER)',
+        'MAKER' => 'GIAO DỊCH VIÊN (MAKER)',
+        'STAFF' => 'NHÂN VIÊN (STAFF)',
         'CHECKER' || 'APPROVER' => 'KIỂM SOÁT VIÊN (CHECKER)',
         'AUDITOR' => 'KIỂM TOÁN VIÊN (AUDITOR)',
+        'ADMIN' || 'MANAGER' => 'QUẢN LÝ / CHỦ QUÁN (ADMIN)',
         'INVENTORY_CUSTODIAN' => 'THỦ KHO NGUYÊN LIỆU',
-        'CASH_SIMULATED_CUSTODIAN' => 'THỦ QUỸ',
+        'CASH_SIMULATED_CUSTODIAN' => 'THỦ QUỸ CỬA HÀNG',
         _ => role.toUpperCase(),
       };
 
@@ -1095,15 +1036,8 @@ class _ColorPresetCard extends StatelessWidget {
   }
 }
 
-class _AppDownloadCard extends StatefulWidget {
+class _AppDownloadCard extends StatelessWidget {
   const _AppDownloadCard();
-
-  @override
-  State<_AppDownloadCard> createState() => _AppDownloadCardState();
-}
-
-class _AppDownloadCardState extends State<_AppDownloadCard> {
-  int _selectedPlatformTab = 0; // 0: Android, 1: iPhone, 2: Zalo/QR
 
   static const String appUrl =
       'https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev';
@@ -1111,824 +1045,167 @@ class _AppDownloadCardState extends State<_AppDownloadCard> {
   bool get _isIosDevice =>
       defaultTargetPlatform == TargetPlatform.iOS || isIosWeb();
 
-  @override
-  void initState() {
-    super.initState();
-    // Tự động phát hiện thiết bị: nếu là iPhone/iPad thì mặc định chọn hướng dẫn iOS
-    _selectedPlatformTab = _isIosDevice ? 1 : 0;
-  }
-
-  void _handleInstall() {
+  void _handleInstall(BuildContext context) {
     if (_isIosDevice) {
-      _showInstallModal(context, isIos: true);
+      AppToast.info(context,
+          'Chạm biểu tượng Chia sẻ (⎋) dưới thanh Safari, chọn "Thêm vào MH chính"');
       return;
     }
     if (isPwaInstallSupported()) {
       promptPwaInstall();
-      AppToast.info(context, 'Đang mở hộp thoại cài đặt ứng dụng...');
     } else {
-      _showInstallModal(context, isIos: false);
+      AppToast.info(context,
+          'Chạm menu 3 chấm (⋮) trình duyệt, chọn "Cài đặt ứng dụng"');
     }
-  }
-
-  void _showInstallModal(BuildContext context, {required bool isIos}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _InstallGuideModal(initialIsIos: isIos),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+
+    final qrBlock = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: QrImageView(
+            data: appUrl,
+            version: QrVersions.auto,
+            size: 110,
+            backgroundColor: Colors.white,
+            eyeStyle: const QrEyeStyle(
+              eyeShape: QrEyeShape.square,
+              color: Color(0xFF1E293B),
+            ),
+            dataModuleStyle: const QrDataModuleStyle(
+              dataModuleShape: QrDataModuleShape.square,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Quét mã trên điện thoại',
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+
+    final actionBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            const StoreLogo(size: 36),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Cài đặt ứng dụng',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tự động đồng bộ phiên bản mới • Hoạt động ngoại tuyến',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 42,
+          child: ElevatedButton.icon(
+            key: const Key('btn-install-pwa'),
+            onPressed: () => _handleInstall(context),
+            icon: Icon(
+              _isIosDevice ? Icons.apple : Icons.download_rounded,
+              size: 18,
+            ),
+            label: Text(
+              _isIosDevice
+                  ? 'Thêm vào màn hình chính (iPhone)'
+                  : 'Cài đặt ứng dụng ngay',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0284C7),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(
           color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isCompact = constraints.maxWidth < 640;
-
-            final qrBlock = Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: QrImageView(
-                    data: appUrl,
-                    version: QrVersions.auto,
-                    size: isCompact ? 130 : 150,
-                    backgroundColor: Colors.white,
-                    eyeStyle: const QrEyeStyle(
-                      eyeShape: QrEyeShape.square,
-                      color: Color(0xFF1E293B),
-                    ),
-                    dataModuleStyle: const QrDataModuleStyle(
-                      dataModuleShape: QrDataModuleShape.square,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Quét mã mở trên điện thoại',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            );
-
-            final actionsAndGuides = Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Khối banner Cài đặt ứng dụng PWA
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isDark
-                          ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-                          : [const Color(0xFFF8FAFC), const Color(0xFFF0FDF4)],
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark
-                          ? const Color(0xFF334155)
-                          : const Color(0xFFBAE6FD).withValues(alpha: 0.6),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0284C7),
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF0284C7).withValues(alpha: 0.25),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.install_mobile_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Cài đặt ứng dụng (PWA)',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
-                                Text(
-                                  'Tự động đồng bộ phiên bản mới nhất • Hoạt động offline',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 44,
-                        child: ElevatedButton.icon(
-                          key: const Key('btn-install-pwa'),
-                          onPressed: _handleInstall,
-                          icon: Icon(
-                            _isIosDevice ? Icons.apple : Icons.download_rounded,
-                            size: 19,
-                          ),
-                          label: Text(
-                            _isIosDevice
-                                ? 'Cài đặt trên iPhone (Safari)'
-                                : 'Cài đặt ứng dụng ngay',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0284C7),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 38,
-                        child: OutlinedButton.icon(
-                          key: const Key('btn-force-sync-app'),
-                          onPressed: () {
-                            AppToast.info(context,
-                                'Đang đồng bộ và nạp phiên bản mới nhất từ máy chủ...');
-                            forceAppUpdate();
-                          },
-                          icon: const Icon(Icons.sync_rounded, size: 16),
-                          label: const Text(
-                            'Đồng bộ phiên bản mới (Xóa cache)',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: isDark
-                                ? const Color(0xFF38BDF8)
-                                : const Color(0xFF0369A1),
-                            side: BorderSide(
-                              color: isDark
-                                  ? const Color(0xFF0284C7)
-                                  : const Color(0xFFBAE6FD),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Hướng dẫn thêm vào màn hình chính:',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // Thanh chọn nền tảng dạng pill không bị vỡ chữ
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildPlatformPill(
-                        index: 1,
-                        icon: Icons.apple,
-                        label: 'iPhone / Safari',
-                        isSelected: _selectedPlatformTab == 1,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildPlatformPill(
-                        index: 0,
-                        icon: Icons.android_rounded,
-                        label: 'Android / Chrome',
-                        isSelected: _selectedPlatformTab == 0,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildPlatformPill(
-                        index: 2,
-                        icon: Icons.qr_code_scanner_rounded,
-                        label: 'Zalo / Quét QR',
-                        isSelected: _selectedPlatformTab == 2,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: _buildGuideContent(_selectedPlatformTab, theme),
-                ),
-              ],
-            );
-
-            if (isCompact) {
-              return Column(
+        padding: isMobile
+            ? const EdgeInsets.all(12)
+            : const EdgeInsets.all(AppSpacing.md),
+        child: isMobile
+            ? Column(
+                children: [
+                  actionBlock,
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 10),
+                  qrBlock,
+                ],
+              )
+            : Row(
                 children: [
                   qrBlock,
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
-                  actionsAndGuides,
-                ],
-              );
-            }
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                qrBlock,
-                const SizedBox(width: 24),
-                Expanded(child: actionsAndGuides),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlatformPill({
-    required int index,
-    required IconData icon,
-    required String label,
-    required bool isSelected,
-    required ThemeData theme,
-    required bool isDark,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => setState(() => _selectedPlatformTab = index),
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFF0284C7).withValues(alpha: isDark ? 0.25 : 0.12)
-                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFF0284C7)
-                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected
-                    ? const Color(0xFF0284C7)
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected
-                      ? (isDark ? Colors.white : const Color(0xFF0369A1))
-                      : theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuideContent(int tabIndex, ThemeData theme) {
-    switch (tabIndex) {
-      case 1:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStepRow(
-              number: '1',
-              icon: Icons.open_in_browser_rounded,
-              title: 'Mở bằng trình duyệt Safari',
-              description: 'Truy cập website trên iPhone/iPad bằng Safari (không dùng trình duyệt nhúng trong Zalo hay Facebook).',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '2',
-              icon: Icons.ios_share,
-              title: 'Nhấn nút Chia sẻ (Share ⎋)',
-              description: 'Ở thanh công cụ dưới đáy Safari, nhấn biểu tượng hình vuông có mũi tên chỉ lên.',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '3',
-              icon: Icons.add_box_outlined,
-              title: 'Chọn "Thêm vào MH chính"',
-              description: 'Cuộn danh sách tác vụ xuống và chọn mục "Thêm vào MH chính" (Add to Home Screen).',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '4',
-              icon: Icons.check_circle_rounded,
-              title: 'Nhấn "Thêm" ở góc trên bên phải',
-              description: 'Biểu tượng ứng dụng Kho Trà Sữa sẽ xuất hiện ngay trên màn hình chính như app tải từ App Store!',
-              theme: theme,
-              isLast: true,
-            ),
-          ],
-        );
-      case 0:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStepRow(
-              number: '1',
-              icon: Icons.open_in_browser_rounded,
-              title: 'Mở bằng Google Chrome',
-              description: 'Truy cập đường dẫn website trên trình duyệt Chrome điện thoại.',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '2',
-              icon: Icons.more_vert_rounded,
-              title: 'Nhấn menu 3 chấm (⋮)',
-              description: 'Ở góc trên bên phải màn hình Chrome, nhấn vào biểu tượng 3 chấm dọc.',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '3',
-              icon: Icons.add_to_home_screen_rounded,
-              title: 'Chọn "Cài đặt ứng dụng"',
-              description: 'Chọn mục "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính".',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '4',
-              icon: Icons.check_circle_rounded,
-              title: 'Xác nhận cài đặt',
-              description: 'Ứng dụng sẽ được cài đặt ra màn hình chính và tự động đồng bộ mỗi khi có phiên bản mới.',
-              theme: theme,
-              isLast: true,
-            ),
-          ],
-        );
-      case 2:
-      default:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStepRow(
-              number: '1',
-              icon: Icons.qr_code_scanner_rounded,
-              title: 'Quét mã QR bằng Camera / Zalo',
-              description: 'Dùng Camera điện thoại hoặc tính năng Quét mã trong Zalo để quét mã QR bên cạnh.',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '2',
-              icon: Icons.more_horiz_rounded,
-              title: 'Mở menu 3 chấm (⋯) trong Zalo',
-              description: 'Khi Zalo mở liên kết web, hãy nhấn vào biểu tượng 3 chấm (⋯) ở góc trên bên phải.',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '3',
-              icon: Icons.open_in_browser_rounded,
-              title: 'Chọn "Mở bằng trình duyệt"',
-              description: 'Chọn mở bằng Safari (nếu dùng iPhone) hoặc Google Chrome (nếu dùng Android).',
-              theme: theme,
-            ),
-            _buildStepRow(
-              number: '4',
-              icon: Icons.install_mobile_rounded,
-              title: 'Thêm vào màn hình chính',
-              description: 'Tiến hành các bước thêm vào màn hình chính theo tab iPhone hoặc Android tương ứng.',
-              theme: theme,
-              isLast: true,
-            ),
-          ],
-        );
-    }
-  }
-
-  Widget _buildStepRow({
-    required String number,
-    required IconData icon,
-    required String title,
-    required String description,
-    required ThemeData theme,
-    bool isLast = false,
-  }) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Color(0xFF0284C7),
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              number,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 14, color: const Color(0xFF0284C7)),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Modal hướng dẫn trực quan từng bước cài đặt ứng dụng
-class _InstallGuideModal extends StatefulWidget {
-  const _InstallGuideModal({required this.initialIsIos});
-
-  final bool initialIsIos;
-
-  @override
-  State<_InstallGuideModal> createState() => _InstallGuideModalState();
-}
-
-class _InstallGuideModalState extends State<_InstallGuideModal> {
-  late bool _isIos;
-
-  @override
-  void initState() {
-    super.initState();
-    _isIos = widget.initialIsIos;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Text(
-              _isIos
-                  ? 'Cài đặt trên iPhone / iPad (Safari)'
-                  : 'Cài đặt trên Android (Chrome)',
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Center(
-            child: Text(
-              'Thêm ứng dụng ra màn hình chính để dùng mượt mà toàn màn hình',
-              style: TextStyle(
-                fontSize: 12.5,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 14),
-          // Toggle chuyển nhanh nền tảng
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _modalTabButton(
-                    label: 'iPhone (Safari)',
-                    icon: Icons.apple,
-                    isSelected: _isIos,
-                    onTap: () => setState(() => _isIos = true),
-                  ),
-                  _modalTabButton(
-                    label: 'Android (Chrome)',
-                    icon: Icons.android_rounded,
-                    isSelected: !_isIos,
-                    onTap: () => setState(() => _isIos = false),
-                  ),
+                  const SizedBox(width: 18),
+                  Expanded(child: actionBlock),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Nội dung hướng dẫn
-          if (_isIos) ...[
-            _modalStep(
-              step: '1',
-              icon: Icons.open_in_browser_rounded,
-              title: 'Mở bằng Safari',
-              desc: 'Chắc chắn bạn đang mở website này trong trình duyệt Safari.',
-            ),
-            _modalStep(
-              step: '2',
-              icon: Icons.ios_share,
-              title: 'Bấm nút Chia sẻ (⎋)',
-              desc: 'Biểu tượng ô vuông có mũi tên chỉ lên ở thanh công cụ dưới đáy màn hình.',
-            ),
-            _modalStep(
-              step: '3',
-              icon: Icons.add_box_outlined,
-              title: 'Chọn "Thêm vào MH chính"',
-              desc: 'Cuộn xuống danh sách tùy chọn và chọn "Thêm vào MH chính" (Add to Home Screen).',
-            ),
-            _modalStep(
-              step: '4',
-              icon: Icons.check_circle_rounded,
-              title: 'Bấm "Thêm" để hoàn tất',
-              desc: 'Icon Kho Trà Sữa sẽ xuất hiện ngay trên màn hình chính của iPhone/iPad!',
-              isLast: true,
-            ),
-          ] else ...[
-            _modalStep(
-              step: '1',
-              icon: Icons.open_in_browser_rounded,
-              title: 'Mở bằng Google Chrome',
-              desc: 'Mở trang web bằng trình duyệt Google Chrome trên điện thoại Android.',
-            ),
-            _modalStep(
-              step: '2',
-              icon: Icons.more_vert_rounded,
-              title: 'Bấm nút Menu 3 chấm (⋮)',
-              desc: 'Nhấn vào biểu tượng 3 chấm dọc ở góc trên bên phải màn hình.',
-            ),
-            _modalStep(
-              step: '3',
-              icon: Icons.add_to_home_screen_rounded,
-              title: 'Chọn "Cài đặt ứng dụng"',
-              desc: 'Chọn mục "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính".',
-            ),
-            _modalStep(
-              step: '4',
-              icon: Icons.check_circle_rounded,
-              title: 'Xác nhận cài đặt',
-              desc: 'Ứng dụng sẽ được cài đặt và tự động đồng bộ dữ liệu mỗi khi mở.',
-              isLast: true,
-            ),
-          ],
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0284C7),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Đã hiểu, tiến hành ngay',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _modalTabButton({
-    required String label,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0284C7) : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 15,
-              color: isSelected ? Colors.white : const Color(0xFF64748B),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : const Color(0xFF64748B),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _modalStep({
-    required String step,
-    required IconData icon,
-    required String title,
-    required String desc,
-    bool isLast = false,
-  }) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 24,
-            height: 24,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Color(0xFF0284C7),
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              step,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 15, color: const Color(0xFF0284C7)),
-                    const SizedBox(width: 5),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  desc,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
 }
-
 

@@ -41,6 +41,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
   DataSyncController? _syncController;
   bool _isSelectionMode = false;
   final Set<String> _selectedItemIds = {};
+  String _searchQuery = '';
+  String _selectedCategory = 'Tất cả';
+  String _stockFilter = 'all';
+
+  double _stockForItem(String itemId, List<StockBalance> balances) {
+    return balances
+        .where((b) => b.itemId == itemId)
+        .fold<double>(0.0, (sum, b) => sum + (double.tryParse(b.quantity) ?? 0.0));
+  }
 
   @override
   void didChangeDependencies() {
@@ -106,8 +115,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final skuCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final unitCtrl = TextEditingController(text: 'gói');
-    final categoryCtrl = TextEditingController(text: 'Nguyên liệu');
+    final categoryCtrl = TextEditingController(text: 'Nhóm Trà');
     final packagingCtrl = TextEditingController();
+    final costPriceCtrl = TextEditingController();
+    final sellingPriceCtrl = TextEditingController();
+    final minStockCtrl = TextEditingController(text: '10');
+    final sessionUser = SessionScope.maybeOf(context)?.user;
+    final isAdmin = RoleVisibility.canManageEmployees(sessionUser);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -119,7 +133,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             children: [
               Icon(Icons.inventory_2_outlined, color: Color(0xFF2563EB)),
               SizedBox(width: 8),
-              Text('Thêm nguyên vật liệu',
+              Text('Thêm mặt hàng mới',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -139,36 +153,96 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 TextField(
                   controller: nameCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Tên nguyên vật liệu *',
-                    hintText: 'Ví dụ: Trà ô long đặc biệt',
+                    labelText: 'Tên nguyên vật liệu / Sản phẩm *',
+                    hintText: 'Ví dụ: Trà Ô Long Nướng Đặc Biệt',
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 14),
-                TextField(
-                  controller: unitCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Đơn Vị Tính',
-                    hintText: 'Gói / Túi / Kg / Hộp / Chai',
-                    border: OutlineInputBorder(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: unitCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Đơn Vị Tính *',
+                          hintText: 'gói / hộp / kg',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: minStockCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Định mức tồn Min',
+                          hintText: 'VD: 10',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: categoryCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nhóm sản phẩm',
+                          hintText: 'Nhóm Trà / Topping...',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: packagingCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Quy cách đóng gói',
+                          hintText: '500g/gói',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (isAdmin) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: costPriceCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Giá vốn (Admin)',
+                            hintText: 'VD: 85000',
+                            suffixText: 'đ',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: sellingPriceCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Giá bán (Admin)',
+                            hintText: 'VD: 125000',
+                            suffixText: 'đ',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: categoryCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Nhóm nguyên liệu',
-                      hintText: 'Ví dụ: Nhóm Trà / Topping / Sữa',
-                      border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: packagingCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Quy cách đóng gói',
-                      hintText: 'Ví dụ: 500 g/gói',
-                      border: OutlineInputBorder()),
-                ),
+                ],
               ],
             ),
           ),
@@ -204,7 +278,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
           unit: unitCtrl.text.trim().isEmpty ? 'gói' : unitCtrl.text.trim(),
           trackedSerial: false,
           category: categoryCtrl.text.trim().isEmpty ? 'Nguyên liệu' : categoryCtrl.text.trim(),
-          packaging: packagingCtrl.text.trim(),
+          packaging: packagingCtrl.text.trim().isNotEmpty ? packagingCtrl.text.trim() : null,
+          costPrice: isAdmin ? double.tryParse(costPriceCtrl.text.replaceAll(',', '').trim()) : null,
+          sellingPrice: isAdmin ? double.tryParse(sellingPriceCtrl.text.replaceAll(',', '').trim()) : null,
+          minStock: double.tryParse(minStockCtrl.text.replaceAll(',', '').trim()),
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -261,6 +338,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final unitCtrl = TextEditingController(text: item.unit);
     final categoryCtrl = TextEditingController(text: item.category ?? '');
     final packagingCtrl = TextEditingController(text: item.packaging ?? '');
+    final costPriceCtrl = TextEditingController(
+      text: item.costPrice != null ? item.costPrice!.toStringAsFixed(0) : '',
+    );
+    final sellingPriceCtrl = TextEditingController(
+      text: item.sellingPrice != null ? item.sellingPrice!.toStringAsFixed(0) : '',
+    );
+    final minStockCtrl = TextEditingController(
+      text: item.minStock != null ? item.minStock!.toStringAsFixed(0) : '',
+    );
+    final sessionUser = SessionScope.maybeOf(context)?.user;
+    final isAdmin = RoleVisibility.canManageEmployees(sessionUser);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -275,37 +363,98 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Tên nguyên vật liệu *',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-                controller: categoryCtrl,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Nhóm nguyên liệu',
-                    border: OutlineInputBorder())),
-            const SizedBox(height: 14),
-            TextField(
-                controller: packagingCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Quy cách đóng gói',
-                    border: OutlineInputBorder())),
-            const SizedBox(height: 14),
-            TextField(
-              controller: unitCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Đơn Vị Tính',
-                border: OutlineInputBorder(),
+                  labelText: 'Tên nguyên vật liệu / Sản phẩm *',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: unitCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Đơn Vị Tính',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: minStockCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Định mức tồn Min',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: categoryCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nhóm nguyên liệu',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: packagingCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Quy cách đóng gói',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (isAdmin) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: costPriceCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Giá vốn (Admin)',
+                          suffixText: 'đ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: sellingPriceCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Giá bán (Admin)',
+                          suffixText: 'đ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -329,6 +478,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
           unit: unitCtrl.text.trim(),
           category: categoryCtrl.text.trim(),
           packaging: packagingCtrl.text.trim(),
+          costPrice: isAdmin
+              ? double.tryParse(costPriceCtrl.text.replaceAll(',', '').trim())
+              : item.costPrice,
+          sellingPrice: isAdmin
+              ? double.tryParse(sellingPriceCtrl.text.replaceAll(',', '').trim())
+              : item.sellingPrice,
+          minStock: double.tryParse(minStockCtrl.text.replaceAll(',', '').trim()),
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1997,9 +2153,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
           return const Center(child: LoadingView());
         }
         final data = snapshot.data!;
-        final canManageCatalog = RoleVisibility.canManageCatalog(
-          RoleVisibility.rolesOf(SessionScope.maybeOf(context)?.user),
-        );
+        final sessionUser = SessionScope.maybeOf(context)?.user;
+        final userRoles = RoleVisibility.rolesOf(sessionUser);
+        final canManageCatalog = RoleVisibility.canManageCatalog(userRoles);
+        final isAdmin = sessionUser == null ||
+            userRoles.contains('admin') ||
+            userRoles.contains('system_admin') ||
+            RoleVisibility.canManageEmployees(sessionUser);
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
 
@@ -2120,6 +2280,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           ];
         } else {
+          double totalValuation = 0.0;
+          for (final item in data.items) {
+            final stock = _stockForItem(item.id, data.balances);
+            final cost = item.costPrice ?? 0.0;
+            totalValuation += stock * cost;
+          }
+          final lowStockCount = data.lowStockAlerts.length;
+
           kpiCards = [
             _buildKpiCard(
               context,
@@ -2131,27 +2299,39 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
             _buildKpiCard(
               context,
-              title: 'CHỦNG LOẠI NGUYÊN LIỆU',
-              value: '${data.items.length} loại vật tư',
-              subtitle: 'Trà, bột sữa, topping và bao bì',
+              title: 'TỔNG SẢN PHẨM (SKU)',
+              value: '${data.items.length} mặt hàng',
+              subtitle: 'Đang quản lý trong kho',
               icon: Icons.category_rounded,
               color: const Color(0xFF0891B2),
             ),
             _buildKpiCard(
               context,
-              title: 'ĐIỂM LƯU KHO',
-              value: '${data.locations.length} khu vực kho',
-              subtitle: 'Kho quầy và kho trung tâm',
-              icon: Icons.warehouse_rounded,
-              color: const Color(0xFF059669),
+              title: 'CẢNH BÁO TỒN KHO',
+              value: '$lowStockCount mặt hàng',
+              subtitle: lowStockCount > 0
+                  ? 'Dưới định mức tối thiểu'
+                  : 'Tất cả đạt định mức an toàn',
+              icon: lowStockCount > 0
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_outline_rounded,
+              color: lowStockCount > 0
+                  ? const Color(0xFFDC2626)
+                  : const Color(0xFF059669),
             ),
             _buildKpiCard(
               context,
-              title: 'MỤC CẦN KIỂM KÊ',
-              value: '${data.items.length} mặt hàng',
-              subtitle: 'Đối chiếu tồn lý thuyết và thực tế',
-              icon: Icons.qr_code_2_rounded,
-              color: const Color(0xFF7C3AED),
+              title: 'TỔNG GIÁ TRỊ KHO',
+              value: isAdmin
+                  ? '${AppFormat.money(totalValuation.toStringAsFixed(0))} ₫'
+                  : '••••••',
+              subtitle: isAdmin
+                  ? 'Định giá vốn tồn hiện tại'
+                  : 'Bảo mật (Chỉ Admin)',
+              icon: isAdmin
+                  ? Icons.account_balance_wallet_rounded
+                  : Icons.lock_outline_rounded,
+              color: isAdmin ? const Color(0xFF059669) : Colors.grey,
             ),
           ];
         }
@@ -2475,461 +2655,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ),
                   ),
                 )
-              else
-                Card(
-                  child: Column(
-                    children: [
-                      for (final item in data.items)
-                        ListTile(
-                          leading: _isSelectionMode
-                              ? Checkbox(
-                                  key: Key('checkbox-item-${item.sku}'),
-                                  value: _selectedItemIds.contains(item.id),
-                                  onChanged: (_) => _toggleItemSelection(item.id),
-                                )
-                              : null,
-                          onTap: _isSelectionMode
-                              ? () => _toggleItemSelection(item.id)
-                              : null,
-                          title: Text(item.name),
-                          subtitle: Text(
-                              '${item.sku} · ${item.category ?? 'Chưa phân nhóm'} · ${item.unit}${item.packaging == null ? '' : ' · ${item.packaging}'}'),
-                          trailing: canManageCatalog
-                              ? (_isSelectionMode
-                                  ? null
-                                  : (isCompact
-                                      ? PopupMenuButton<String>(
-                                          key: Key('menu-item-${item.sku}'),
-                                          icon: const Icon(Icons.more_vert, size: 20),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          itemBuilder: (ctx) => [
-                                            const PopupMenuItem(
-                                              value: 'levels',
-                                              child: Row(
-                                                children: [
-                                                  Icon(Icons.tune_outlined,
-                                                      size: 16,
-                                                      color: Color(0xFF2563EB)),
-                                                  SizedBox(width: 8),
-                                                  Text('Định mức tồn'),
-                                                ],
-                                              ),
-                                            ),
-                                            const PopupMenuItem(
-                                              value: 'edit',
-                                              child: Row(
-                                                children: [
-                                                  Icon(Icons.edit_outlined,
-                                                      size: 16),
-                                                  SizedBox(width: 8),
-                                                  Text('Sửa thông tin'),
-                                                ],
-                                              ),
-                                            ),
-                                            PopupMenuItem(
-                                              key: Key('btn-delete-item-${item.sku}'),
-                                              value: 'delete',
-                                              child: const Row(
-                                                children: [
-                                                  Icon(Icons.delete_outline,
-                                                      size: 16,
-                                                      color: Colors.red),
-                                                  SizedBox(width: 8),
-                                                  Text('Xóa mặt hàng',
-                                                      style: TextStyle(
-                                                          color: Colors.red)),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                          onSelected: (val) {
-                                            if (val == 'levels') {
-                                              _showSetStockLevelDialog(
-                                                  item,
-                                                  data.locations,
-                                                  data.stockLevels);
-                                            } else if (val == 'edit') {
-                                              _showEditItemDialog(item);
-                                            } else if (val == 'delete') {
-                                              _confirmDeleteItem(
-                                                  item, data.balances);
-                                            }
-                                          },
-                                        )
-                                      : Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            IconButton(
-                                              tooltip:
-                                                  'Định mức tồn (Min / Max)',
-                                              icon: const Icon(
-                                                  Icons.tune_outlined,
-                                                  color: Color(0xFF2563EB)),
-                                              onPressed: () =>
-                                                  _showSetStockLevelDialog(
-                                                      item,
-                                                      data.locations,
-                                                      data.stockLevels),
-                                            ),
-                                            IconButton(
-                                              key: Key(
-                                                  'btn-edit-item-${item.sku}'),
-                                              tooltip: 'Sửa mặt hàng',
-                                              icon: const Icon(
-                                                  Icons.edit_outlined),
-                                              onPressed: () =>
-                                                  _showEditItemDialog(item),
-                                            ),
-                                            IconButton(
-                                              key: Key(
-                                                  'btn-delete-item-${item.sku}'),
-                                              tooltip: 'Xóa mặt hàng',
-                                              icon: const Icon(
-                                                  Icons.delete_outline,
-                                                  color: Colors.red),
-                                              onPressed: () =>
-                                                  _confirmDeleteItem(
-                                                      item, data.balances),
-                                            ),
-                                          ],
-                                        )))
-                              : null,
-                        ),
-                    ],
-                  ),
+              else ...[
+                _buildGoogleSheetTable(
+                  context,
+                  data,
+                  isAdmin: isAdmin,
+                  canManageCatalog: canManageCatalog,
+                  isCompact: isCompact,
+                  theme: theme,
+                  isDark: isDark,
                 ),
-              const SizedBox(height: 24),
-
-              // Bảng Tồn kho vật tư
-              Text(
-                'Chi Tiết Tồn Kho Theo Nguyên Vật Liệu',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color:
-                        theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                child: data.balances.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Center(child: Text('Không có dữ liệu tồn kho.')),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: data.balances.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
-                          final bal = data.balances[i];
-                          // Match Item
-                          final item =
-                              data.items.cast<InventoryItem?>().firstWhere(
-                                    (it) => it?.id == bal.itemId,
-                                    orElse: () => null,
-                                  );
-                          // Match Location
-                          final loc = data.locations
-                              .cast<InventoryLocation?>()
-                              .firstWhere(
-                                (l) => l?.id == bal.locationId,
-                                orElse: () => null,
-                              );
-
-                          final itemName = item?.name ?? 'Vật tư ${bal.itemId}';
-                          final locName = loc != null
-                              ? '${loc.code} — ${loc.name}'
-                              : bal.locationId;
-                          final unit = item?.unit ?? 'đơn vị';
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF2563EB)
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(
-                                    Icons.file_copy_rounded,
-                                    size: 20,
-                                    color: Color(0xFF2563EB),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        itemName,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        'Điểm lưu kho: $locName • SKU: ${item?.sku ?? "N/A"}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: theme
-                                              .colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Wrap(
-                                  spacing: 12,
-                                  alignment: WrapAlignment.end,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '${AppFormat.number(bal.quantity)} $unit',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const Text('Sổ sách',
-                                            style: TextStyle(
-                                                fontSize: 10.5,
-                                                color: Colors.grey)),
-                                      ],
-                                    ),
-                                    if (bal.reservedNumber > 0)
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            '${AppFormat.number(bal.reservedQuantity)} $unit',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 14,
-                                              color: Color(0xFFD97706),
-                                            ),
-                                          ),
-                                          const Text('Đặt trước',
-                                              style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  color: Color(0xFFD97706))),
-                                        ],
-                                      ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '${AppFormat.number(bal.availableNumber.toString())} $unit',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 16,
-                                            color: Color(0xFF059669),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF10B981)
-                                                .withValues(alpha: 0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: const Text(
-                                            'Khả dụng',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF059669),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                if (item != null && canManageCatalog) ...[
-                                  const SizedBox(width: 8),
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_vert, size: 18),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(10)),
-                                    itemBuilder: (ctx) => [
-                                      const PopupMenuItem(
-                                        value: 'edit',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.edit_outlined, size: 16),
-                                            SizedBox(width: 8),
-                                            Text('Sửa thông tin'),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'delete',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.delete_outline,
-                                                size: 16, color: Colors.red),
-                                            SizedBox(width: 8),
-                                            Text('Xóa mặt hàng',
-                                                style: TextStyle(
-                                                    color: Colors.red)),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    onSelected: (v) {
-                                      if (v == 'edit')
-                                        _showEditItemDialog(item);
-                                      if (v == 'delete')
-                                        _confirmDeleteItem(item, data.balances);
-                                    },
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              const SizedBox(height: 24),
-
-              // Bảng Quản lý Serial & Tài sản bảo mật
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Dải Số Serial Phôi Bảo Mật (Serial Tracking)',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    '${data.assets.length} bản ghi theo dõi',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color:
-                        theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                child: data.assets.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(
-                            child:
-                                Text('Không có dải serial nào được quản lý.')),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: data.assets.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
-                          final a = data.assets[i];
-                          final loc = data.locations
-                              .cast<InventoryLocation?>()
-                              .firstWhere(
-                                (l) => l?.id == a.locationId,
-                                orElse: () => null,
-                              );
-                          return InkWell(
-                            key: Key('btn-asset-detail-${a.serial}'),
-                            onTap: () => _showAssetLifecycleDialog(a, data),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 12),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.qr_code,
-                                      size: 20, color: Color(0xFF7C3AED)),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          a.serial,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 13.5,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Kho: ${loc?.name ?? a.locationId}${a.assignee != null ? " • Người phụ trách: ${a.assignee}" : ""}',
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            color: theme
-                                                .colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981)
-                                          .withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      a.status.name.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Color(0xFF059669),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.chevron_right,
-                                      size: 18, color: Colors.grey),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
             ],
             if (!isStockOnly) ...[
               _buildStocktakesSection(context, data),
@@ -2941,6 +2678,1073 @@ class _InventoryScreenState extends State<InventoryScreen> {
   );
 },
 );
+  }
+
+  Widget _buildGoogleSheetTable(
+    BuildContext context,
+    _InventoryData data, {
+    required bool isAdmin,
+    required bool canManageCatalog,
+    required bool isCompact,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    // 1. Collect Categories
+    final categories = <String>['Tất cả'];
+    for (final it in data.items) {
+      final c = it.category?.trim();
+      if (c != null && c.isNotEmpty && !categories.contains(c)) {
+        categories.add(c);
+      }
+    }
+
+    // 2. Filter items
+    final filteredItems = data.items.where((item) {
+      if (_searchQuery.trim().isNotEmpty) {
+        final q = _searchQuery.trim().toLowerCase();
+        final matchName = item.name.toLowerCase().contains(q);
+        final matchSku = item.sku.toLowerCase().contains(q);
+        final matchCat = (item.category ?? '').toLowerCase().contains(q);
+        if (!matchName && !matchSku && !matchCat) return false;
+      }
+      if (_selectedCategory != 'Tất cả') {
+        if ((item.category ?? '') != _selectedCategory) return false;
+      }
+      final stock = _stockForItem(item.id, data.balances);
+      final minStock = item.minStock ?? 0.0;
+      if (_stockFilter == 'low' && (stock > minStock || stock == 0)) return false;
+      if (_stockFilter == 'out' && stock > 0) return false;
+      return true;
+    }).toList();
+
+    // Thanh công cụ tìm kiếm và bộ lọc kiểu Bảng Tính
+    final filterBar = Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 10 : 14,
+        vertical: isCompact ? 8 : 10,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Tìm SKU, tên sản phẩm...',
+                      hintStyle: TextStyle(
+                        fontSize: 12.5,
+                        color: isDark
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF64748B),
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () =>
+                                  setState(() => _searchQuery = ''),
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF475569)
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                    ),
+                    onChanged: (val) => setState(() => _searchQuery = val),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: categories.contains(_selectedCategory)
+                        ? _selectedCategory
+                        : 'Tất cả',
+                    icon: const Icon(Icons.arrow_drop_down, size: 20),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                    dropdownColor:
+                        isDark ? const Color(0xFF1E293B) : Colors.white,
+                    items: categories.map((c) {
+                      return DropdownMenuItem(
+                        value: c,
+                        child: Text(c == 'Tất cả' ? 'Tất cả nhóm' : c),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedCategory = val);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('all', 'Tất cả (${data.items.length})', isDark),
+                const SizedBox(width: 6),
+                _buildFilterChip('low', 'Cảnh báo ít tồn', isDark,
+                    color: const Color(0xFFD97706)),
+                const SizedBox(width: 6),
+                _buildFilterChip('out', 'Hết hàng', isDark,
+                    color: const Color(0xFFEF4444)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final emptyFilterPlaceholder = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 36),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.search_off_rounded,
+            size: 36,
+            color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Không tìm thấy mặt hàng nào phù hợp',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () => setState(() {
+              _searchQuery = '';
+              _selectedCategory = 'Tất cả';
+              _stockFilter = 'all';
+            }),
+            child: const Text('Đặt lại bộ lọc'),
+          ),
+        ],
+      ),
+    );
+
+    // Màn hình di động (isCompact < 960px): Hiển thị Card danh sách tối ưu
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          filterBar,
+          if (filteredItems.isEmpty)
+            emptyFilterPlaceholder
+          else
+            Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filteredItems.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  color: isDark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF1F5F9),
+                ),
+                itemBuilder: (context, i) {
+                  final item = filteredItems[i];
+                  final stock = _stockForItem(item.id, data.balances);
+                  final isSelected = _selectedItemIds.contains(item.id);
+                  final isOutOfStock = stock <= 0;
+                  final isLowStock = !isOutOfStock &&
+                      item.minStock != null &&
+                      stock <= item.minStock!;
+
+                  return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    leading: _isSelectionMode
+                        ? Checkbox(
+                            key: Key('checkbox-item-${item.sku}'),
+                            value: isSelected,
+                            onChanged: (_) => _toggleItemSelection(item.id),
+                          )
+                        : null,
+                    onTap: _isSelectionMode
+                        ? () => _toggleItemSelection(item.id)
+                        : null,
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13.5),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: isOutOfStock
+                                ? (isDark
+                                    ? const Color(0xFF451A1A)
+                                    : const Color(0xFFFEE2E2))
+                                : (isLowStock
+                                    ? (isDark
+                                        ? const Color(0xFF452205)
+                                        : const Color(0xFFFEF3C7))
+                                    : (isDark
+                                        ? const Color(0xFF064E3B)
+                                        : const Color(0xFFD1FAE5))),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isOutOfStock
+                                ? 'Hết hàng'
+                                : (isLowStock ? 'Sắp hết' : 'Đủ hàng'),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: isOutOfStock
+                                  ? const Color(0xFFEF4444)
+                                  : (isLowStock
+                                      ? const Color(0xFFD97706)
+                                      : const Color(0xFF059669)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 2),
+                        Text(
+                          '${item.sku} · ${item.category ?? 'Chưa phân nhóm'} · ${item.unit}${item.packaging != null ? " · ${item.packaging}" : ""}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Tồn: ${AppFormat.number(stock.toString())} ${item.unit}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isOutOfStock
+                                    ? const Color(0xFFEF4444)
+                                    : (isLowStock
+                                        ? const Color(0xFFD97706)
+                                        : const Color(0xFF059669)),
+                              ),
+                            ),
+                            if (item.minStock != null)
+                              Text(
+                                'Min: ${AppFormat.number(item.minStock!.toString())}',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant),
+                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Giá bán: ',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant)),
+                                if (isAdmin)
+                                  Text(
+                                    item.sellingPrice != null
+                                        ? '${AppFormat.money(item.sellingPrice!.toStringAsFixed(0))} ₫'
+                                        : '—',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF0284C7)),
+                                  )
+                                else
+                                  Tooltip(
+                                    message: 'Chỉ Admin mới có quyền xem giá',
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.lock_outline,
+                                            size: 12,
+                                            color: theme.colorScheme.outline),
+                                        const SizedBox(width: 2),
+                                        Text('••••••',
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                letterSpacing: 1,
+                                                color: theme.colorScheme.outline,
+                                                fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    trailing: canManageCatalog
+                        ? (_isSelectionMode
+                            ? null
+                            : PopupMenuButton<String>(
+                                key: Key('menu-item-${item.sku}'),
+                                icon: const Icon(Icons.more_vert, size: 20),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(
+                                    value: 'levels',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.tune_outlined,
+                                            size: 16,
+                                            color: Color(0xFF2563EB)),
+                                        SizedBox(width: 8),
+                                        Text('Định mức tồn'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit_outlined, size: 16),
+                                        SizedBox(width: 8),
+                                        Text('Sửa thông tin'),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    key: Key('btn-delete-item-${item.sku}'),
+                                    value: 'delete',
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.delete_outline,
+                                            size: 16, color: Colors.red),
+                                        SizedBox(width: 8),
+                                        Text('Xóa mặt hàng',
+                                            style:
+                                                TextStyle(color: Colors.red)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                onSelected: (val) {
+                                  if (val == 'levels') {
+                                    _showSetStockLevelDialog(
+                                        item,
+                                        data.locations,
+                                        data.stockLevels);
+                                  } else if (val == 'edit') {
+                                    _showEditItemDialog(item);
+                                  } else if (val == 'delete') {
+                                    _confirmDeleteItem(
+                                        item, data.balances);
+                                  }
+                                },
+                              ))
+                        : null,
+                  );
+                },
+              ),
+            ),
+        ],
+      );
+    }
+
+    // Màn hình rộng (Desktop / Tablet >= 960px): Bảng tính Google Sheet chuyên nghiệp
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        filterBar,
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 1060),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Hàng Tiêu Đề Cột (Google Sheet Header)
+                  Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFCBD5E1),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        if (_isSelectionMode)
+                          _buildHeaderCell('#',
+                              width: 44, align: TextAlign.center, isDark: isDark),
+                        _buildHeaderCell('MÃ SKU', width: 95, isDark: isDark),
+                        _buildHeaderCell('TÊN NGUYÊN LIỆU / SP',
+                            width: 200, isDark: isDark),
+                        _buildHeaderCell('NHÓM', width: 110, isDark: isDark),
+                        _buildHeaderCell('ĐVT',
+                            width: 60, align: TextAlign.center, isDark: isDark),
+                        _buildHeaderCell('TỒN KHẢ DỤNG',
+                            width: 105, align: TextAlign.right, isDark: isDark),
+                        _buildHeaderCell('TỒN MIN',
+                            width: 80, align: TextAlign.right, isDark: isDark),
+                        _buildHeaderCell(
+                          isAdmin ? 'GIÁ BÁN' : 'GIÁ BÁN (🔒)',
+                          width: 105,
+                          align: TextAlign.right,
+                          isDark: isDark,
+                        ),
+                        _buildHeaderCell(
+                          isAdmin ? 'GIÁ VỐN' : 'GIÁ VỐN (🔒)',
+                          width: 105,
+                          align: TextAlign.right,
+                          isDark: isDark,
+                        ),
+                        _buildHeaderCell('TRẠNG THÁI',
+                            width: 95, align: TextAlign.center, isDark: isDark),
+                        _buildHeaderCell('THAO TÁC',
+                            width: 120, align: TextAlign.center, isDark: isDark),
+                      ],
+                    ),
+                  ),
+
+                  // Danh sách các dòng dữ liệu
+                  if (filteredItems.isEmpty)
+                    emptyFilterPlaceholder
+                  else
+                    for (int i = 0; i < filteredItems.length; i++)
+                      _buildDataRow(
+                        context,
+                        filteredItems[i],
+                        data,
+                        index: i,
+                        isAdmin: isAdmin,
+                        canManageCatalog: canManageCatalog,
+                        isCompact: isCompact,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderCell(
+    String title, {
+    required double width,
+    TextAlign align = TextAlign.left,
+    required bool isDark,
+  }) {
+    return Container(
+      width: width,
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: align == TextAlign.center
+          ? Alignment.center
+          : (align == TextAlign.right
+              ? Alignment.centerRight
+              : Alignment.centerLeft),
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataRow(
+    BuildContext context,
+    InventoryItem item,
+    _InventoryData data, {
+    required int index,
+    required bool isAdmin,
+    required bool canManageCatalog,
+    required bool isCompact,
+    required ThemeData theme,
+    required bool isDark,
+  }) {
+    final stock = _stockForItem(item.id, data.balances);
+    final minStock = item.minStock;
+    final isSelected = _selectedItemIds.contains(item.id);
+
+    // Row zebra background
+    final rowBg = isSelected
+        ? (isDark
+            ? const Color(0xFF1E3A8A).withValues(alpha: 0.3)
+            : const Color(0xFFEFF6FF))
+        : (index.isEven
+            ? (isDark ? const Color(0xFF0F172A) : Colors.white)
+            : (isDark
+                ? const Color(0xFF1E293B).withValues(alpha: 0.35)
+                : const Color(0xFFF8FAFC)));
+
+    // Stock status
+    final bool isOutOfStock = stock <= 0;
+    final bool isLowStock = !isOutOfStock && minStock != null && stock <= minStock;
+
+    return InkWell(
+      onTap: _isSelectionMode ? () => _toggleItemSelection(item.id) : null,
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(
+          color: rowBg,
+          border: Border(
+            bottom: BorderSide(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            // Checkbox if selection mode
+            if (_isSelectionMode)
+              Container(
+                width: 44,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  border: Border(
+                    right: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                ),
+                child: Checkbox(
+                  key: Key('checkbox-item-${item.sku}'),
+                  value: isSelected,
+                  onChanged: (_) => _toggleItemSelection(item.id),
+                ),
+              ),
+
+            // Mã SKU
+            Container(
+              width: 95,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              alignment: Alignment.centerLeft,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF475569)
+                        : const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: Text(
+                  item.sku,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    color: isDark
+                        ? const Color(0xFF93C5FD)
+                        : const Color(0xFF1D4ED8),
+                  ),
+                ),
+              ),
+            ),
+
+            // TÊN NGUYÊN LIỆU / SP
+            Container(
+              width: 200,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerLeft,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (item.packaging != null && item.packaging!.isNotEmpty)
+                    Text(
+                      item.packaging!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // NHÓM
+            Container(
+              width: 110,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerLeft,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Text(
+                item.category ?? 'Chưa phân nhóm',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? const Color(0xFFCBD5E1)
+                      : const Color(0xFF475569),
+                ),
+              ),
+            ),
+
+            // ĐVT
+            Container(
+              width: 60,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Text(
+                item.unit,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+
+            // TỒN KHẢ DỤNG
+            Container(
+              width: 105,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerRight,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Text(
+                '${AppFormat.number(stock.toString())} ${item.unit}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12.5,
+                  color: isOutOfStock
+                      ? const Color(0xFFEF4444)
+                      : (isLowStock
+                          ? const Color(0xFFD97706)
+                          : const Color(0xFF059669)),
+                ),
+              ),
+            ),
+
+            // TỒN MIN
+            Container(
+              width: 80,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerRight,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Text(
+                minStock != null
+                    ? '${AppFormat.number(minStock.toString())}'
+                    : '—',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+
+            // GIÁ BÁN (Admin Only)
+            Container(
+              width: 105,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerRight,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: isAdmin
+                  ? Text(
+                      item.sellingPrice != null
+                          ? '${AppFormat.money(item.sellingPrice!.toStringAsFixed(0))} ₫'
+                          : '—',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: Color(0xFF0284C7),
+                      ),
+                    )
+                  : Tooltip(
+                      message: 'Chỉ Admin mới có quyền xem giá',
+                      child: Text(
+                        '••••••',
+                        style: TextStyle(
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: isDark
+                              ? const Color(0xFF64748B)
+                              : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ),
+            ),
+
+            // GIÁ VỐN (Admin Only)
+            Container(
+              width: 105,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerRight,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: isAdmin
+                  ? Text(
+                      item.costPrice != null
+                          ? '${AppFormat.money(item.costPrice!.toStringAsFixed(0))} ₫'
+                          : '—',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: isDark
+                            ? const Color(0xFFCBD5E1)
+                            : const Color(0xFF475569),
+                      ),
+                    )
+                  : Tooltip(
+                      message: 'Chỉ Admin mới có quyền xem giá',
+                      child: Text(
+                        '••••••',
+                        style: TextStyle(
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: isDark
+                              ? const Color(0xFF64748B)
+                              : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ),
+            ),
+
+            // TRẠNG THÁI
+            Container(
+              width: 95,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isOutOfStock
+                      ? (isDark
+                          ? const Color(0xFF451A1A)
+                          : const Color(0xFFFEE2E2))
+                      : (isLowStock
+                          ? (isDark
+                              ? const Color(0xFF452205)
+                              : const Color(0xFFFEF3C7))
+                          : (isDark
+                              ? const Color(0xFF064E3B)
+                              : const Color(0xFFD1FAE5))),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isOutOfStock
+                      ? 'Hết hàng'
+                      : (isLowStock ? 'Sắp hết' : 'Đủ hàng'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isOutOfStock
+                        ? const Color(0xFFEF4444)
+                        : (isLowStock
+                            ? const Color(0xFFD97706)
+                            : const Color(0xFF059669)),
+                  ),
+                ),
+              ),
+            ),
+
+            // THAO TÁC
+            Container(
+              width: 120,
+              height: 52,
+              alignment: Alignment.center,
+              child: canManageCatalog
+                  ? (_isSelectionMode
+                      ? null
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 32, minHeight: 32),
+                              iconSize: 18,
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Định mức tồn (Min / Max)',
+                              icon: const Icon(Icons.tune_outlined,
+                                  size: 18, color: Color(0xFF2563EB)),
+                              onPressed: () => _showSetStockLevelDialog(
+                                  item, data.locations, data.stockLevels),
+                            ),
+                            IconButton(
+                              key: Key('btn-edit-item-${item.sku}'),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 32, minHeight: 32),
+                              iconSize: 18,
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Sửa mặt hàng',
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              onPressed: () => _showEditItemDialog(item),
+                            ),
+                            IconButton(
+                              key: Key('btn-delete-item-${item.sku}'),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 32, minHeight: 32),
+                              iconSize: 18,
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Xóa mặt hàng',
+                              icon: const Icon(Icons.delete_outline,
+                                  size: 18, color: Colors.red),
+                              onPressed: () =>
+                                  _confirmDeleteItem(item, data.balances),
+                            ),
+                          ],
+                        ))
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String value, String label, bool isDark,
+      {Color? color}) {
+    final isSelected = _stockFilter == value;
+    final activeColor = color ?? const Color(0xFF2563EB);
+    return InkWell(
+      onTap: () => setState(() => _stockFilter = value),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? activeColor.withValues(alpha: isDark ? 0.25 : 0.12)
+              : (isDark ? const Color(0xFF0F172A) : Colors.white),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? activeColor
+                : (isDark
+                    ? const Color(0xFF334155)
+                    : const Color(0xFFCBD5E1)),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected
+                ? activeColor
+                : (isDark
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF64748B)),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildLowStockAlertBanner(

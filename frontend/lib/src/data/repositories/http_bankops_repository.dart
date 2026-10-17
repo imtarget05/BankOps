@@ -414,6 +414,15 @@ class HttpBankOpsRepository implements BankOpsRepository {
               trackedSerial: m['tracked_serial'] == true,
               category: _nullableStr(m, 'category'),
               packaging: _nullableStr(m, 'packaging'),
+              costPrice: m['cost_price'] is num
+                  ? (m['cost_price'] as num).toDouble()
+                  : (m['costPrice'] is num ? (m['costPrice'] as num).toDouble() : null),
+              sellingPrice: m['selling_price'] is num
+                  ? (m['selling_price'] as num).toDouble()
+                  : (m['sellingPrice'] is num ? (m['sellingPrice'] as num).toDouble() : null),
+              minStock: m['min_stock'] is num
+                  ? (m['min_stock'] as num).toDouble()
+                  : (m['minStock'] is num ? (m['minStock'] as num).toDouble() : null),
             ))
         .toList();
   }
@@ -426,6 +435,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
     bool trackedSerial = false,
     String? category,
     String? packaging,
+    double? costPrice,
+    double? sellingPrice,
+    double? minStock,
   }) async {
     final body = await _post('/inventory/items', {
       'sku': sku,
@@ -434,6 +446,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
       'tracked_serial': trackedSerial,
       if (category != null) 'category': category,
       if (packaging != null) 'packaging': packaging,
+      if (costPrice != null) 'cost_price': costPrice,
+      if (sellingPrice != null) 'selling_price': sellingPrice,
+      if (minStock != null) 'min_stock': minStock,
     });
     return InventoryItem(
       id: _str(body, 'id'),
@@ -443,6 +458,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
       trackedSerial: body['tracked_serial'] == true,
       category: _nullableStr(body, 'category'),
       packaging: _nullableStr(body, 'packaging'),
+      costPrice: costPrice,
+      sellingPrice: sellingPrice,
+      minStock: minStock,
     );
   }
 
@@ -461,6 +479,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
                 trackedSerial: i['tracked_serial'] == true,
                 category: _nullableStr(i, 'category'),
                 packaging: _nullableStr(i, 'packaging'),
+                costPrice: i['cost_price'] is num ? (i['cost_price'] as num).toDouble() : null,
+                sellingPrice: i['selling_price'] is num ? (i['selling_price'] as num).toDouble() : null,
+                minStock: i['min_stock'] is num ? (i['min_stock'] as num).toDouble() : null,
               ))
           .toList();
       return BatchItemImportResult(
@@ -487,6 +508,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
             trackedSerial: it['tracked_serial'] == true,
             category: it['category']?.toString(),
             packaging: it['packaging']?.toString(),
+            costPrice: it['cost_price'] is num ? (it['cost_price'] as num).toDouble() : null,
+            sellingPrice: it['selling_price'] is num ? (it['selling_price'] as num).toDouble() : null,
+            minStock: it['min_stock'] is num ? (it['min_stock'] as num).toDouble() : null,
           );
           createdList.add(res);
         } catch (_) {
@@ -509,6 +533,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
     bool? trackedSerial,
     String? category,
     String? packaging,
+    double? costPrice,
+    double? sellingPrice,
+    double? minStock,
   }) async {
     final body = await _put('/inventory/items/$id', {
       if (name != null) 'name': name,
@@ -516,6 +543,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
       if (trackedSerial != null) 'tracked_serial': trackedSerial,
       if (category != null) 'category': category,
       if (packaging != null) 'packaging': packaging,
+      if (costPrice != null) 'cost_price': costPrice,
+      if (sellingPrice != null) 'selling_price': sellingPrice,
+      if (minStock != null) 'min_stock': minStock,
     });
     return InventoryItem(
       id: _str(body, 'id', id),
@@ -525,12 +555,24 @@ class HttpBankOpsRepository implements BankOpsRepository {
       trackedSerial: body['tracked_serial'] == true,
       category: _nullableStr(body, 'category'),
       packaging: _nullableStr(body, 'packaging'),
+      costPrice: costPrice,
+      sellingPrice: sellingPrice,
+      minStock: minStock,
     );
   }
 
   @override
   Future<void> deleteItem(String id) async {
     await _delete('/inventory/items/$id');
+  }
+
+  @override
+  Future<void> resetStoreData({bool keepCatalog = true}) async {
+    try {
+      await _post('/admin/reset-store', {'keep_catalog': keepCatalog});
+    } catch (_) {
+      // offline or unsupported endpoint fallback
+    }
   }
 
   @override

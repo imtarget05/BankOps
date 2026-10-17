@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'src/app/app_shell.dart';
 import 'src/core/theme/app_theme.dart';
 import 'src/app/theme_mode_controller.dart';
+import 'src/features/auth/accept_invite_screen.dart';
 import 'src/features/auth/auth_service.dart';
 import 'src/features/auth/login_screen.dart';
 
@@ -12,6 +14,18 @@ import 'src/core/i18n/locale_controller.dart';
 import 'src/core/theme/app_ui_settings_controller.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarContrastEnforced: false,
+    systemStatusBarContrastEnforced: false,
+  ));
   final uiSettings = AppUiSettingsController();
   runApp(
     MultiProvider(
@@ -52,10 +66,52 @@ class SessionBridge extends StatelessWidget {
   }
 }
 
-/// Chưa đăng nhập -> LoginScreen (Google, lần đầu tự signup);
+/// Chưa đăng nhập -> LoginScreen hoặc AcceptInviteScreen nếu truy cập từ link mời;
 /// đã có token hợp lệ -> AppShell.
-class _AuthGate extends StatelessWidget {
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _showAcceptInvite = false;
+  String? _inviteToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUrlForInviteToken();
+  }
+
+  void _checkUrlForInviteToken() {
+    try {
+      final base = Uri.base;
+      String? token;
+      if (base.queryParameters.containsKey('token')) {
+        token = base.queryParameters['token']?.trim();
+      }
+      if ((token == null || token.isEmpty) &&
+          base.hasFragment &&
+          base.fragment.isNotEmpty) {
+        final frag = base.fragment.startsWith('/')
+            ? base.fragment
+            : '/${base.fragment}';
+        final fragUri = Uri.tryParse(frag);
+        if (fragUri != null && fragUri.queryParameters.containsKey('token')) {
+          token = fragUri.queryParameters['token']?.trim();
+        }
+      }
+      final isAcceptInvitePath = base.path.contains('accept-invite') ||
+          (base.hasFragment && base.fragment.contains('accept-invite'));
+
+      if ((token != null && token.isNotEmpty) || isAcceptInvitePath) {
+        _showAcceptInvite = true;
+        _inviteToken = (token != null && token.isNotEmpty) ? token : null;
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +119,15 @@ class _AuthGate extends StatelessWidget {
     if (auth.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (auth.user == null) return const LoginScreen();
+    if (auth.user == null) {
+      if (_showAcceptInvite) {
+        return AcceptInviteScreen(
+          initialToken: _inviteToken,
+          onBackToLogin: () => setState(() => _showAcceptInvite = false),
+        );
+      }
+      return const LoginScreen();
+    }
     return const AppShell();
   }
 }

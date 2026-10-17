@@ -20,6 +20,7 @@ from app.api.errors import AppError
 from app.api.routes.auth_utils import (
     get_current_user,
     get_user_capabilities,
+    get_user_roles,
     require_any_capability,
 )
 from app.config import settings
@@ -196,8 +197,13 @@ def _line_total(qty: Decimal, price: Decimal | None) -> str | None:
     return str(total)
 
 
-def _item_out(item: Item) -> dict:
-    """Return the ingredient catalog representation used by all item APIs."""
+def _item_out(item: Item, is_admin: bool = True) -> dict:
+    """Return the ingredient catalog representation used by all item APIs.
+    
+    Chỉ Admin/Manager mới thấy cost_price & selling_price; nhân viên khác nhận None.
+    """
+    has_cost = is_admin and getattr(item, "cost_price", None) is not None
+    has_selling = is_admin and getattr(item, "selling_price", None) is not None
     return {
         "id": str(item.id),
         "sku": item.sku,
@@ -205,6 +211,9 @@ def _item_out(item: Item) -> dict:
         "unit": item.unit,
         "category": item.category,
         "packaging": item.packaging,
+        "cost_price": float(item.cost_price) if has_cost else None,
+        "selling_price": float(item.selling_price) if has_selling else None,
+        "min_stock": float(item.min_stock) if getattr(item, "min_stock", None) is not None else None,
         "tracked_serial": item.tracked_serial,
         "active": item.active,
     }
@@ -540,8 +549,13 @@ async def list_items(
     db: AsyncSession = Depends(get_db),
 ):
     items = (await db.execute(select(Item).where(Item.active.is_(True)))).scalars().all()
+    roles = await get_user_roles(db, current_user.id)
+    is_admin = any(r in ("admin", "superadmin", "manager") for r in roles)
+    if not is_admin:
+        caps = await get_user_capabilities(db, current_user.id)
+        is_admin = "admin:user_management" in caps or "admin" in caps or getattr(current_user, "is_superuser", False)
     return {
-        "items": [_item_out(i) for i in items]
+        "items": [_item_out(i, is_admin=is_admin) for i in items]
     }
 
 
@@ -557,6 +571,9 @@ async def create_item(
     category = str(payload.get("category", "")).strip() or None
     packaging = str(payload.get("packaging", "")).strip() or None
     tracked_serial = bool(payload.get("tracked_serial", False))
+    cost_price = Decimal(str(payload["cost_price"])) if payload.get("cost_price") is not None else None
+    selling_price = Decimal(str(payload["selling_price"])) if payload.get("selling_price") is not None else None
+    min_stock = Decimal(str(payload["min_stock"])) if payload.get("min_stock") is not None else None
     if not sku:
         raise AppError(422, "MISSING_SKU", "SKU không được để trống")
     if not name:
@@ -570,6 +587,9 @@ async def create_item(
             existing.category = category
             existing.packaging = packaging
             existing.tracked_serial = tracked_serial
+            existing.cost_price = cost_price
+            existing.selling_price = selling_price
+            existing.min_stock = min_stock
             await db.commit()
             await db.refresh(existing)
             return _item_out(existing)
@@ -581,6 +601,9 @@ async def create_item(
         unit=unit,
         category=category,
         packaging=packaging,
+        cost_price=cost_price,
+        selling_price=selling_price,
+        min_stock=min_stock,
         tracked_serial=tracked_serial,
         active=True,
     )
@@ -681,6 +704,12 @@ async def update_item(
         item.category = str(payload["category"] or "").strip() or None
     if "packaging" in payload:
         item.packaging = str(payload["packaging"] or "").strip() or None
+    if "cost_price" in payload:
+        item.cost_price = Decimal(str(payload["cost_price"])) if payload["cost_price"] is not None else None
+    if "selling_price" in payload:
+        item.selling_price = Decimal(str(payload["selling_price"])) if payload["selling_price"] is not None else None
+    if "min_stock" in payload:
+        item.min_stock = Decimal(str(payload["min_stock"])) if payload["min_stock"] is not None else None
     if "tracked_serial" in payload:
         item.tracked_serial = bool(payload["tracked_serial"])
     if "active" in payload:

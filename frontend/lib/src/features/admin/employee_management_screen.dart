@@ -253,7 +253,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                           subtitle: Text(
                             'Sinh mã mời kích hoạt có hạn 7 ngày. Nhân viên tự thiết lập mật khẩu.',
                           ),
-                          value: 'email_invite',
+                          value: 'invite_email',
                         ),
                       ],
                     ),
@@ -276,6 +276,16 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     displayNameCtrl.text.trim().isEmpty) {
                   AppToast.error(ctx, 'Vui lòng điền đủ Username và Họ tên');
                   return;
+                }
+                if (onboardingMethod == 'invite_email') {
+                  final email = emailCtrl.text.trim();
+                  if (email.isEmpty ||
+                      !email.contains('@') ||
+                      !email.contains('.')) {
+                    AppToast.error(ctx,
+                        'Phương thức mời yêu cầu email thật hợp lệ (vd: nhanvien@congty.com)');
+                    return;
+                  }
                 }
                 Navigator.pop(ctx, true);
               },
@@ -302,8 +312,6 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
         // Hiển thị kết quả onboarding cho admin bàn giao
         if (onboardingMethod == 'temporary_password') {
-          // Lưu ý: backend trả về mật khẩu tạm trong response nếu là temporary_password
-          // hoặc admin có thể reset để lấy lại
           await showDialog(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -353,7 +361,57 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             ),
           );
         } else {
-          AppToast.success(context, 'Đã gửi thư mời kích hoạt tài khoản');
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.mark_email_read_rounded,
+                      color: Color(0xFF059669)),
+                  SizedBox(width: 8),
+                  Text('Đã tạo lời mời kích hoạt'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Đã khởi tạo tài khoản "${result.username}" (${result.displayName}).',
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline,
+                            color: Color(0xFF16A34A)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Lời mời kích hoạt tài khoản có hiệu lực 7 ngày đã được gửi tới email "${result.email}". Nhân viên bấm liên kết trong thư để kích hoạt tài khoản.',
+                            style: const TextStyle(
+                                fontSize: 13, color: Color(0xFF166534)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Hoàn tất'),
+                ),
+              ],
+            ),
+          );
         }
 
         _loadData();

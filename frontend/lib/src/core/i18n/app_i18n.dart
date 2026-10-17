@@ -23,7 +23,7 @@ class AppI18n {
       'nav_more': 'Thêm',
 
       // Branding & Shell
-      'app_title': 'Quản Lý Kho Trà Sữa',
+      'app_title': 'Quản Lý Bán Hàng & Kho',
       'branch_badge': 'CN Quận 1 · Quán Trà Sữa Đô Thị',
       'live_online': 'Trực tuyến',
       'search_placeholder': 'Tìm nguyên liệu, phiếu kho, ca trực... (Ctrl+K)',

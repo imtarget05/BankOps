@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/google_logo.dart';
+import '../../core/widgets/store_logo.dart';
 import '../../data/repositories/bankops_repository.dart';
 import 'auth_service.dart';
+import 'accept_invite_screen.dart';
 import 'widgets/forgot_password_dialog.dart';
 import 'widgets/register_dialog.dart';
 
@@ -235,10 +238,30 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF06140E) : const Color(0xFFF4F7F5),
-      body: Center(
-        child: isDesktop ? _buildDesktopLayout(context) : _buildMobileLayout(context),
+    final overlayStyle = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
+      systemStatusBarContrastEnforced: false,
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Scaffold(
+        backgroundColor:
+            isDark ? const Color(0xFF06140E) : const Color(0xFFF4F7F5),
+        body: SafeArea(
+          child: Center(
+            child: isDesktop
+                ? _buildDesktopLayout(context)
+                : _buildMobileLayout(context),
+          ),
+        ),
       ),
     );
   }
@@ -315,29 +338,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     return Column(
       children: [
-        Container(
-          width: 54,
-          height: 54,
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F4C3A),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F4C3A).withValues(alpha: 0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.emoji_food_beverage_rounded,
-            color: Color(0xFFFDE047),
-            size: 30,
-          ),
-        ),
-        const SizedBox(height: 12),
+        const StoreLogo(size: 56),
+        const SizedBox(height: 14),
         Text(
-          'MilkTea Ops',
+          'Quản Lý Bán Hàng & Kho',
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w900,
             letterSpacing: -0.5,
@@ -345,7 +349,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Hệ Thống Quản Lý Nhập Xuất Tồn & Kiểm Kê Ca Pha Chế',
+          'Hệ thống quản lý bán hàng, kho hàng và công nợ thực chiến',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w500,
@@ -869,6 +873,31 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton.icon(
+            key: const Key('login-accept-invite-btn'),
+            onPressed: _busy
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AcceptInviteScreen(),
+                      ),
+                    );
+                  },
+            icon: const Icon(Icons.mark_email_read_outlined, size: 16),
+            label: const Text(
+              'Nhận được thư mời? Kích hoạt tài khoản tại đây',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0284C7),
+              ),
+            ),
+          ),
         ),
       ],
     );

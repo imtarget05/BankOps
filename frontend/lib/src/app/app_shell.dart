@@ -19,6 +19,7 @@ import '../core/offline/offline_ui.dart';
 import '../core/util/web_helpers.dart';
 import '../core/widgets/app_toast.dart';
 import '../core/widgets/global_search.dart';
+import '../core/widgets/store_logo.dart';
 import '../core/widgets/user_avatar.dart';
 import 'theme_mode_controller.dart';
 import '../data/repositories/http_bankops_repository.dart';
@@ -85,6 +86,8 @@ class _AppShellState extends State<AppShell> {
   int _requestsNavId = 0;
   bool _autoOpenStockRequest = false;
   bool _autoOpenCashRequest = false;
+  /// Tạm thời ẩn chat bot trợ lý theo yêu cầu người dùng
+  static const bool _enableAiAssistant = false;
   bool _aiUnavailable = false;
   bool _isUpdateAvailable = false;
   Timer? _offlinePingTimer;
@@ -92,6 +95,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _syncController.addListener(_onSyncSignal);
     onAppUpdateAvailable(() {
       if (mounted) {
@@ -223,7 +227,6 @@ class _AppShellState extends State<AppShell> {
     _Item(2, 'Ca làm việc', Icons.schedule_outlined, Icons.schedule),
     _Item(3, 'Yêu cầu', Icons.receipt_long_outlined, Icons.receipt_long),
     _Item(4, 'Duyệt', Icons.fact_check_outlined, Icons.fact_check),
-    _Item(5, 'Hoạt động', Icons.timeline_outlined, Icons.timeline),
     _Item(6, 'Hoạt động', Icons.timeline_outlined, Icons.timeline),
     _Item(7, 'Báo cáo', Icons.insert_chart_outlined, Icons.insert_chart),
     _Item(8, 'Cài đặt', Icons.settings_outlined, Icons.settings),
@@ -652,18 +655,7 @@ class _AppShellState extends State<AppShell> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4A2C2A),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.local_cafe_outlined,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+                const StoreLogo(size: 32),
                 if (isWide) ...[
                   const SizedBox(width: 10),
                   const Expanded(
@@ -671,7 +663,7 @@ class _AppShellState extends State<AppShell> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Kho Trà Sữa',
+                          'Quản Lý Kho',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
@@ -679,7 +671,7 @@ class _AppShellState extends State<AppShell> {
                           ),
                         ),
                         Text(
-                          'NHẬP · XUẤT · TỒN',
+                          'BÁN HÀNG & KHO',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -1164,7 +1156,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     final scaffold = Scaffold(
-      floatingActionButton: _aiUnavailable
+      floatingActionButton: (!_enableAiAssistant || _aiUnavailable)
           ? null
           : (layout.isWide
               ? FloatingActionButton.extended(
@@ -1189,11 +1181,28 @@ class _AppShellState extends State<AppShell> {
           layout.isCompact ? _bottomBar(session: session) : null,
     );
 
-    return RepositoryScope(
-      repository: _repository!,
-      child: SyncScope(
-        controller: _syncController,
-        child: _shortcutWrapper(scaffold),
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final overlayStyle = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
+      systemStatusBarContrastEnforced: false,
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: RepositoryScope(
+        repository: _repository!,
+        child: SyncScope(
+          controller: _syncController,
+          child: _shortcutWrapper(scaffold),
+        ),
       ),
     );
   }

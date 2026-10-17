@@ -91,52 +91,45 @@ async def reset_demo_database():
 
         # 3. Cập nhật tên hiển thị của Users
         user_names = {
-            "demo_maker": "Nguyễn Hoàng An (GDV)",
-            "demo_checker": "Trần Tuấn Bình (KSV)",
-            "demo_auditor": "Lê Khánh Chi (KTNB)",
-            "demo_admin": "Phạm Minh Trị (Admin)",
-            "demo_approver2": "Hoàng Quốc Việt (Trưởng KSV)",
+            "demo_maker": "Nguyễn Thị Mai (Pha Chế)",
+            "demo_checker": "Trần Văn Quản Lý (Quản Lý Cửa Hàng)",
+            "demo_auditor": "Lê Khánh Chi (Kiểm Soát Vận Hành)",
+            "demo_admin": "Phạm Minh Trị (Chủ Quán / Admin)",
+            "demo_approver2": "Hoàng Quốc Việt (Trưởng Ca)",
         }
         for uname, dname in user_names.items():
             user = (await db.execute(select(User).where(User.username == uname))).scalars().first()
             if user:
                 user.display_name_demo = dname
         await db.commit()
-        print("Đã chuẩn hóa tên cán bộ ngân hàng.")
+        print("Đã chuẩn hóa tên nhân sự cửa hàng trà sữa.")
 
     # 4. Chạy seed_demo để nạp lại từ sample-data sạch
     await seed_demo()
 
-    # 5. Nạp thêm các kết nối mẫu ngân hàng
+    # 5. Nạp các kết nối mẫu thiết bị cửa hàng F&B
     async with AsyncSessionLocal() as db:
         existing_conns = (await db.execute(select(IntegrationConnection))).scalars().all()
         if not existing_conns:
             conns = [
                 IntegrationConnection(
                     id=uuid.uuid4(),
-                    type="core_banking",
-                    name="Cổng Tích Hợp Core Banking T24 (ISO 8583)",
+                    type="pos_printer",
+                    name="Máy In Bill & POS Quầy Thu Ngân",
                     status="connected",
-                    config_json={"endpoint": "https://core.khotrasua.internal/api/v2/transactions"},
+                    config_json={"endpoint": "https://pos.khotrasua.internal/api/v1/receipts"},
                 ),
                 IntegrationConnection(
                     id=uuid.uuid4(),
-                    type="napas",
-                    name="Cổng Chuyển Mạch Tài Chính Quốc Gia NAPAS",
+                    type="delivery_hub",
+                    name="Cổng Đồng Bộ Đơn Giao Hàng Trực Tuyến",
                     status="connected",
-                    config_json={"endpoint": "https://napas.gateway.vn/switch/v1/settlement"},
-                ),
-                IntegrationConnection(
-                    id=uuid.uuid4(),
-                    type="oracle_gl",
-                    name="Sổ Cái Kế Toán Tổng Hợp Oracle GL ERP",
-                    status="connected",
-                    config_json={"endpoint": "https://gl.erp.internal/soap/v1/ledger"},
+                    config_json={"endpoint": "https://hub.delivery.vn/orders/v1"},
                 ),
             ]
             db.add_all(conns)
             await db.commit()
-            print("Đã nạp 3 kết nối hệ thống ngân hàng chuẩn.")
+            print("Đã nạp kết nối POS và đối tác giao hàng.")
 
         # Seed sample ETL Connection & Pipeline
         existing_etl_conn = (await db.execute(select(EtlConnection))).scalars().first()

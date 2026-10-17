@@ -73,11 +73,22 @@ async def init_db() -> None:
         import app.models.inventory  # noqa: F401
         import app.models.reconciliation  # noqa: F401
 
+        from sqlalchemy import text
+
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            for col_stmt in [
+                "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS category VARCHAR(128)",
+                "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS packaging VARCHAR(256)",
+                "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS cost_price NUMERIC(15,2)",
+                "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS selling_price NUMERIC(15,2)",
+                "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS min_stock NUMERIC(12,2)",
+            ]:
+                try:
+                    await conn.execute(text(col_stmt))
+                except Exception as ex:
+                    logger.warning(f"Migration note: {ex}")
         if settings.app_env != "production":
-            from sqlalchemy import text
-
             from app.seed import seed_demo
 
             await seed_demo()

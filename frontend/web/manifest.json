@@ -1,11 +1,11 @@
 {
-    "name": "Quản Lý Nhập Xuất Tồn Quán Trà Sữa",
-    "short_name": "Kho Trà Sữa",
+    "name": "Quản Lý Bán Hàng & Kho",
+    "short_name": "Bán Hàng & Kho",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#4A2C2A",
-    "theme_color": "#4A2C2A",
-    "description": "Ứng dụng quản lý nhập, xuất và tồn nguyên vật liệu cho quán trà sữa.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#FFFFFF",
+    "description": "Ứng dụng quản lý bán hàng, kho hàng và công nợ thực chiến.",
     "orientation": "any",
     "prefer_related_applications": false,
     "icons": [

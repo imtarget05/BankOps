@@ -1,5 +1,6 @@
 import "package:kho_tra_sua/src/app/app_shell.dart";
 import "package:kho_tra_sua/src/core/theme/app_theme.dart";
+import "package:kho_tra_sua/src/core/widgets/store_logo.dart";
 import "package:kho_tra_sua/src/data/repositories/fake_repository.dart";
 import "package:kho_tra_sua/src/features/auth/auth_service.dart";
 import "package:flutter/material.dart";
@@ -43,7 +44,7 @@ void main() {
 
     // Verify wide/medium layout: NavigationBar biến mất, thanh sidebar xuất hiện
     expect(find.byType(NavigationBar), findsNothing);
-    expect(find.byIcon(Icons.local_cafe_outlined), findsOneWidget);
+    expect(find.byType(StoreLogo), findsOneWidget);
     expect(find.byKey(const Key('nav-requests')), findsOneWidget);
 
     // Nội dung màn hình vẫn giữ nguyên vẹn

@@ -102,6 +102,10 @@ class InventoryItem {
     required this.trackedSerial,
     this.category,
     this.packaging,
+    this.costPrice,
+    this.sellingPrice,
+    this.minStock,
+    this.imageUrl,
   });
 
   final String id;
@@ -111,6 +115,10 @@ class InventoryItem {
   final bool trackedSerial;
   final String? category;
   final String? packaging;
+  final double? costPrice;
+  final double? sellingPrice;
+  final double? minStock;
+  final String? imageUrl;
 }
 
 /// Kết quả import mặt hàng hàng loạt.

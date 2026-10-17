@@ -281,12 +281,12 @@ async def create_user(
     clean_email = body.email.strip().lower() if body.email and body.email.strip() else None
 
     # Invite qua email BẮT BUỘC email thật có format hợp lệ (không cho placeholder).
-    if body.onboarding_method == "invite_email":
+    if body.onboarding_method in ("invite_email", "email_invite"):
         if not clean_email:
             raise AppError(
                 422,
                 "EMAIL_REQUIRED",
-                "Onboarding 'invite_email' bắt buộc email thật của nhân viên để nhận thư mời.",
+                "Onboarding mời qua email bắt buộc email thật của nhân viên để nhận thư mời.",
             )
         if not is_valid_email(clean_email):
             raise AppError(

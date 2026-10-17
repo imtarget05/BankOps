@@ -230,6 +230,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
     bool trackedSerial = false,
     String? category,
     String? packaging,
+    double? costPrice,
+    double? sellingPrice,
+    double? minStock,
   }) async {
     _ensureItemsInitialized();
     final itm = InventoryItem(
@@ -240,6 +243,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
       trackedSerial: trackedSerial,
       category: category,
       packaging: packaging,
+      costPrice: costPrice,
+      sellingPrice: sellingPrice,
+      minStock: minStock,
     );
     _items.add(itm);
     return _delay(itm);
@@ -261,6 +267,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
       final category = it['category']?.toString();
       final packaging = it['packaging']?.toString();
       final trackedSerial = it['tracked_serial'] == true;
+      final costPrice = it['cost_price'] is num ? (it['cost_price'] as num).toDouble() : null;
+      final sellingPrice = it['selling_price'] is num ? (it['selling_price'] as num).toDouble() : null;
+      final minStock = it['min_stock'] is num ? (it['min_stock'] as num).toDouble() : null;
 
       if (sku.isEmpty || name.isEmpty || existingSkus.contains(sku)) {
         skipped++;
@@ -276,6 +285,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
         trackedSerial: trackedSerial,
         category: category,
         packaging: packaging,
+        costPrice: costPrice,
+        sellingPrice: sellingPrice,
+        minStock: minStock,
       );
       _items.add(newItem);
       createdList.add(newItem);
@@ -296,6 +308,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
     bool? trackedSerial,
     String? category,
     String? packaging,
+    double? costPrice,
+    double? sellingPrice,
+    double? minStock,
   }) async {
     final idx = _items.indexWhere((i) => i.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy vật tư');
@@ -308,6 +323,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
       trackedSerial: trackedSerial ?? cur.trackedSerial,
       category: category ?? cur.category,
       packaging: packaging ?? cur.packaging,
+      costPrice: costPrice ?? cur.costPrice,
+      sellingPrice: sellingPrice ?? cur.sellingPrice,
+      minStock: minStock ?? cur.minStock,
     );
     return _delay(_items[idx]);
   }
@@ -327,11 +345,51 @@ class FakeBankOpsRepository implements BankOpsRepository {
     return _delay(null);
   }
 
+  final _balances = <StockBalance>[];
+  bool _balancesInitialized = false;
+
+  void _ensureBalancesInitialized() {
+    if (!_balancesInitialized) {
+      _balancesInitialized = true;
+      _balances.addAll(_seedBalances());
+    }
+  }
+
   @override
-  Future<List<StockBalance>> getBalances({String? locationId}) =>
-      _delay(_seedBalances()
-          .where((b) => locationId == null || b.locationId == locationId)
-          .toList());
+  Future<List<StockBalance>> getBalances({String? locationId}) {
+    _ensureBalancesInitialized();
+    return _delay(_balances
+        .where((b) => locationId == null || b.locationId == locationId)
+        .toList());
+  }
+
+  @override
+  Future<void> resetStoreData({bool keepCatalog = true}) async {
+    _stockRequests.clear();
+    _stocktakes.clear();
+    _assetLogs.clear();
+    _assets.clear();
+    if (!keepCatalog) {
+      _items.clear();
+      _itemsInitialized = true;
+      _balances.clear();
+      _balancesInitialized = true;
+    } else {
+      _ensureBalancesInitialized();
+      _balances.clear();
+      _ensureItemsInitialized();
+      for (final it in _items) {
+        _balances.add(StockBalance(
+          locationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+          itemId: it.id,
+          quantity: '0',
+          reservedQuantity: '0',
+          availableQuantity: '0',
+        ));
+      }
+    }
+    return _delay(null);
+  }
 
   static AssetStatus _assetStatus(String raw) {
     for (final s in AssetStatus.values) {
@@ -834,8 +892,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? reason,
   }) async {
     if (_stockRequests.isEmpty) _stockRequests.addAll(_seedStockRequests());
+    final nextNum = _stockRequests.fold<int>(0, (maxId, r) {
+      final numPart = int.tryParse(r.id.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+      return numPart > maxId ? numPart : maxId;
+    }) + 1;
     final created = StockRequest(
-      id: 'sr-000${_stockRequests.length + 1}',
+      id: 'sr-${nextNum.toString().padLeft(4, '0')}',
       kind: kind,
       status: RequestStatus.draft,
       version: 1,
@@ -1002,8 +1064,12 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? reason,
   }) async {
     if (_cashRequests.isEmpty) _cashRequests.addAll(_seedCashRequests());
+    final nextNum = _cashRequests.fold<int>(0, (maxId, r) {
+      final numPart = int.tryParse(r.id.replaceAll(RegExp(r'[^\d]'), '')) ?? 0;
+      return numPart > maxId ? numPart : maxId;
+    }) + 1;
     final created = CashRequest(
-      id: 'cr-000${_cashRequests.length + 1}',
+      id: 'cr-${nextNum.toString().padLeft(4, '0')}',
       kind: kind,
       status: RequestStatus.draft,
       version: 1,
@@ -1663,46 +1729,68 @@ class FakeBankOpsRepository implements BankOpsRepository {
 
   final List<BranchDto> _branches = [
     const BranchDto(
-        id: 'br_ho',
-        code: 'HO',
-        name: 'Hội sở chính',
+        id: 'br_q1',
+        code: 'CH_QUAN_1',
+        name: 'Cửa hàng Trà Sữa Quận 1 (Cửa hàng chính)',
         address: 'Quận 1, TP.HCM',
+        active: true),
+    const BranchDto(
+        id: 'br_q3',
+        code: 'CH_QUAN_3',
+        name: 'Cửa hàng Trà Sữa Quận 3',
+        address: 'Quận 3, TP.HCM',
         active: true),
     const BranchDto(
         id: 'br_bt',
-        code: 'CN_BEN_THANH',
-        name: 'Chi nhánh Bến Thành',
-        address: 'Quận 1, TP.HCM',
-        active: true),
-    const BranchDto(
-        id: 'br_hk',
-        code: 'CN_HOAN_KIEM',
-        name: 'Chi nhánh Hoàn Kiếm',
-        address: 'Hoàn Kiếm, Hà Nội',
+        code: 'CH_BINH_THANH',
+        name: 'Cửa hàng Trà Sữa Bình Thạnh',
+        address: 'Bình Thạnh, TP.HCM',
         active: true),
   ];
 
   final List<RoleDto> _roles = [
-    const RoleDto(code: 'admin', name: 'Quản trị viên hệ thống', capabilities: [
-      'iam:admin',
-      'etl:admin',
-      'etl:design',
-      'etl:run',
-      'etl:review',
-      'etl:post_balance'
-    ]),
     const RoleDto(
-        code: 'staff',
-        name: 'Nhân viên giao dịch (Maker)',
-        capabilities: ['inventory:create_request', 'etl:run']),
+      code: 'admin',
+      name: 'Chủ quán / Quản lý hệ thống (Admin)',
+      capabilities: [
+        'iam:admin',
+        'admin:user_management',
+        'admin',
+        'inventory:manage_catalog',
+        'inventory:approve_request',
+        'inventory:view_balances',
+        'cash:approve_request',
+        'cash:view_balances',
+      ],
+    ),
     const RoleDto(
-        code: 'approver',
-        name: 'Kiểm soát viên (Checker)',
-        capabilities: ['inventory:approve_request', 'etl:review']),
+      code: 'staff',
+      name: 'Nhân viên pha chế / Thu ngân (Staff)',
+      capabilities: [
+        'inventory:create_request',
+        'inventory:view_balances',
+        'cash:create_request',
+        'cash:view_balances',
+      ],
+    ),
     const RoleDto(
-        code: 'auditor',
-        name: 'Kiểm toán nội bộ',
-        capabilities: ['audit:view']),
+      code: 'approver',
+      name: 'Quản lý ca trực (Checker)',
+      capabilities: [
+        'inventory:approve_request',
+        'inventory:view_balances',
+        'cash:approve_request',
+        'cash:view_balances',
+      ],
+    ),
+    const RoleDto(
+      code: 'auditor',
+      name: 'Kiểm soát chất lượng (Auditor)',
+      capabilities: [
+        'audit:view',
+        'inventory:view_balances',
+      ],
+    ),
   ];
 
   final List<EmployeeUserDto> _employees = [
@@ -1710,35 +1798,48 @@ class FakeBankOpsRepository implements BankOpsRepository {
       id: 'emp_1',
       username: 'demo_admin',
       displayName: 'Phạm Minh Trị (Admin)',
-      email: 'admin@bankops.vn',
+      email: 'admin@khotrasua.vn',
       status: 'active',
       roles: ['admin'],
       capabilities: [
         'iam:admin',
-        'etl:admin',
-        'etl:design',
-        'etl:run',
-        'etl:review',
-        'etl:post_balance'
+        'admin:user_management',
+        'admin',
+        'inventory:manage_catalog',
+        'inventory:approve_request',
+        'inventory:view_balances',
       ],
     ),
     const EmployeeUserDto(
       id: 'emp_2',
       username: 'demo_maker',
       displayName: 'Nguyễn Hoàng An (GDV)',
-      email: 'maker@bankops.vn',
+      email: 'maker@khotrasua.vn',
       status: 'active',
       roles: ['staff'],
-      capabilities: ['inventory:create_request', 'etl:run'],
+      capabilities: [
+        'inventory:create_request',
+        'inventory:view_balances',
+        'cash:create_request',
+        'cash:view_balances',
+      ],
     ),
     const EmployeeUserDto(
       id: 'emp_3',
       username: 'demo_checker',
       displayName: 'Trần Tuấn Bình (KSV)',
-      email: 'checker@bankops.vn',
+      email: 'checker@khotrasua.vn',
       status: 'active',
       roles: ['admin', 'approver', 'inventory_manager'],
-      capabilities: ['iam:admin', 'admin:user_management', 'admin', 'inventory:approve_request', 'etl:review'],
+      capabilities: [
+        'iam:admin',
+        'admin:user_management',
+        'admin',
+        'inventory:approve_request',
+        'inventory:manage_catalog',
+        'inventory:view_balances',
+        'cash:approve_request',
+      ],
     ),
   ];
 

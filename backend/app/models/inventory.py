@@ -43,6 +43,9 @@ class Item(Base, TimestampMixin):
     # location-specific in ``inv_stock_levels``.
     category: str | None = Column(String(128), nullable=True)
     packaging: str | None = Column(String(256), nullable=True)
+    cost_price: Decimal | None = Column(Numeric(14, 2), nullable=True)
+    selling_price: Decimal | None = Column(Numeric(14, 2), nullable=True)
+    min_stock: Decimal | None = Column(Numeric(12, 2), nullable=True)
     tracked_serial: bool = Column(Boolean, default=False, nullable=False)
     active: bool = Column(Boolean, default=True, nullable=False)
 

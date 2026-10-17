@@ -5,9 +5,14 @@ part of 'fake_repository.dart';
 
 List<AppUser> _seedUsers() => const [
       AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
+          username: 'admin',
+          displayName: 'Trần Văn Quản Lý (Chủ Cửa Hàng - Admin)',
+          roles: ['admin', 'inventory_manager', 'approver']),
+      AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
-          username: 'demo_maker',
-          displayName: 'Nguyễn Thị Mai (Trưởng Ca Sáng - Staff)',
+          username: 'staff',
+          displayName: 'Nguyễn Thị Mai (Nhân Viên Bán Hàng & Kho)',
           roles: ['staff']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
@@ -15,25 +20,15 @@ List<AppUser> _seedUsers() => const [
           displayName: 'Trần Văn Quản Lý (Quản Lý Cửa Hàng - Admin)',
           roles: ['approver', 'inventory_manager', 'admin']),
       AppUser(
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+          username: 'demo_maker',
+          displayName: 'Nguyễn Thị Mai (Trưởng Ca Sáng - Staff)',
+          roles: ['staff']),
+      AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3',
           username: 'demo_auditor',
           displayName: 'Lê Khánh Chi (Kiểm Soát Viên - Auditor)',
           roles: ['auditor']),
-      AppUser(
-          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
-          username: 'staff_morning',
-          displayName: 'Nguyễn Thị Mai (Pha Chế Ca Sáng 07:30 - 15:00)',
-          roles: ['staff']),
-      AppUser(
-          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5',
-          username: 'staff_afternoon',
-          displayName: 'Lê Hoàng Nam (Pha Chế Ca Chiều 15:00 - 23:00)',
-          roles: ['staff']),
-      AppUser(
-          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6',
-          username: 'staff_split',
-          displayName: 'Phạm Minh Tuấn (Pha Chế Ca Lỡ 07:30 - 18:00)',
-          roles: ['staff']),
       AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
           username: 'manager_demo',
@@ -68,6 +63,9 @@ List<InventoryItem> _seedItems() => const [
           unit: 'gói',
           category: 'Nhóm Trà',
           packaging: '500g/gói (Thùng 20 gói)',
+          costPrice: 65000,
+          sellingPrice: 95000,
+          minStock: 10,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
@@ -76,6 +74,9 @@ List<InventoryItem> _seedItems() => const [
           unit: 'gói',
           category: 'Nhóm Trà',
           packaging: '500g/gói (Thùng 20 gói)',
+          costPrice: 70000,
+          sellingPrice: 105000,
+          minStock: 10,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3',
@@ -84,6 +85,9 @@ List<InventoryItem> _seedItems() => const [
           unit: 'gói',
           category: 'Nhóm Trà',
           packaging: '500g/gói (Thùng 20 gói)',
+          costPrice: 85000,
+          sellingPrice: 125000,
+          minStock: 8,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc4',
@@ -92,6 +96,9 @@ List<InventoryItem> _seedItems() => const [
           unit: 'túi',
           category: 'Nhóm Bột & Sữa',
           packaging: '1kg/túi (Thùng 12 túi)',
+          costPrice: 75000,
+          sellingPrice: 110000,
+          minStock: 15,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc5',
@@ -100,6 +107,9 @@ List<InventoryItem> _seedItems() => const [
           unit: 'hộp',
           category: 'Nhóm Bột & Sữa',
           packaging: '1 Lít/hộp (Thùng 12 hộp)',
+          costPrice: 32000,
+          sellingPrice: 45000,
+          minStock: 24,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc6',
@@ -108,6 +118,9 @@ List<InventoryItem> _seedItems() => const [
           unit: 'túi',
           category: 'Nhóm Bột & Sữa',
           packaging: '1kg/túi (Thùng 12 túi)',
+          costPrice: 42000,
+          sellingPrice: 60000,
+          minStock: 12,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc7',
@@ -116,86 +129,86 @@ List<InventoryItem> _seedItems() => const [
           unit: 'gói',
           category: 'Topping',
           packaging: '1kg/gói (Thùng 20 gói)',
+          costPrice: 38000,
+          sellingPrice: 55000,
+          minStock: 15,
           trackedSerial: false),
       InventoryItem(
           id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc8',
-          sku: 'TRAN-CHAU-1KG',
-          name: 'Trân Châu Đen Đóng Túi',
-          unit: 'túi',
-          category: 'Topping',
-          packaging: '1kg/túi',
-          trackedSerial: false),
-      InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc9',
           sku: 'TRAN-CHAU-3Q',
           name: 'Trân Châu Trắng 3Q Sea Jelly',
           unit: 'túi',
           category: 'Topping',
           packaging: '2kg/túi',
+          costPrice: 55000,
+          sellingPrice: 80000,
+          minStock: 8,
           trackedSerial: false),
       InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc10',
+          id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc9',
           sku: 'THACH-NHA-DAM',
           name: 'Thạch Nha Đam Giòn Aloka',
           unit: 'túi',
           category: 'Topping',
           packaging: '1kg/túi',
+          costPrice: 35000,
+          sellingPrice: 50000,
+          minStock: 10,
           trackedSerial: false),
       InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc11',
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc10',
           sku: 'SYRUP-DAO-700ML',
           name: 'Syrup Đào Monin Chai Thủy Tinh',
           unit: 'chai',
           category: 'Syrup & Mứt',
           packaging: '700ml/chai',
+          costPrice: 165000,
+          sellingPrice: 220000,
+          minStock: 5,
           trackedSerial: false),
       InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc12',
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc11',
           sku: 'DUONG-NUOC-5L',
           name: 'Nước Đường Bắp Đậm Đặc',
           unit: 'can',
           category: 'Syrup & Mứt',
           packaging: '5 Lít/can',
+          costPrice: 280000,
+          sellingPrice: 360000,
+          minStock: 4,
           trackedSerial: false),
       InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc13',
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc12',
           sku: 'LY-PP-700ML',
           name: 'Ly Nhựa PP Trong 700ml',
           unit: 'cái',
           category: 'Bao bì',
           packaging: '50 cái/cây',
+          costPrice: 850,
+          sellingPrice: 1500,
+          minStock: 200,
           trackedSerial: false),
       InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc14',
-          sku: 'LY-700ML',
-          name: 'Ly nhựa 700 ml',
-          unit: 'cái',
-          category: 'Bao bì',
-          packaging: '50 cái/lốc',
-          trackedSerial: false),
-      InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc15',
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc13',
           sku: 'CUON-MANG-EP',
           name: 'Cuộn Màng Ép Miệng Ly Trà Sữa',
           unit: 'cuộn',
           category: 'Bao bì',
           packaging: '3000 nắp/cuộn',
+          costPrice: 120000,
+          sellingPrice: 180000,
+          minStock: 2,
           trackedSerial: false),
       InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc20',
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc14',
           sku: 'ONG-HUT-PP',
           name: 'Ống Hút Phi 12 Trà Sữa',
-          unit: 'cái',
+          unit: 'gói',
           category: 'Bao bì',
-          packaging: '100 cái/bịch (Kiện 5000 cái)',
-          trackedSerial: false),
-      InventoryItem(
-          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc21',
-          sku: 'TUI-MANG-VE',
-          name: 'Túi Mang Về 2 Ngăn',
-          unit: 'cái',
-          category: 'Bao bì',
-          packaging: '100 cái/xấp (Kiện 2000 cái)',
+          packaging: '100 cái/gói',
+          costPrice: 15000,
+          sellingPrice: 25000,
+          minStock: 10,
           trackedSerial: false),
     ];
 
@@ -268,33 +281,24 @@ List<StockRequest> _seedStockRequests() => [
 List<Cashbox> _seedCashboxes() => const [
       Cashbox(
           id: '11111111-1111-4111-8111-111111111111',
-          code: 'DEMO-CASH-01',
-          name: 'Két Sắt Đại Quỹ Hội Sở Chính (Main Vault)',
-          openingBalance: '25000000000.00'),
+          code: 'CASH-BAR-01',
+          name: 'Két Tiền Mặt Quầy Thu Ngân',
+          openingBalance: '5000000.00'),
       Cashbox(
           id: '11111111-1111-4111-8111-111111111112',
-          code: 'TELLER-BOX-01',
-          name: 'Két Quầy Giao Dịch Số 01 - Hội Sở',
-          openingBalance: '500000000.00'),
-      Cashbox(
-          id: '11111111-1111-4111-8111-111111111113',
-          code: 'ATM-VAULT-01',
-          name: 'Hộp Tiền Cây ATM Trung Tâm Hội Sở',
-          openingBalance: '1200000000.00'),
+          code: 'CASH-SAFE-01',
+          name: 'Két Sắt Dự Phòng Cửa Hàng',
+          openingBalance: '10000000.00'),
     ];
 
 List<CashBalance> _seedCashBalances() => const [
       CashBalance(
           cashboxId: '11111111-1111-4111-8111-111111111111',
-          amount: '25850000000.00',
+          amount: '5000000.00',
           currency: 'VND'),
       CashBalance(
           cashboxId: '11111111-1111-4111-8111-111111111112',
-          amount: '480000000.00',
-          currency: 'VND'),
-      CashBalance(
-          cashboxId: '11111111-1111-4111-8111-111111111113',
-          amount: '1150000000.00',
+          amount: '10000000.00',
           currency: 'VND'),
     ];
 
@@ -303,18 +307,10 @@ List<JournalEntry> _seedJournals() => [
           id: 'je-0001',
           cashboxId: '11111111-1111-4111-8111-111111111111',
           kind: 'receipt',
-          amount: '850000000.00',
+          amount: '5000000.00',
           currency: 'VND',
-          reason: 'Nộp tiền tiếp quỹ từ Ngân hàng Nhà nước',
+          reason: 'Tiền mặt đầu ca trực quầy thu ngân',
           createdAt: DateTime.utc(2026, 10, 1)),
-      JournalEntry(
-          id: 'je-0002',
-          cashboxId: '11111111-1111-4111-8111-111111111112',
-          kind: 'payment',
-          amount: '20000000.00',
-          currency: 'VND',
-          reason: 'Chi tiền mặt giải ngân khoản vay cá nhân',
-          createdAt: DateTime.utc(2026, 10, 3)),
     ];
 
 List<CashRequest> _seedCashRequests() => [
@@ -324,11 +320,11 @@ List<CashRequest> _seedCashRequests() => [
           status: RequestStatus.draft,
           version: 1,
           cashboxId: '11111111-1111-4111-8111-111111111111',
-          amount: '50000000.00',
+          amount: '2000000.00',
           currency: 'VND',
-          reason: 'Nộp điều chuyển tiền mặt từ chi nhánh',
+          reason: 'Nộp tiền mặt bán lẻ ca tối hôm trước',
           createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
-          createdByName: 'Nguyễn Hoàng An (GDV)',
+          createdByName: 'Nguyễn Thị Mai (Pha Chế)',
           createdAt: DateTime.utc(2026, 10, 5)),
       CashRequest(
           id: 'cr-0002',
@@ -336,11 +332,11 @@ List<CashRequest> _seedCashRequests() => [
           status: RequestStatus.pending,
           version: 1,
           cashboxId: '11111111-1111-4111-8111-111111111111',
-          amount: '35000000.00',
+          amount: '150000.00',
           currency: 'VND',
-          reason: 'Tiếp quỹ đầu ngày cho Quầy số 01',
-          createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
-          createdByName: 'Trần Tuấn Bình (KSV)',
+          reason: 'Rút tiền mặt thanh toán đá viên ca sáng',
+          createdBy: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+          createdByName: 'Nguyễn Thị Mai (Pha Chế)',
           createdAt: DateTime.utc(2026, 10, 6)),
     ];
 
@@ -353,60 +349,11 @@ List<ActivityEvent> _seedActivity() => [
           messageKey: 'stock_request_created',
           processed: 1,
           total: 1),
-      ActivityEvent(
-          id: 'ae-0002',
-          occurredAt: DateTime.utc(2026, 10, 8, 10, 30),
-          subjectId: 'cr-0002',
-          status: 'pending',
-          messageKey: 'cash_request_pending'),
     ];
 
-List<IntegrationConnection> _seedConnections() => const [
-      IntegrationConnection(
-          id: 'ic-0001',
-          name: 'Core Banking T24 Gateway (ISO 8583)',
-          endpoint: 'https://core.bankops.internal/api/v2',
-          status: 'connected',
-          lastTestedAt: null,
-          lastError: null),
-      IntegrationConnection(
-          id: 'ic-0002',
-          name: 'Cổng Chuyển Mạch Tài Chính Quốc Gia NAPAS',
-          endpoint: 'https://napas.gateway.vn/switch/v1',
-          status: 'connected',
-          lastTestedAt: null,
-          lastError: null),
-      IntegrationConnection(
-          id: 'ic-0003',
-          name: 'Sổ Cái Kế Toán Tổng Hợp Oracle GL ERP',
-          endpoint: 'https://gl.erp.internal/soap/v1',
-          status: 'connected',
-          lastTestedAt: null,
-          lastError: null),
-    ];
+List<IntegrationConnection> _seedConnections() => const [];
 
-List<IntegrationRun> _seedRuns() => [
-      IntegrationRun(
-          id: 'ir-0001',
-          connectionId: 'ic-0001',
-          status: 'succeeded',
-          phase: 'completed',
-          startedAt: DateTime.utc(2026, 10, 8, 8, 0),
-          processed: 1250,
-          errorCount: 0,
-          total: 1250,
-          endedAt: DateTime.utc(2026, 10, 8, 8, 2)),
-      IntegrationRun(
-          id: 'ir-0002',
-          connectionId: 'ic-0002',
-          status: 'succeeded',
-          phase: 'completed',
-          startedAt: DateTime.utc(2026, 10, 8, 12, 0),
-          processed: 840,
-          errorCount: 0,
-          total: 840,
-          endedAt: DateTime.utc(2026, 10, 8, 12, 1)),
-    ];
+List<IntegrationRun> _seedRuns() => const [];
 
 List<ReconciliationRun> _seedReconciliations() => [
       ReconciliationRun(

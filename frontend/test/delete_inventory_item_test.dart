@@ -277,8 +277,9 @@ void main() {
 
     // In compact mode, PopupMenuButton is shown instead of row of icon buttons
     final menuBtn = find.byKey(Key('menu-item-${firstItem.sku}'));
-    while (tester.widgetList(menuBtn).isEmpty) {
-      await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    while (tester.widgetList(menuBtn).isEmpty ||
+        tester.getCenter(menuBtn).dy > 750) {
+      await tester.drag(find.byType(ListView).first, const Offset(0, -250));
       await tester.pumpAndSettle();
     }
     expect(menuBtn, findsOneWidget);

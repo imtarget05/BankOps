@@ -214,7 +214,7 @@ void main() {
 
   group('SettingsScreen Security Options Tests', () {
     testWidgets(
-        'SettingsScreen displays change password and change PIN actions',
+        'SettingsScreen displays change password and removed change PIN action',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -244,7 +244,7 @@ void main() {
       expect(find.text('Tài khoản & Bảo mật'), findsOneWidget);
       expect(find.byKey(const Key('settings-change-password-tile')),
           findsOneWidget);
-      expect(find.byKey(const Key('settings-change-pin-tile')), findsOneWidget);
+      expect(find.byKey(const Key('settings-change-pin-tile')), findsNothing);
 
       // Tap change password tile opens dialog
       await tester.ensureVisible(
@@ -257,18 +257,6 @@ void main() {
       await tester.tap(find.byKey(const Key('change-password-cancel-btn')));
       await tester.pumpAndSettle();
       expect(find.byType(ChangePasswordDialog), findsNothing);
-
-      // Tap change PIN tile opens dialog
-      await tester
-          .ensureVisible(find.byKey(const Key('settings-change-pin-tile')));
-      await tester.tap(find.byKey(const Key('settings-change-pin-tile')));
-      await tester.pumpAndSettle();
-      expect(find.byType(ChangePinDialog), findsOneWidget);
-
-      // Close dialog
-      await tester.tap(find.byKey(const Key('change-pin-cancel-btn')));
-      await tester.pumpAndSettle();
-      expect(find.byType(ChangePinDialog), findsNothing);
     });
 
     testWidgets(
@@ -313,8 +301,8 @@ void main() {
       // Verify enterprise sections exist
       expect(find.text('Hồ Sơ Của Tôi'), findsOneWidget);
       expect(find.text('Tài khoản & Bảo mật'), findsOneWidget);
-      expect(find.text('Hệ thống & Cổng kết nối API'), findsOneWidget);
-      expect(find.text('Quản Lý Kho Trà Sữa v1.0.0'), findsOneWidget);
+      expect(find.text('Hệ thống & Cổng kết nối API'), findsNothing);
+      expect(find.text('Quản lý kho'), findsOneWidget);
       expect(find.text('Đăng xuất'), findsOneWidget);
     });
   });

@@ -8,8 +8,8 @@ import 'package:kho_tra_sua/src/features/settings/settings_screen.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  group('PWA Install & iOS Guide Redesign Tests', () {
-    testWidgets('Settings screen renders redesigned install card, non-breaking pill tabs and handles click', (tester) async {
+  group('PWA Install & Simplified Background Install Tests', () {
+    testWidgets('Settings screen renders streamlined 1-click install card with QR code, hides manual guides', (tester) async {
       final repo = FakeBankOpsRepository(latency: Duration.zero);
       final auth = AuthService();
 
@@ -31,7 +31,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Scroll down to the install card in the long Settings list
+      // Scroll down to the install card in the Settings list
       await tester.scrollUntilVisible(
         find.byKey(const Key('btn-install-pwa')),
         300,
@@ -39,43 +39,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Ensure 1-Click PWA button is present with clean, non-blocky styling
+      // Ensure 1-Click PWA button and QR code are present
       final installBtn = find.byKey(const Key('btn-install-pwa'));
       expect(installBtn, findsOneWidget);
+      expect(find.text('Quét mã trên điện thoại'), findsOneWidget);
 
-      // Verify the horizontal platform pills exist
-      expect(find.text('iPhone / Safari'), findsOneWidget);
-      expect(find.text('Android / Chrome'), findsOneWidget);
-      expect(find.text('Zalo / Quét QR'), findsOneWidget);
+      // Verify the old platform pills and 4-step guides are removed/hidden
+      expect(find.text('iPhone / Safari'), findsNothing);
+      expect(find.text('Android / Chrome'), findsNothing);
+      expect(find.text('Zalo / Quét QR'), findsNothing);
+      expect(find.textContaining('Nhấn nút Chia sẻ (Share ⎋)'), findsNothing);
 
-      // Tap iPhone pill
-      await tester.tap(find.text('iPhone / Safari'));
-      await tester.pumpAndSettle();
-
-      // Check iOS specific guide contents
-      expect(find.textContaining('Nhấn nút Chia sẻ (Share ⎋)'), findsOneWidget);
-      expect(find.textContaining('Thêm vào MH chính'), findsWidgets);
-
-      // Tap Android pill
-      await tester.tap(find.text('Android / Chrome'));
-      await tester.pumpAndSettle();
-
-      // Check Android specific guide contents
-      expect(find.textContaining('Nhấn menu 3 chấm (⋮)'), findsOneWidget);
-      expect(find.textContaining('Chọn "Cài đặt ứng dụng"'), findsOneWidget);
-
-      // Tap the Install button to trigger install / guide modal
+      // Tap the Install button to trigger background execution without modal popup
       await tester.tap(installBtn);
       await tester.pumpAndSettle();
 
-      // Modal should appear with clear visual steps
-      expect(find.text('Đã hiểu, tiến hành ngay'), findsOneWidget);
-      expect(find.textContaining('Cài đặt trên'), findsWidgets);
-
-      // Dismiss modal
-      await tester.tap(find.text('Đã hiểu, tiến hành ngay'));
-      await tester.pumpAndSettle();
-
+      // Ensure no blocking modal sheet was popped up
+      expect(find.byType(BottomSheet), findsNothing);
       expect(find.text('Đã hiểu, tiến hành ngay'), findsNothing);
     });
 
@@ -111,7 +91,7 @@ void main() {
       expect(find.byKey(const Key('btn-install-pwa')), findsOneWidget);
     });
 
-    testWidgets('Settings screen provides force sync & clear cache buttons', (tester) async {
+    testWidgets('Settings screen removed duplicate sync buttons and build line, leaving clean Quản lý kho', (tester) async {
       final repo = FakeBankOpsRepository(latency: Duration.zero);
       final auth = AuthService();
 
@@ -133,38 +113,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('btn-force-sync-app')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
+      // Duplicate sync buttons should not exist
+      expect(find.byKey(const Key('btn-force-sync-app')), findsNothing);
+      expect(find.byKey(const Key('btn-sync-app-version')), findsNothing);
 
-      final forceSyncBtn = find.byKey(const Key('btn-force-sync-app'));
-      expect(forceSyncBtn, findsOneWidget);
+      // Build number line should not be exposed
+      expect(find.textContaining('Build:'), findsNothing);
 
-      await tester.tap(forceSyncBtn);
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(find.textContaining('Đang đồng bộ'), findsOneWidget);
-      
-      // Clear snackbars so the next button tap can show its own toast
-      ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first)).clearSnackBars();
-      await tester.pumpAndSettle();
-
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('btn-sync-app-version')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-
-      final versionSyncBtn = find.byKey(const Key('btn-sync-app-version'));
-      expect(versionSyncBtn, findsOneWidget);
-
-      await tester.tap(versionSyncBtn);
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(find.textContaining('Đang làm sạch bộ nhớ tạm'), findsOneWidget);
-      await tester.pumpAndSettle();
+      // Clean text Quản lý kho should be displayed
+      expect(find.text('Quản lý kho'), findsOneWidget);
+      expect(find.text('Hệ thống quản lý bán hàng và kho hàng'), findsOneWidget);
     });
   });
 }

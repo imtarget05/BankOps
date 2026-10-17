@@ -31,7 +31,7 @@ class AppUiSettingsController extends ThemeModeController {
 
   AppColorPreset _colorPreset = AppColorPreset.matcha;
   AppDensity _density = AppDensity.comfortable;
-  bool _showLiveTicker = true;
+  bool _showLiveTicker = false;
 
   AppColorPreset get colorPreset => _colorPreset;
   AppDensity get density => _density;

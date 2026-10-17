@@ -39,10 +39,16 @@ class AppScreen extends StatelessWidget {
       );
     }
 
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 1120),
-      padding: context.pagePadding,
-      child: content,
+    return SafeArea(
+      top: false, // AppBar đã xử lý top safe area
+      bottom: false, // NavigationBar đã xử lý bottom safe area
+      left: true, // Xử lý tai thỏ / giọt nước / Dynamic Island khi xoay ngang
+      right: true, // Xử lý tai thỏ / giọt nước / Dynamic Island khi xoay ngang
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 1120),
+        padding: context.pagePadding,
+        child: content,
+      ),
     );
   }
 }

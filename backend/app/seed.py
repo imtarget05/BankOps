@@ -255,6 +255,9 @@ async def seed_demo():
                     unit=item["unit"],
                     category=item.get("category"),
                     packaging=item.get("packaging"),
+                    cost_price=Decimal(str(item["cost_price"])) if item.get("cost_price") is not None else None,
+                    selling_price=Decimal(str(item["selling_price"])) if item.get("selling_price") is not None else None,
+                    min_stock=Decimal(str(item["min_stock"])) if item.get("min_stock") is not None else None,
                     tracked_serial=item.get("tracked_serial", False),
                     active=True,
                 ))
@@ -264,6 +267,12 @@ async def seed_demo():
                 existing.unit = item["unit"]
                 existing.category = item.get("category")
                 existing.packaging = item.get("packaging")
+                if item.get("cost_price") is not None:
+                    existing.cost_price = Decimal(str(item["cost_price"]))
+                if item.get("selling_price") is not None:
+                    existing.selling_price = Decimal(str(item["selling_price"]))
+                if item.get("min_stock") is not None:
+                    existing.min_stock = Decimal(str(item["min_stock"]))
                 # Giữ nguyên trạng thái active người dùng đã thiết lập (nếu đã xóa/ẩn thì không tự kích hoạt lại)
         if new_items:
             db.add_all(new_items)
