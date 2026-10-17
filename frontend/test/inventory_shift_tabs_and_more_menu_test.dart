@@ -88,8 +88,8 @@ void main() {
 
     // In ShiftWork mode:
     expect(find.text('Quản Lý Ca Làm Việc & Kiểm Kê Ca Pha Chế'), findsOneWidget);
-    expect(find.text('CA VẬN HÀNH'), findsOneWidget);
-    expect(find.text('TỔNG ĐỢT KIỂM KÊ'), findsOneWidget);
+    expect(find.text('TỔNG ĐỢT'), findsOneWidget);
+    expect(find.text('CHỜ DUYỆT'), findsOneWidget);
     expect(
         find.text('Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch'), findsOneWidget);
     expect(find.text('Quầy kiểm kê theo ca'), findsOneWidget);

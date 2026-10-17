@@ -81,7 +81,10 @@ class RoleVisibility {
     final username = user.username.trim().toLowerCase();
     if (email.contains('tanmainguyen') || username.contains('tanmainguyen')) return true;
     final roles = rolesOf(user);
-    if (roles.contains('admin') || roles.contains('system_admin') || roles.contains('manager')) return true;
+    if (roles.contains('admin') ||
+        roles.contains('system_admin') ||
+        roles.contains('manager') ||
+        roles.contains('owner')) return true;
     final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
     return caps.contains('iam:admin') || caps.contains('admin:user_management');
   }

@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/demo_banner.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 
@@ -220,6 +221,8 @@ class _ImportScreenState extends State<ImportScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const DemoBanner(),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),

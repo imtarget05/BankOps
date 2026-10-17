@@ -521,7 +521,7 @@ void main() {
       expect(find.text('Hồ Sơ Của Tôi'), findsOneWidget);
       expect(find.text('Nguyễn Văn Maker'), findsOneWidget);
       expect(find.text('@demo_maker · Mã NV: BO-8892'), findsOneWidget);
-      expect(find.text('GIAO DỊCH VIÊN (MAKER)'), findsOneWidget);
+      expect(find.text('NHÂN VIÊN LẬP PHIẾU'), findsOneWidget);
       expect(find.text('Hoạt động'), findsOneWidget);
       expect(find.text('maker@bankops.vn'), findsOneWidget);
       expect(find.text('0901 234 567'), findsOneWidget);

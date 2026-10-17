@@ -7,6 +7,7 @@ import '../../core/util/formatting.dart';
 import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/demo_banner.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
@@ -179,6 +180,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           .onSurfaceVariant,
                                     ),
                               ),
+                              const SizedBox(height: 8),
+                              const DemoBanner(),
                             ],
                           ),
                           Wrap(

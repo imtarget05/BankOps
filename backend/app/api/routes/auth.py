@@ -376,10 +376,8 @@ async def get_current_user_info(
     capabilities = await get_user_capabilities(db, current_user.id)
 
     user_email = (current_user.email or current_user.username or "").lower().strip()
-    is_superadmin = (
-        user_email in [e.lower() for e in settings.admin_emails]
-        or user_email == "tanmainguyenbinh@gmail.com"
-    )
+    admin_email_set = {e.lower().strip() for e in settings.admin_emails}
+    is_superadmin = user_email in admin_email_set
     if is_superadmin:
         for r in ["admin", "inventory_manager", "system_admin", "approver"]:
             if r not in roles:

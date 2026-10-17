@@ -113,10 +113,10 @@ void main() {
       await tester.pumpWidget(wrapWithScaffold(const ApprovalsScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Hộp Thư Phê Duyệt Kiểm Soát Kép (Maker–Checker)'), findsOneWidget);
+      expect(find.text('Hộp Thư Phê Duyệt Yêu Cầu'), findsOneWidget);
       expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
 
-      final titleTop = tester.getTopLeft(find.text('Hộp Thư Phê Duyệt Kiểm Soát Kép (Maker–Checker)')).dy;
+      final titleTop = tester.getTopLeft(find.text('Hộp Thư Phê Duyệt Yêu Cầu')).dy;
       final badgeTop = tester.getTopLeft(find.byIcon(Icons.shield_outlined)).dy;
       expect(titleTop, lessThan(badgeTop));
     });

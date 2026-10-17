@@ -105,6 +105,7 @@ class Settings(BaseSettings):
     admin_emails: list[str] = Field(
         default=[
             "tanmainguyenbinh@gmail.com",
+            "tanmainguyenbinhtan@gmail.com",
         ]
     )
 

@@ -46,6 +46,12 @@ class AuthService extends ChangeNotifier {
   static const String _offlineSessionKey = 'offline_session_user';
   static const String _offlineCreatedAtKey = 'offline_created_at';
 
+  /// Email của quản trị viên mặc định (có thể cấu hình qua --dart-define=DEFAULT_ADMIN_EMAIL=...)
+  static const String defaultAdminEmail = String.fromEnvironment(
+    'DEFAULT_ADMIN_EMAIL',
+    defaultValue: 'tanmainguyenbinh@gmail.com',
+  );
+
   /// TTL của phiên offline cục bộ: quá 24h thì discard, không restore.
   static const Duration kOfflineSessionTtl = Duration(hours: 24);
 
@@ -856,7 +862,7 @@ class AuthService extends ChangeNotifier {
     final safeUsername =
         email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
     final isSuperAdmin =
-        email.trim().toLowerCase() == 'tanmainguyenbinh@gmail.com';
+        email.trim().toLowerCase() == defaultAdminEmail.toLowerCase();
     return AppUser(
       id: 'offline-google-$safeUsername',
       username: safeUsername,
@@ -1105,8 +1111,8 @@ class AuthService extends ChangeNotifier {
     final email = json['email'] as String?;
     final username = json['username'] as String;
     final isSuperAdmin = email?.trim().toLowerCase() ==
-            'tanmainguyenbinh@gmail.com' ||
-        username.trim().toLowerCase() == 'tanmainguyenbinh@gmail.com';
+            defaultAdminEmail.toLowerCase() ||
+        username.trim().toLowerCase() == defaultAdminEmail.toLowerCase();
 
     final effectiveRoles = isSuperAdmin
         ? ({

@@ -243,7 +243,7 @@ void main() {
   testWidgets(
       'Compact mobile mode shows PopupMenuButton with delete option and no layout overflow',
       (WidgetTester tester) async {
-    // Typical mobile screen width (e.g. iPhone / Android WebView)
+    // Mobile screen width (< 960 compact)
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -264,7 +264,10 @@ void main() {
           child: MaterialApp(
             theme: AppTheme.light(),
             home: const Scaffold(
-              body: InventoryScreen(mode: InventoryTabMode.stock),
+              body: InventoryScreen(
+                mode: InventoryTabMode.stock,
+                initialViewMode: 'list',
+              ),
             ),
           ),
         ),
@@ -275,13 +278,14 @@ void main() {
     final items = await repo.getItems();
     final firstItem = items.first;
 
-    // In compact mode, PopupMenuButton is shown instead of row of icon buttons
     final menuBtn = find.byKey(Key('menu-item-${firstItem.sku}'));
-    while (tester.widgetList(menuBtn).isEmpty ||
-        tester.getCenter(menuBtn).dy > 750) {
-      await tester.drag(find.byType(ListView).first, const Offset(0, -250));
-      await tester.pumpAndSettle();
-    }
+    await tester.scrollUntilVisible(
+      menuBtn,
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(menuBtn);
+    await tester.pumpAndSettle();
     expect(menuBtn, findsOneWidget);
 
     // Tap menu button to open popup menu
@@ -289,7 +293,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify "Xóa mặt hàng" menu item is shown
-    final deleteMenuItem = find.byKey(Key('btn-delete-item-${firstItem.sku}'));
+    final deleteMenuItem = find.text('Xóa mặt hàng');
     expect(deleteMenuItem, findsOneWidget);
 
     // Tap delete in menu

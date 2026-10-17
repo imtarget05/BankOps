@@ -63,8 +63,8 @@ class _CashScreenState extends State<CashScreen> {
             TextField(
               controller: codeCtrl,
               decoration: const InputDecoration(
-                labelText: 'Mã Két Sắt *',
-                hintText: 'Ví dụ: CB-TELLER-03',
+                labelText: 'Mã Két Quầy / Ngăn Kéo *',
+                hintText: 'Ví dụ: POS-01',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -72,7 +72,7 @@ class _CashScreenState extends State<CashScreen> {
             TextField(
               controller: nameCtrl,
               decoration: const InputDecoration(
-                labelText: 'Tên Két Sắt *',
+                labelText: 'Tên Két Quầy / Ngăn Kéo *',
                 hintText: 'Ví dụ: Két Quầy Thu Ngân 1',
                 border: OutlineInputBorder(),
               ),
@@ -634,7 +634,7 @@ class _CashScreenState extends State<CashScreen> {
                     final currency = balance?.currency ?? 'VND';
                     final user = SessionScope.maybeOf(context)?.user;
                     final roles = RoleVisibility.rolesOf(user);
-                    final isAdmin = RoleVisibility.isAdmin(roles) || user?.email == 'tanmainguyenbinh@gmail.com';
+                    final isAdmin = RoleVisibility.isAdmin(roles);
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),

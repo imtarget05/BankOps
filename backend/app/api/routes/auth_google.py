@@ -236,10 +236,8 @@ async def login_with_google(
     user = result.scalars().first()
     is_new_user = user is None
 
-    is_superadmin = (
-        email.lower() in [e.lower() for e in settings.admin_emails]
-        or email.lower() == "tanmainguyenbinh@gmail.com"
-    )
+    admin_email_set = {e.lower().strip() for e in settings.admin_emails}
+    is_superadmin = email.lower().strip() in admin_email_set
 
     if is_new_user:
         new_id = uuid.uuid4()

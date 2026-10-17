@@ -114,9 +114,8 @@ void main() {
         expect(find.byKey(const Key('approval-select-all')), findsNothing);
         expect(find.byKey(const Key('approval-select-sr-0002')), findsNothing);
 
-        // Staff / Maker MUST see read-only informative banner and badge
-        expect(find.byKey(const Key('approvals-readonly-banner')), findsOneWidget);
-        expect(find.text('Chế độ chỉ xem theo dõi tiến độ'), findsOneWidget);
+        // Staff / Maker should NOT see yellow banner (removed per clean business UI)
+        expect(find.byKey(const Key('approvals-readonly-banner')), findsNothing);
         expect(find.byKey(const Key('approval-readonly-tag-sr-0002')), findsOneWidget);
         expect(find.text('Chờ kiểm soát viên duyệt (Chỉ xem)'), findsWidgets);
 

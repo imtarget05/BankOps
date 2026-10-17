@@ -4,6 +4,7 @@ import os
 import sys
 from collections.abc import AsyncIterator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -72,8 +73,6 @@ async def init_db() -> None:
         import app.models.integration  # noqa: F401
         import app.models.inventory  # noqa: F401
         import app.models.reconciliation  # noqa: F401
-
-        from sqlalchemy import text
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
