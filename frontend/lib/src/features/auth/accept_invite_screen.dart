@@ -26,7 +26,6 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
   late final TextEditingController _tokenCtrl;
   final _passwordCtrl = TextEditingController();
   final _confirmPasswordCtrl = TextEditingController();
-  final _pinCtrl = TextEditingController(text: '123456');
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -44,7 +43,6 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
     _tokenCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmPasswordCtrl.dispose();
-    _pinCtrl.dispose();
     super.dispose();
   }
 
@@ -59,7 +57,6 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
     final token = _tokenCtrl.text.trim();
     final password = _passwordCtrl.text;
     final confirm = _confirmPasswordCtrl.text;
-    final pin = _pinCtrl.text.trim();
 
     if (password != confirm) {
       setState(() => _errorMessage = 'Xác nhận mật khẩu mới không khớp.');
@@ -72,7 +69,6 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
       final ok = await auth.acceptInvite(
         inviteToken: token,
         newPassword: password,
-        pin: pin.isNotEmpty ? pin : null,
       );
 
       if (!mounted) return;
@@ -191,7 +187,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Nhận lời mời từ Quản trị viên. Thiết lập mật khẩu mới và mã PIN để bắt đầu làm việc.',
+                          'Nhận lời mời từ Quản trị viên. Thiết lập mật khẩu mới để bắt đầu làm việc.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,
@@ -257,8 +253,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                           controller: _tokenCtrl,
                           decoration: InputDecoration(
                             hintText: 'Dán mã mời kích hoạt...',
-                            prefixIcon: const Icon(Icons.vpn_key_outlined,
-                                size: 20),
+                            prefixIcon: const Icon(Icons.key, size: 20),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -293,8 +288,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
                             hintText: 'Tối thiểu 6 ký tự',
-                            prefixIcon: const Icon(Icons.lock_outline_rounded,
-                                size: 20),
+                            prefixIcon: const Icon(Icons.lock_outline, size: 20),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword
@@ -339,8 +333,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                           obscureText: _obscureConfirm,
                           decoration: InputDecoration(
                             hintText: 'Nhập lại mật khẩu mới',
-                            prefixIcon: const Icon(Icons.lock_reset_rounded,
-                                size: 20),
+                            prefixIcon: const Icon(Icons.lock_outline, size: 20),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscureConfirm
@@ -362,65 +355,6 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                           validator: (v) {
                             if (v != _passwordCtrl.text) {
                               return 'Mật khẩu xác nhận không trùng khớp';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Input PIN (6 digits)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                'Mã PIN ca trực (6 số)',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark
-                                      ? const Color(0xFFCBD5E1)
-                                      : const Color(0xFF334155),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Mặc định: 123456',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isDark
-                                    ? const Color(0xFF94A3B8)
-                                    : const Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _pinCtrl,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(6),
-                          ],
-                          decoration: InputDecoration(
-                            hintText: '123456',
-                            prefixIcon: const Icon(Icons.dialpad_rounded,
-                                size: 20),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                          ),
-                          validator: (v) {
-                            if (v != null &&
-                                v.isNotEmpty &&
-                                v.length != 6) {
-                              return 'Mã PIN phải đủ đúng 6 chữ số';
                             }
                             return null;
                           },

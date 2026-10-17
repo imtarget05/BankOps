@@ -80,7 +80,7 @@ void main() {
 
     expect(find.text('Kích Hoạt Tài Khoản'), findsOneWidget);
     expect(find.text('valid-test-token-123'), findsOneWidget);
-    expect(find.byType(TextFormField), findsNWidgets(4));
+    expect(find.byType(TextFormField), findsNWidgets(3));
 
     final submitBtn = find.text('Kích Hoạt & Đăng Nhập Ngay');
     await tester.ensureVisible(submitBtn);
@@ -133,7 +133,6 @@ void main() {
         final body = json.decode(req.body);
         expect(body['invite_token'], 'valid-token-xyz');
         expect(body['new_password'], 'PhaChe2026!');
-        expect(body['pin'], '123456');
 
         return http.Response(
           json.encode({
@@ -168,7 +167,6 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(1), 'PhaChe2026!');
     await tester.enterText(fields.at(2), 'PhaChe2026!');
-    await tester.enterText(fields.at(3), '123456');
     await tester.pump();
 
     final submitBtn = find.text('Kích Hoạt & Đăng Nhập Ngay');
