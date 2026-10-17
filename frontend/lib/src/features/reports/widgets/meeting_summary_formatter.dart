@@ -77,7 +77,7 @@ class MeetingSummaryFormatter {
     sb.writeln('**Đánh giá sức khỏe vận hành:** $assessmentStr');
     sb.writeln();
 
-    sb.writeln('## 1. DÒNG TIỀN & THANH KHOẢN QUỸ MÔ PHỎNG');
+    sb.writeln('## 1. DÒNG TIỀN & THANH KHOẢN SỔ QUỸ');
     sb.writeln(
         '- **Tổng thu quỹ:** ${AppFormat.money(totalIn.toStringAsFixed(0))}');
     sb.writeln(

@@ -26,6 +26,8 @@ class CashScreen extends StatefulWidget {
 
 class _CashScreenState extends State<CashScreen> {
   Future<_CashData>? _future;
+  String? _selectedCashboxId;
+  bool _showAllJournals = false;
 
   @override
   void didChangeDependencies() {
@@ -615,11 +617,24 @@ class _CashScreenState extends State<CashScreen> {
               const SizedBox(height: 24),
 
               // Section: Két sắt & Số dư
-              Text(
-                'Danh Sách Két Sắt & Số Dư Vật Lý',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Danh Sách Két Sắt & Số Dư Vật Lý',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Nhấn vào từng két để xem sổ bút toán & điều chỉnh số dư bên dưới',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               for (final box in data.cashboxes) ...[
@@ -635,14 +650,24 @@ class _CashScreenState extends State<CashScreen> {
                     final user = SessionScope.maybeOf(context)?.user;
                     final roles = RoleVisibility.rolesOf(user);
                     final isAdmin = RoleVisibility.isAdmin(roles);
+                    final effectiveSelectedId = _selectedCashboxId ??
+                        (data.cashboxes.isNotEmpty ? data.cashboxes.first.id : null);
+                    final isSelected = box.id == effectiveSelectedId;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        color: isSelected
+                            ? (isDark
+                                ? const Color(0xFF0F2E23)
+                                : const Color(0xFFF0FDF4))
+                            : (isDark ? const Color(0xFF1E293B) : Colors.white),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                          color: isSelected
+                              ? const Color(0xFF059669)
+                              : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                          width: isSelected ? 2 : 1,
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -657,164 +682,170 @@ class _CashScreenState extends State<CashScreen> {
                         borderRadius: BorderRadius.circular(16),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: () => _showCashboxDetailSheet(
-                            box: box,
-                            currentAmount: currentAmount,
-                            journals: data.journals,
-                            isAdmin: isAdmin,
-                          ),
+                          onTap: () {
+                            setState(() => _selectedCashboxId = box.id);
+                          },
                           child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Row(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF059669).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: const Icon(
-                                    Icons.savings_rounded,
-                                    size: 28,
-                                    color: Color(0xFF059669),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              box.code,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 12,
-                                                color: Color(0xFF1E3A8A),
-                                              ),
+                                // Hàng 1: Mã két, Tên két, Trạng thái, Menu
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? const Color(0xFF059669).withValues(alpha: 0.2)
+                                            : const Color(0xFF1E3A8A).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        box.code,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          color: isSelected
+                                              ? const Color(0xFF059669)
+                                              : const Color(0xFF1E3A8A),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        box.name,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                          color: isSelected
+                                              ? const Color(0xFF059669)
+                                              : null,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'ĐANG MỞ',
+                                        style: TextStyle(
+                                          color: Color(0xFF059669),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isAdmin) ...[
+                                      const SizedBox(width: 4),
+                                      PopupMenuButton<String>(
+                                        icon: const Icon(Icons.more_vert, size: 18),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        itemBuilder: (ctx) => [
+                                          const PopupMenuItem(
+                                            value: 'detail',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.info_outline_rounded, size: 16),
+                                                SizedBox(width: 8),
+                                                Text('Xem chi tiết dạng sheet'),
+                                              ],
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          Flexible(
-                                            child: Text(
-                                              box.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 16,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
+                                          const PopupMenuItem(
+                                            value: 'edit',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.edit_outlined, size: 16),
+                                                SizedBox(width: 8),
+                                                Text('Điều chỉnh số dư (Admin)'),
+                                              ],
                                             ),
                                           ),
-                                          const SizedBox(width: 10),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: const Text(
-                                              'ĐANG MỞ',
-                                              style: TextStyle(
-                                                color: Color(0xFF059669),
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w800,
-                                              ),
+                                          const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                                SizedBox(width: 8),
+                                                Text('Đóng & Xóa két', style: TextStyle(color: Colors.red)),
+                                              ],
                                             ),
                                           ),
                                         ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'Số dư ban đầu: ${AppFormat.money(box.openingBalance, currency: currency)} • Nhấn để xem chi tiết',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: theme.colorScheme.onSurfaceVariant,
-                                        ),
+                                        onSelected: (v) {
+                                          if (v == 'detail') {
+                                            _showCashboxDetailSheet(
+                                              box: box,
+                                              currentAmount: currentAmount,
+                                              journals: data.journals,
+                                              isAdmin: isAdmin,
+                                            );
+                                          }
+                                          if (v == 'edit') _showEditCashboxDialog(box, currentAmount);
+                                          if (v == 'delete') _confirmDeleteCashbox(box);
+                                        },
                                       ),
                                     ],
-                                  ),
+                                  ],
                                 ),
-                                Column(
+                                const SizedBox(height: 12),
+                                // Hàng 2: Số dư ban đầu bên trái, Số dư thực tế bên phải (cân đối, không bị chèn ép)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text(
-                                      'SỐ DƯ THỰC TẾ',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.5,
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Số dư ban đầu',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          AppFormat.money(box.openingBalance, currency: currency),
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      AppFormat.money(currentAmountStr, currency: currency),
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w900,
-                                        color: Color(0xFF059669),
-                                        letterSpacing: -0.5,
-                                      ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'SỐ DƯ THỰC TẾ',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.5,
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          AppFormat.money(currentAmountStr, currency: currency),
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF059669),
+                                            letterSpacing: -0.5,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                                const SizedBox(width: 8),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, size: 18),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  itemBuilder: (ctx) => [
-                                    const PopupMenuItem(
-                                      value: 'detail',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.info_outline_rounded, size: 16),
-                                          SizedBox(width: 8),
-                                          Text('Xem chi tiết két'),
-                                        ],
-                                      ),
-                                    ),
-                                    if (isAdmin)
-                                      const PopupMenuItem(
-                                        value: 'edit',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.edit_outlined, size: 16),
-                                            SizedBox(width: 8),
-                                            Text('Chỉnh sửa két (Admin)'),
-                                          ],
-                                        ),
-                                      ),
-                                    if (isAdmin)
-                                      const PopupMenuItem(
-                                        value: 'delete',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                                            SizedBox(width: 8),
-                                            Text('Đóng & Xóa két', style: TextStyle(color: Colors.red)),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                  onSelected: (v) {
-                                    if (v == 'detail') {
-                                      _showCashboxDetailSheet(
-                                        box: box,
-                                        currentAmount: currentAmount,
-                                        journals: data.journals,
-                                        isAdmin: isAdmin,
-                                      );
-                                    }
-                                    if (v == 'edit') _showEditCashboxDialog(box, currentAmount);
-                                    if (v == 'delete') _confirmDeleteCashbox(box);
-                                  },
                                 ),
                               ],
                             ),
@@ -825,51 +856,199 @@ class _CashScreenState extends State<CashScreen> {
                   },
                 ),
               ],
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-              // Section: Sổ Nhật Ký Quỹ (Journal Entries)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Sổ Nhật Ký Bút Toán Quỹ (Cash Journal)',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    'Tổng số: ${data.journals.length} bút toán',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                child: data.journals.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Center(
-                          child: Text('Chưa có bút toán nào được ghi nhận.'),
+              // KHUNG CHI TIẾT KÉT ĐANG CHỌN & NÚT ADMIN ĐIỀU CHỈNH SỐ DƯ (Hiển thị ngay bên dưới)
+              Builder(
+                builder: (context) {
+                  final effectiveSelectedId = _selectedCashboxId ??
+                      (data.cashboxes.isNotEmpty ? data.cashboxes.first.id : null);
+                  final selectedBox = data.cashboxes.cast<Cashbox?>().firstWhere(
+                        (b) => b?.id == effectiveSelectedId,
+                        orElse: () => data.cashboxes.isNotEmpty ? data.cashboxes.first : null,
+                      );
+                  final user = SessionScope.maybeOf(context)?.user;
+                  final roles = RoleVisibility.rolesOf(user);
+                  final isAdmin = RoleVisibility.isAdmin(roles);
+
+                  if (selectedBox == null) return const SizedBox.shrink();
+
+                  final balance = data.balances.cast<CashBalance?>().firstWhere(
+                        (b) => b?.cashboxId == selectedBox.id,
+                        orElse: () => null,
+                      );
+                  final currentAmountStr = balance?.amount ?? selectedBox.openingBalance;
+                  final currentAmount = double.tryParse(currentAmountStr) ?? 0.0;
+                  final currency = balance?.currency ?? 'VND';
+
+                  final boxJournals = data.journals.where((j) =>
+                      j.cashboxId == selectedBox.id ||
+                      j.reason.toLowerCase().contains(selectedBox.code.toLowerCase()) ||
+                      j.reason.toLowerCase().contains(selectedBox.name.toLowerCase())).toList();
+
+                  final displayedJournals = _showAllJournals ? data.journals : boxJournals;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header chi tiết của két đang chọn
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFF059669).withValues(alpha: 0.35),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
                         ),
-                      )
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.tune_rounded, color: Color(0xFF059669), size: 18),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              'Két Đang Chọn: ${selectedBox.name}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Mã két: ${selectedBox.code} • Số dư thực tế: ${AppFormat.money(currentAmountStr, currency: currency)}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isAdmin) ...[
+                                  const SizedBox(width: 8),
+                                  FilledButton.icon(
+                                    key: const Key('btn-admin-adjust-cashbox'),
+                                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                                    label: const Text('Điều chỉnh số dư'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF059669),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    onPressed: () => _showEditCashboxDialog(selectedBox, currentAmount),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Filter toggle: Chỉ két này vs Toàn bộ
+                            Row(
+                              children: [
+                                ChoiceChip(
+                                  label: Text('Bút toán két này (${boxJournals.length})'),
+                                  selected: !_showAllJournals,
+                                  onSelected: (val) {
+                                    if (val) setState(() => _showAllJournals = false);
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: Text('Tất cả bút toán (${data.journals.length})'),
+                                  selected: _showAllJournals,
+                                  onSelected: (val) {
+                                    if (val) setState(() => _showAllJournals = true);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Sổ nhật ký giao dịch hiển thị bên dưới
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _showAllJournals
+                                ? 'Sổ Nhật Ký Bút Toán Quỹ (Toàn Hệ Thống)'
+                                : 'Sổ Nhật Ký Giao Dịch: ${selectedBox.name}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            '${displayedJournals.length} bút toán',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: displayedJournals.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.receipt_long_outlined,
+                                          size: 36, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Chưa có bút toán nào phát sinh cho két "${selectedBox.name}".',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
                     : ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: data.journals.length,
+                        itemCount: displayedJournals.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, i) {
-                          final j = data.journals[i];
+                          final j = displayedJournals[i];
                           final isReceipt = j.kind.toLowerCase() == 'receipt' ||
                               j.kind.toLowerCase().contains('thu') ||
                               j.kind.toLowerCase().contains('inbound');
@@ -947,12 +1126,16 @@ class _CashScreenState extends State<CashScreen> {
                           );
                         },
                       ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+        },
+      );
   }
 
   Widget _buildMetricBox(

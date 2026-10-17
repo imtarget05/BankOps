@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/i18n/app_i18n.dart';
+import '../../core/i18n/locale_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
-import '../../core/widgets/demo_banner.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
@@ -116,6 +118,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      context.watch<LocaleController>();
+    } catch (_) {
+      try {
+        context.watch<LocaleController?>();
+      } catch (_) {}
+    }
     return DefaultTabController(
       length: 7,
       child: FutureBuilder<_ReportsData>(
@@ -161,7 +170,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Báo cáo & Biểu đồ',
+                                context.tr('reports_title'),
                                 style: Theme.of(context)
                                     .textTheme
                                     .headlineSmall
@@ -171,7 +180,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Tổng hợp xuất nhập tồn kho, sổ quỹ tiền mặt & giám sát tuân thủ vận hành',
+                                context.tr('reports_subtitle'),
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -181,8 +190,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           .onSurfaceVariant,
                                     ),
                               ),
-                              const SizedBox(height: 8),
-                              const DemoBanner(),
                             ],
                           ),
                           Wrap(
@@ -252,31 +259,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: TabBar(
                   isScrollable: true,
                   tabs: [
                     Tab(
-                        key: Key('tab-reports-inventory'),
-                        text: 'Nhập/Xuất kho'),
+                        key: const Key('tab-reports-inventory'),
+                        text: context.tr('reports_tab_inventory')),
                     Tab(
-                        key: Key('tab-reports-cashflow'),
-                        text: 'Sổ Quỹ Tiền Mặt'),
+                        key: const Key('tab-reports-cashflow'),
+                        text: context.tr('reports_tab_cashflow')),
                     Tab(
-                        key: Key('tab-reports-stagnation'),
-                        text: 'Tồn đọng'),
+                        key: const Key('tab-reports-stagnation'),
+                        text: context.tr('reports_tab_stagnation')),
                     Tab(
-                        key: Key('tab-reports-consumption-top'),
-                        text: 'Top Tiêu Hao F&B'),
+                        key: const Key('tab-reports-consumption-top'),
+                        text: context.tr('reports_tab_consumption')),
                     Tab(
-                        key: Key('tab-reports-shift-history'),
-                        text: 'Lịch Sử Chốt Ca'),
+                        key: const Key('tab-reports-shift-history'),
+                        text: context.tr('reports_tab_shift_history')),
                     Tab(
-                        key: Key('tab-reports-reconciliation'),
-                        text: 'Đối soát'),
+                        key: const Key('tab-reports-reconciliation'),
+                        text: context.tr('reports_tab_reconciliation')),
                     Tab(
-                        key: Key('tab-reports-meeting-notes'),
-                        text: 'Báo Cáo Tổng Hợp'),
+                        key: const Key('tab-reports-meeting-notes'),
+                        text: context.tr('reports_tab_meeting_notes')),
                   ],
                 ),
               ),

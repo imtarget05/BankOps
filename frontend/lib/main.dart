@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'src/app/app_shell.dart';
 import 'src/core/theme/app_theme.dart';
 import 'src/app/theme_mode_controller.dart';
@@ -145,6 +147,15 @@ class TeaInventoryApp extends StatelessWidget {
       title: i18n.tr('app_title'),
       debugShowCheckedModeBanner: false,
       locale: locale,
+      supportedLocales: const [
+        Locale('vi'),
+        Locale('en'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: AppTheme.light(
         preset: uiSettings.colorPreset,
         density: uiSettings.density,

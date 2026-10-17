@@ -240,21 +240,22 @@ class _AppShellState extends State<AppShell> {
   ];
 
   String _labelFor(BuildContext context, int index) {
-    final locale =
-        Provider.of<LocaleController?>(context)?.locale ?? const Locale('vi');
     const keys = <String>[
       'nav_dashboard',
       'nav_inventory',
       'nav_shift_work',
       'nav_requests',
       'nav_approvals',
-      'nav_activity',
+      'nav_integrations',
       'nav_activity',
       'nav_reports',
       'nav_settings',
       'nav_employees',
     ];
-    return AppI18n(locale).tr(keys[index]);
+    if (index >= 0 && index < keys.length) {
+      return context.tr(keys[index]);
+    }
+    return '';
   }
 
   String _titleFor(BuildContext context, int index) =>
@@ -320,20 +321,20 @@ class _AppShellState extends State<AppShell> {
               const Icon(Icons.gpp_bad_outlined,
                   size: 64, color: Color(0xFFF59E0B)),
               const SizedBox(height: 16),
-              const Text(
-                'Từ chối quyền truy cập',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                context.tr('nav_access_denied_title'),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Tài khoản kiểm toán viên chỉ xem nhật ký kiểm toán và báo cáo, không truy cập phân hệ phê duyệt chứng từ.',
+              Text(
+                context.tr('nav_auditor_denied'),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF64748B)),
+                style: const TextStyle(color: Color(0xFF64748B)),
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
                 icon: const Icon(Icons.arrow_back),
-                label: const Text('Quay lại Tổng quan'),
+                label: Text(context.tr('nav_access_denied_back')),
                 onPressed: () => setState(() => _index = 0),
               ),
             ],
@@ -398,20 +399,20 @@ class _AppShellState extends State<AppShell> {
                   const Icon(Icons.gpp_bad_outlined,
                       size: 64, color: Color(0xFFEF4444)),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Từ chối quyền truy cập',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Text(
+                    context.tr('nav_access_denied_title'),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Phân hệ Quản trị nhân viên chỉ dành riêng cho Quản trị viên (Admin).',
+                  Text(
+                    context.tr('nav_admin_denied'),
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFF64748B)),
+                    style: const TextStyle(color: Color(0xFF64748B)),
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
                     icon: const Icon(Icons.arrow_back),
-                    label: const Text('Quay lại Tổng quan'),
+                    label: Text(context.tr('nav_access_denied_back')),
                     onPressed: () => setState(() => _index = 0),
                   ),
                 ],
@@ -593,13 +594,13 @@ class _AppShellState extends State<AppShell> {
           children: [
             ListTile(
               leading: const Icon(Icons.apps_rounded),
-              title: const Text(
-                'Chọn phân hệ làm việc',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              title: Text(
+                context.tr('nav_select_workspace'),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.close),
-                tooltip: 'Đóng',
+                tooltip: context.tr('btn_close'),
                 onPressed: () => Navigator.of(sheetContext).pop(),
               ),
             ),
@@ -683,21 +684,21 @@ class _AppShellState extends State<AppShell> {
                 const StoreLogo(size: 32),
                 if (isWide) ...[
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Quản Lý Kho',
-                          style: TextStyle(
+                          context.tr('nav_brand_title'),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.3,
                           ),
                         ),
                         Text(
-                          'BÁN HÀNG & KHO',
-                          style: TextStyle(
+                          context.tr('nav_brand_sub'),
+                          style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF64748B),
@@ -749,13 +750,13 @@ class _AppShellState extends State<AppShell> {
                 if (isWide) {
                   if (item.index == 0) {
                     sectionHeader =
-                        _buildNavSectionHeader('VẬN HÀNH KHO TRÀ SỮA');
+                        _buildNavSectionHeader(context.tr('nav_section_ops'));
                   } else if (item.index == 3) {
                     sectionHeader =
-                        _buildNavSectionHeader('KIỂM SOÁT PHÊ DUYỆT');
-                  } else if (item.index == 5) {
+                        _buildNavSectionHeader(context.tr('nav_section_control'));
+                  } else if (item.index == 5 || item.index == 6) {
                     sectionHeader =
-                        _buildNavSectionHeader('HỆ THỐNG & ĐỐI SOÁT');
+                        _buildNavSectionHeader(context.tr('nav_section_system'));
                   }
                 }
 
@@ -830,8 +831,10 @@ class _AppShellState extends State<AppShell> {
                                 ),
                                 child: Text(
                                   _pendingApprovalCount > 0
-                                      ? '$_pendingApprovalCount CHỜ DUYỆT'
-                                      : 'PHÊ DUYỆT',
+                                      ? context.tr('nav_badge_pending', {
+                                          'count': '$_pendingApprovalCount'
+                                        })
+                                      : context.tr('nav_badge_approvals'),
                                   style: TextStyle(
                                     color: _pendingApprovalCount > 0
                                         ? const Color(0xFFDC2626)
@@ -934,13 +937,13 @@ class _AppShellState extends State<AppShell> {
           key: const Key('topbar-search-btn'),
           icon: const Icon(Icons.search_rounded, size: 20),
           onPressed: _openSearch,
-          tooltip: 'Tìm kiếm toàn cục (Ctrl+K)',
+          tooltip: context.tr('topbar_search_tooltip'),
         ),
         IconButton(
           key: const Key('topbar-refresh-btn'),
           icon: const Icon(Icons.refresh_rounded, size: 20),
           onPressed: _reload,
-          tooltip: 'Làm mới dữ liệu',
+          tooltip: context.tr('topbar_refresh_tooltip'),
         ),
         if (_canAccessApprovals(session))
           Stack(
@@ -949,7 +952,8 @@ class _AppShellState extends State<AppShell> {
               IconButton(
                 key: const Key('topbar-approvals-notif-btn'),
                 icon: const Icon(Icons.notifications_outlined, size: 20),
-                tooltip: 'Hộp thư duyệt: $_pendingApprovalCount yêu cầu',
+                tooltip: context.tr('topbar_approvals_tooltip',
+                    {'count': '$_pendingApprovalCount'}),
                 onPressed: () => setState(() => _index = 4),
               ),
               if (_pendingApprovalCount > 0)
@@ -978,6 +982,17 @@ class _AppShellState extends State<AppShell> {
                 ),
             ],
           ),
+        IconButton(
+          key: const Key('topbar-language-btn'),
+          icon: Text(
+            context.isVietnamese ? '🇻🇳 VI' : '🇬🇧 EN',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+          tooltip: context.tr('topbar_lang_tooltip'),
+          onPressed: () {
+            context.read<LocaleController?>()?.toggleLanguage();
+          },
+        ),
         if (!compact)
           IconButton(
             icon: Icon(
@@ -986,7 +1001,7 @@ class _AppShellState extends State<AppShell> {
                   : Icons.dark_mode_outlined,
               size: 20,
             ),
-            tooltip: 'Chuyển giao diện Sáng / Tối',
+            tooltip: context.tr('topbar_theme_tooltip'),
             onPressed: () {
               // ignore: use_build_context_synchronously
               final ctrl =
@@ -1004,7 +1019,7 @@ class _AppShellState extends State<AppShell> {
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),
             onPressed: _openSettings,
-            tooltip: 'Cài đặt hệ thống',
+            tooltip: context.tr('topbar_settings_tooltip'),
           ),
         const SizedBox(width: 8),
         Container(
@@ -1038,7 +1053,7 @@ class _AppShellState extends State<AppShell> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  user?.displayName ?? 'Khách',
+                  user?.displayName ?? context.tr('topbar_guest'),
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, fontSize: 13),
                 ),
@@ -1055,7 +1070,7 @@ class _AppShellState extends State<AppShell> {
                     : const UserAvatar(size: 26),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
-                tooltip: user?.displayName ?? 'Tài khoản',
+                tooltip: user?.displayName ?? context.tr('topbar_account'),
                 itemBuilder: (context) => [
                   if (user != null) ...[
                     PopupMenuItem(
@@ -1077,24 +1092,24 @@ class _AppShellState extends State<AppShell> {
                       ),
                     ),
                     const PopupMenuDivider(),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'settings',
                       child: ListTile(
-                        leading: Icon(Icons.settings, size: 18),
-                        title: Text('Cài đặt'),
+                        leading: const Icon(Icons.settings, size: 18),
+                        title: Text(context.tr('nav_settings')),
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
                     const PopupMenuDivider(),
                   ],
-                  const PopupMenuItem(
-                    key: Key('menu-signout'),
+                  PopupMenuItem(
+                    key: const Key('menu-signout'),
                     value: 'signout',
                     child: ListTile(
-                      leading: Icon(Icons.logout_rounded,
+                      leading: const Icon(Icons.logout_rounded,
                           size: 18, color: Colors.red),
-                      title: Text('Đăng xuất',
-                          style: TextStyle(color: Colors.red)),
+                      title: Text(context.tr('btn_logout'),
+                          style: const TextStyle(color: Colors.red)),
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
@@ -1114,6 +1129,13 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      context.watch<LocaleController>();
+    } catch (_) {
+      try {
+        context.watch<LocaleController?>();
+      } catch (_) {}
+    }
     final session = SessionScope.maybeOf(context);
     final layout = Breakpoints.fromWidth(MediaQuery.sizeOf(context).width);
 
@@ -1122,7 +1144,7 @@ class _AppShellState extends State<AppShell> {
         key: _bodySubtreeKey,
         child: KeyedSubtree(
           key: ValueKey(
-              'screen-$_index-$_refreshTick-${session?.user?.id ?? ''}'),
+              'screen-$_index-$_refreshTick-${session?.user?.id ?? ''}-${context.currentLocale.languageCode}'),
           child: _screenFor(_index, session),
         ),
       ),
@@ -1356,7 +1378,7 @@ class _TeaOpsTickerState extends State<_TeaOpsTicker> {
               key: const Key('btn-dismiss-live-ticker'),
               icon: Icon(Icons.close_rounded,
                   size: 17, color: theme.colorScheme.onPrimaryContainer),
-              tooltip: 'Tắt thanh thông báo',
+              tooltip: context.tr('topbar_dismiss_ticker'),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),

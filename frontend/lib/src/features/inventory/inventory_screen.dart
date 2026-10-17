@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/i18n/app_i18n.dart';
 import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
@@ -2707,11 +2708,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
         final isStockOnly = widget.mode == InventoryTabMode.stock;
 
         final headerTitle = isShiftOnly
-            ? 'Quản Lý Ca Làm Việc & Kiểm Kê Ca Pha Chế'
-            : 'Quản Lý Nhập Xuất Tồn Nguyên Vật Liệu';
+            ? context.tr('inventory_title_shift')
+            : context.tr('inventory_title_stock');
         final headerSubtitle = isShiftOnly
-            ? 'Kiểm kê đầu ca, chốt số liệu cuối ca và đối chiếu chênh lệch định lượng nguyên liệu'
-            : 'Theo dõi nguyên liệu theo ca, định mức tồn và chênh lệch kiểm kê';
+            ? context.tr('inventory_subtitle_shift')
+            : context.tr('inventory_subtitle_stock');
 
         final headerActions = <Widget>[
           if (isShiftOnly)
@@ -2719,7 +2720,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               key: const Key('btn-open-shift-stocktake'),
               onPressed: () => _showCreateStocktakeDialog(data.locations),
               icon: const Icon(Icons.add_task_rounded, size: 18),
-              label: const Text('Mở Đợt Kiểm Kê Mới'),
+              label: Text(context.tr('inventory_btn_new_stocktake')),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF0891B2),
                 shape: RoundedRectangleBorder(
@@ -2732,7 +2733,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 key: const Key('btn-add-item'),
                 onPressed: () => _showCreateItemDialog(),
                 icon: const Icon(Icons.add_box_outlined, size: 18),
-                label: const Text('Thêm mặt hàng'),
+                label: Text(context.tr('inventory_btn_add_item')),
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
@@ -2742,7 +2743,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 key: const Key('btn-import-items'),
                 onPressed: () => _showImportItemsDialog(data.items),
                 icon: const Icon(Icons.upload_file_outlined, size: 18),
-                label: const Text('Import mặt hàng'),
+                label: Text(context.tr('inventory_btn_import_items')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF059669),
                   side: const BorderSide(color: Color(0xFF059669)),
@@ -2761,7 +2762,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 }
               },
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Lập phiếu kho mới'),
+              label: Text(context.tr('inventory_btn_create_stock_req')),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF2563EB),
                 shape: RoundedRectangleBorder(
@@ -2796,9 +2797,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
             _buildKpiCard(
               context,
-              title: 'CHỜ DUYỆT',
-              value: '$pendingCount phiếu',
-              subtitle: 'Chờ quản lý đối soát',
+              title: context.tr('inventory_kpi_shift_pending'),
+              value: '$pendingCount ${context.isVietnamese ? 'phiếu' : 'vouchers'}',
+              subtitle: context.isVietnamese
+                  ? 'Chờ quản lý đối soát'
+                  : 'Awaiting review',
               icon: Icons.pending_actions_rounded,
               color: const Color(0xFFF59E0B),
               isSelected: _stocktakeStatusFilter == 'pending',
@@ -2806,9 +2809,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
             _buildKpiCard(
               context,
-              title: 'ĐÃ DUYỆT',
-              value: '$approvedCount phiếu',
-              subtitle: 'Khớp số liệu tồn kho',
+              title: context.tr('inventory_kpi_shift_approved'),
+              value: '$approvedCount ${context.isVietnamese ? 'phiếu' : 'vouchers'}',
+              subtitle: context.isVietnamese
+                  ? 'Khớp số liệu tồn kho'
+                  : 'Matched inventory balance',
               icon: Icons.verified_rounded,
               color: const Color(0xFF059669),
               isSelected: _stocktakeStatusFilter == 'approved',
@@ -2816,9 +2821,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
             _buildKpiCard(
               context,
-              title: 'CHÊNH LỆCH',
-              value: '$discrepancyCount ca',
-              subtitle: 'Cần giải trình số liệu',
+              title: context.tr('inventory_kpi_shift_discrepancy'),
+              value: '$discrepancyCount ${context.isVietnamese ? 'ca' : 'shifts'}',
+              subtitle: context.isVietnamese
+                  ? 'Cần giải trình số liệu'
+                  : 'Explanation required',
               icon: Icons.warning_amber_rounded,
               color: const Color(0xFFEF4444),
               isSelected: _stocktakeStatusFilter == 'discrepancy',
@@ -2837,27 +2844,35 @@ class _InventoryScreenState extends State<InventoryScreen> {
           kpiCards = [
             _buildKpiCard(
               context,
-              title: 'TỔNG LƯỢNG TỒN KHO',
-              value: '${AppFormat.intFormat(totalQuantity.round())} đơn vị',
-              subtitle: 'Định mức khả dụng an toàn',
+              title: context.tr('inventory_kpi_total_stock'),
+              value: '${AppFormat.intFormat(totalQuantity.round())} ${context.isVietnamese ? 'đơn vị' : 'units'}',
+              subtitle: context.isVietnamese
+                  ? 'Định mức khả dụng an toàn'
+                  : 'Safe stock quota',
               icon: Icons.inventory_2_rounded,
               color: const Color(0xFF2563EB),
             ),
             _buildKpiCard(
               context,
-              title: 'TỔNG SẢN PHẨM (SKU)',
-              value: '${data.items.length} mặt hàng',
-              subtitle: 'Đang quản lý trong kho',
+              title: context.tr('inventory_kpi_total_sku'),
+              value: '${data.items.length} ${context.isVietnamese ? 'mặt hàng' : 'items'}',
+              subtitle: context.isVietnamese
+                  ? 'Đang quản lý trong kho'
+                  : 'Active warehouse items',
               icon: Icons.category_rounded,
               color: const Color(0xFF0891B2),
             ),
             _buildKpiCard(
               context,
-              title: 'CẢNH BÁO TỒN KHO',
-              value: '$lowStockCount mặt hàng',
+              title: context.tr('inventory_kpi_stock_alerts'),
+              value: '$lowStockCount ${context.isVietnamese ? 'mặt hàng' : 'items'}',
               subtitle: lowStockCount > 0
-                  ? 'Dưới định mức tối thiểu'
-                  : 'Tất cả đạt định mức an toàn',
+                  ? (context.isVietnamese
+                      ? 'Dưới định mức tối thiểu'
+                      : 'Below safety threshold')
+                  : (context.isVietnamese
+                      ? 'Tất cả đạt định mức an toàn'
+                      : 'All items at safe levels'),
               icon: lowStockCount > 0
                   ? Icons.warning_amber_rounded
                   : Icons.check_circle_outline_rounded,
@@ -2867,13 +2882,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
             _buildKpiCard(
               context,
-              title: 'TỔNG GIÁ TRỊ KHO',
+              title: context.tr('inventory_kpi_total_valuation'),
               value: isAdmin
                   ? AppFormat.money(totalValuation.toStringAsFixed(0), currency: '₫')
                   : '••••••',
               subtitle: isAdmin
-                  ? 'Định giá vốn tồn hiện tại'
-                  : 'Bảo mật (Chỉ Admin)',
+                  ? (context.isVietnamese
+                      ? 'Định giá vốn tồn hiện tại'
+                      : 'Current inventory valuation')
+                  : (context.isVietnamese
+                      ? 'Bảo mật (Chỉ Admin)'
+                      : 'Restricted (Admin only)'),
               icon: isAdmin
                   ? Icons.account_balance_wallet_rounded
                   : Icons.lock_outline_rounded,
@@ -3363,7 +3382,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     items: categories.map((c) {
                       return DropdownMenuItem(
                         value: c,
-                        child: Text(c == 'Tất cả' ? 'Tất cả nhóm' : c),
+                        child: Text(c == 'Tất cả'
+                            ? (context.isVietnamese ? 'Tất cả nhóm' : 'All Categories')
+                            : c),
                       );
                     }).toList(),
                     onChanged: (val) {
@@ -3381,12 +3402,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildFilterChip('all', 'Tất cả (${data.items.length})', isDark),
+                _buildFilterChip('all',
+                    '${context.isVietnamese ? 'Tất cả' : 'All'} (${data.items.length})', isDark),
                 const SizedBox(width: 6),
-                _buildFilterChip('low', 'Cảnh báo ít tồn', isDark,
+                _buildFilterChip(
+                    'low',
+                    context.isVietnamese ? 'Cảnh báo ít tồn' : 'Low Stock',
+                    isDark,
                     color: const Color(0xFFD97706)),
                 const SizedBox(width: 6),
-                _buildFilterChip('out', 'Hết hàng', isDark,
+                _buildFilterChip(
+                    'out',
+                    context.isVietnamese ? 'Hết hàng' : 'Out of Stock',
+                    isDark,
                     color: const Color(0xFFEF4444)),
                 if (isAdmin) ...[
                   const SizedBox(width: 8),
@@ -3399,7 +3427,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       color: _revealPrices ? const Color(0xFF0284C7) : null,
                     ),
                     label: Text(
-                      _revealPrices ? 'Đang hiện giá' : 'Đang ẩn giá',
+                      _revealPrices
+                          ? (context.isVietnamese ? 'Đang hiện giá' : 'Prices Visible')
+                          : (context.isVietnamese ? 'Đang ẩn giá' : 'Prices Hidden'),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -3421,7 +3451,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       size: 14,
                     ),
                     label: Text(
-                      _sheetViewMode == 'sheet' ? 'Xem dạng Thẻ' : 'Bảng Google Sheets',
+                      _sheetViewMode == 'sheet'
+                          ? (context.isVietnamese ? 'Xem dạng Thẻ' : 'Card View')
+                          : (context.isVietnamese ? 'Bảng Google Sheets' : 'Google Sheets View'),
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                     onPressed: () => setState(() {
@@ -4595,14 +4627,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch',
+                context.tr('inventory_stocktake_section_title'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                'Kiểm đếm thực tế, đối chiếu định mức và tự động sinh phiếu điều chỉnh',
+                context.tr('inventory_stocktake_section_sub'),
                 style: TextStyle(
                     fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -4611,7 +4643,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 FilledButton.icon(
                   onPressed: () => _showCreateStocktakeDialog(data.locations),
                   icon: const Icon(Icons.add_task_rounded, size: 16),
-                  label: const Text('Mở Đợt Kiểm Kê Mới'),
+                  label: Text(context.tr('inventory_btn_new_stocktake')),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF0891B2),
                     shape: RoundedRectangleBorder(
@@ -4629,14 +4661,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Kiểm Kê Kho Định Kỳ & Đối Soát Chênh Lệch',
+                      context.tr('inventory_stocktake_section_title'),
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Kiểm đếm thực tế, đối chiếu định mức và tự động sinh phiếu điều chỉnh',
+                      context.tr('inventory_stocktake_section_sub'),
                       style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurfaceVariant),
@@ -4649,7 +4681,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 FilledButton.icon(
                   onPressed: () => _showCreateStocktakeDialog(data.locations),
                   icon: const Icon(Icons.add_task_rounded, size: 16),
-                  label: const Text('Mở Đợt Kiểm Kê Mới'),
+                  label: Text(context.tr('inventory_btn_new_stocktake')),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF0891B2),
                     shape: RoundedRectangleBorder(

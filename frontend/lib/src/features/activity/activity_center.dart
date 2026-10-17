@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/i18n/app_i18n.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/util/formatting.dart';
 import '../../core/widgets/state_views.dart';
@@ -18,11 +19,12 @@ class ActivityCenter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (events.isEmpty) {
-      return const Center(
+      return Center(
           child: EmptyView(
-        title: 'Chưa có hoạt động nào được ghi nhận',
-        subtitle:
-            'Mọi thao tác tạo, gửi duyệt và duyệt phiếu sẽ hiện tại đây theo thời gian thực.',
+        title: context.tr('activity_empty_title'),
+        subtitle: context.isVietnamese
+            ? 'Mọi thao tác tạo, gửi duyệt và duyệt phiếu sẽ hiện tại đây theo thời gian thực.'
+            : 'All voucher creation, submission, and approvals will appear here in real-time.',
         icon: Icons.timeline_outlined,
       ));
     }
@@ -41,7 +43,7 @@ class ActivityCenter extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hoạt động & Tiến trình nền',
+                    context.tr('activity_header_title'),
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                       letterSpacing: -0.5,
@@ -49,7 +51,7 @@ class ActivityCenter extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Toàn bộ lịch sử thao tác lập lệnh, phê duyệt, đối soát và tiến trình nền bất biến',
+                    context.tr('activity_header_subtitle'),
                     style: TextStyle(
                       color: theme.colorScheme.onSurfaceVariant,
                       fontSize: 13,
@@ -64,7 +66,7 @@ class ActivityCenter extends StatelessWidget {
                 key: const Key('activity-resync-btn'),
                 onPressed: onRefresh,
                 icon: const Icon(Icons.sync_rounded, size: 18),
-                label: const Text('Đồng bộ lại'),
+                label: Text(context.tr('activity_btn_resync')),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF1E3A8A),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

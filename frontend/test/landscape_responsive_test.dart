@@ -10,6 +10,9 @@ import 'package:kho_tra_sua/src/features/cash/cash_screen.dart';
 import 'package:kho_tra_sua/src/features/inventory/inventory_screen.dart';
 import 'package:kho_tra_sua/src/features/requests/requests_screen.dart';
 
+import 'package:provider/provider.dart';
+import 'package:kho_tra_sua/src/core/i18n/locale_controller.dart';
+
 void main() {
   const user = AppUser(
     id: 'u_admin',
@@ -20,13 +23,17 @@ void main() {
 
   Widget wrapWithScaffold(Widget child) {
     final repo = FakeBankOpsRepository(latency: Duration.zero);
-    return RepositoryScope(
-      repository: repo,
-      child: SessionScope(
-        user: user,
-        child: MaterialApp(
-          theme: AppTheme.light(),
-          home: Scaffold(body: child),
+    return ChangeNotifierProvider<LocaleController>(
+      create: (_) => LocaleController(),
+      child: RepositoryScope(
+        repository: repo,
+        child: SessionScope(
+          user: user,
+          child: MaterialApp(
+            locale: const Locale('vi'),
+            theme: AppTheme.light(),
+            home: Scaffold(body: child),
+          ),
         ),
       ),
     );

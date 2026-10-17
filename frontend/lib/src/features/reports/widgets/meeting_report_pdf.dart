@@ -7,7 +7,8 @@ import '../../../core/util/formatting.dart';
 import '../../../data/models/dtos.dart';
 import '../reports_filter.dart';
 
-/// Tạo tài liệu PDF A4 báo cáo giao ban điều hành phục vụ in ấn hoặc lưu trữ cuộc họp.
+/// Tạo tài liệu PDF A4 báo cáo điều hành & xuất nhập tồn chuẩn văn bản nhà nước (Nghị định 30/2020/NĐ-CP).
+/// Thiết kế 100% Trắng Đen (Monochrome), trang trọng, rõ ràng phục vụ in ấn trình ký và lưu trữ.
 class MeetingReportPdf {
   const MeetingReportPdf._();
 
@@ -52,9 +53,6 @@ class MeetingReportPdf {
     // Phân tầng tồn đọng
     final critical =
         stagnationItems.where((i) => i.severity == 'critical').toList();
-    final stagnant =
-        stagnationItems.where((i) => i.severity == 'stagnant').toList();
-    final watch = stagnationItems.where((i) => i.severity == 'watch').toList();
 
     // Đối soát
     final totalRuns = reconciliations.length;
@@ -64,309 +62,347 @@ class MeetingReportPdf {
         : '100.0';
 
     final periodStr = dateRange != null
-        ? '${AppFormat.date(dateRange.start)} → ${AppFormat.date(dateRange.end)}'
+        ? '${AppFormat.date(dateRange.start)} - ${AppFormat.date(dateRange.end)}'
         : (granularity == ReportGranularity.daily
-            ? 'Tổng hợp theo ngày'
-            : 'Tổng hợp theo tháng');
+            ? 'Tổng hợp ngày gần nhất'
+            : 'Tổng hợp tháng hiện tại');
 
     final assessmentStr = staffAssessment ??
         (critical.isNotEmpty
-            ? 'Cảnh báo rủi ro (Tồn đọng >= 90 ngày)'
-            : 'Vận hành đạt chuẩn');
+            ? 'Cần rà soát mặt hàng chậm luân chuyển'
+            : 'Vận hành đạt chuẩn - Số liệu cân đối');
+
+    final now = DateTime.now();
 
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 28),
         theme: pw.ThemeData.withFont(base: font, bold: font, italic: font),
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            // Header báo cáo kho trà sữa
+            // 1. Thể thức văn bản hành chính theo Nghị định 30/2020/NĐ-CP
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
                     pw.Text(
-                      'HỆ THỐNG CỬA HÀNG & KHO F&B BANKOPS',
+                      'CỬA HÀNG KHO TRÀ SỮA',
                       style: pw.TextStyle(
-                        fontSize: 10,
+                        fontSize: 9.5,
                         fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.blue900,
+                        color: PdfColors.black,
                       ),
                     ),
+                    pw.SizedBox(height: 2),
                     pw.Text(
-                      'Chi nhánh Vận hành Trung tâm',
+                      'BỘ PHẬN KHO VẬN & SỔ QUỸ',
                       style: const pw.TextStyle(
-                          fontSize: 8.5, color: PdfColors.grey700),
+                        fontSize: 8.5,
+                        color: PdfColors.black,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Số: ...... / BC-XNT-QUY',
+                      style: const pw.TextStyle(
+                        fontSize: 8,
+                        color: PdfColors.black,
+                      ),
+                    ),
+                    pw.Container(
+                      width: 60,
+                      height: 0.5,
+                      color: PdfColors.black,
+                      margin: const pw.EdgeInsets.only(top: 2),
                     ),
                   ],
                 ),
                 pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
                     pw.Text(
-                      'BÁO CÁO VẬN HÀNH ĐIỀU HÀNH',
+                      'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
                       style: pw.TextStyle(
-                        fontSize: 8.5,
+                        fontSize: 9.5,
                         fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.blue900,
+                        color: PdfColors.black,
                       ),
                     ),
+                    pw.SizedBox(height: 2),
                     pw.Text(
-                      'Hệ thống Quản trị Doanh nghiệp BankOps',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey600),
+                      'Độc lập - Tự do - Hạnh phúc',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.black,
+                      ),
+                    ),
+                    pw.Container(
+                      width: 90,
+                      height: 0.8,
+                      color: PdfColors.black,
+                      margin: const pw.EdgeInsets.only(top: 2, bottom: 4),
+                    ),
+                    pw.Text(
+                      '..., ngày ${now.day.toString().padLeft(2, '0')} tháng ${now.month.toString().padLeft(2, '0')} năm ${now.year}',
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.black,
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-            pw.SizedBox(height: 12),
-            pw.Divider(thickness: 1.5, color: PdfColors.blue900),
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 14),
 
-            // Tiêu đề báo cáo
+            // 2. Tiêu đề báo cáo trang trọng ở giữa trang
             pw.Center(
               child: pw.Column(
                 children: [
                   pw.Text(
-                    'BÁO CÁO TỔNG HỢP VẬN HÀNH KINH DOANH & TỒN KHO',
+                    'BÁO CÁO TỔNG HỢP XUẤT NHẬP TỒN & SỔ QUỸ TIỀN MẶT',
                     style: pw.TextStyle(
-                      fontSize: 14,
+                      fontSize: 12.5,
                       fontWeight: pw.FontWeight.bold,
                       color: PdfColors.black,
                     ),
                   ),
-                  pw.SizedBox(height: 4),
+                  pw.SizedBox(height: 3),
                   pw.Text(
-                    'Kỳ báo cáo: $periodStr · Ngày in: ${AppFormat.dateTime(DateTime.now())}',
-                    style: const pw.TextStyle(
-                        fontSize: 9, color: PdfColors.grey700),
+                    'Kỳ báo cáo: $periodStr',
+                    style: pw.TextStyle(
+                      fontSize: 8.5,
+                      fontStyle: pw.FontStyle.italic,
+                      color: PdfColors.black,
+                    ),
                   ),
                   pw.SizedBox(height: 2),
                   pw.Text(
-                    'Đánh giá trạng thái: $assessmentStr',
+                    'Tình trạng vận hành: $assessmentStr',
                     style: pw.TextStyle(
-                      fontSize: 9.5,
+                      fontSize: 8.5,
                       fontWeight: pw.FontWeight.bold,
-                      color: critical.isNotEmpty
-                          ? PdfColors.red800
-                          : PdfColors.green800,
+                      color: PdfColors.black,
                     ),
                   ),
                 ],
               ),
             ),
-            pw.SizedBox(height: 14),
+            pw.SizedBox(height: 12),
 
-            // Mục 1: Chỉ số tổng hợp dòng tiền & kho
+            // 3. Phần I: Bảng tổng hợp luân chuyển kho nguyên vật liệu
             pw.Text(
-              'I. TỔNG HỢP CHỈ SỐ THANH KHOẢN & VẬN HÀNH KHO',
+              'I. BẢNG TỔNG HỢP LUÂN CHUYỂN KHO NGUYÊN VẬT LIỆU',
               style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.blue900),
+                fontSize: 9.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              ),
             ),
-            pw.SizedBox(height: 6),
+            pw.SizedBox(height: 4),
             pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
               children: [
                 pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                   children: [
-                    _cellHeader('Chỉ số vận hành'),
-                    _cellHeader('Giá trị trong kỳ'),
-                    _cellHeader('Chi tiết / Đơn vị'),
+                    _cellHeader('STT', width: 24, align: pw.TextAlign.center),
+                    _cellHeader('Chỉ tiêu luân chuyển kho'),
+                    _cellHeader('Khối lượng / Số lượng', align: pw.TextAlign.right),
+                    _cellHeader('Diễn giải chi tiết'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Tổng thu tiền mặt (Thu quỹ)'),
-                    _cellText(AppFormat.money(totalIn.toStringAsFixed(0))),
-                    _cellText('$totalJournals bút toán thực hiện'),
+                    _cellText('1', align: pw.TextAlign.center),
+                    _cellText('Tổng số phiếu nhập kho thực hiện'),
+                    _cellText('$totalReceipts phiếu', align: pw.TextAlign.right, bold: true),
+                    _cellText('Phiếu nhập kho đã hoàn tất đối soát'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Tổng chi tiền mặt (Chi quỹ)'),
-                    _cellText(AppFormat.money(totalOut.toStringAsFixed(0))),
-                    _cellText('Điều chỉnh & xuất kho'),
-                  ],
-                ),
-                pw.TableRow(
-                  children: [
-                    _cellText('Dòng tiền thuần ròng (Net)'),
+                    _cellText('2', align: pw.TextAlign.center),
+                    _cellText('Tổng số lượng nguyên vật liệu nhập'),
                     _cellText(
-                      AppFormat.money(netCash.toStringAsFixed(0)),
+                      '${AppFormat.quantity(totalInbound.toStringAsFixed(0))} đơn vị',
+                      align: pw.TextAlign.right,
                       bold: true,
-                      color:
-                          netCash >= 0 ? PdfColors.green900 : PdfColors.red900,
                     ),
-                    _cellText(netCash >= 0
-                        ? 'Thặng dư thanh khoản'
-                        : 'Thâm hụt dòng tiền'),
+                    _cellText('Nhập kho từ nhà cung cấp / luân chuyển'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Nhập kho nguyên liệu'),
+                    _cellText('3', align: pw.TextAlign.center),
+                    _cellText('Tổng số phiếu xuất kho thực hiện'),
+                    _cellText('$totalIssues phiếu', align: pw.TextAlign.right, bold: true),
+                    _cellText('Phiếu xuất pha chế / tiêu hao ca trực'),
+                  ],
+                ),
+                pw.TableRow(
+                  children: [
+                    _cellText('4', align: pw.TextAlign.center),
+                    _cellText('Tổng số lượng nguyên vật liệu xuất'),
                     _cellText(
-                        '${AppFormat.quantity(totalInbound.toStringAsFixed(0))} đơn vị'),
-                    _cellText('$totalReceipts phiếu nhập hoàn tất'),
+                      '${AppFormat.quantity(totalOutbound.toStringAsFixed(0))} đơn vị',
+                      align: pw.TextAlign.right,
+                      bold: true,
+                    ),
+                    _cellText('Đã trừ tồn kho theo định mức ca'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Xuất kho / sử dụng nguyên liệu'),
+                    _cellText('5', align: pw.TextAlign.center),
+                    _cellText('Biến động tồn kho ròng trong kỳ', bold: true),
                     _cellText(
-                        '${AppFormat.quantity(totalOutbound.toStringAsFixed(0))} đơn vị'),
-                    _cellText('$totalIssues phiếu xuất hoàn tất'),
-                  ],
-                ),
-                pw.TableRow(
-                  children: [
-                    _cellText('Biến động tồn kho ròng'),
-                    _cellText(
-                        '${AppFormat.quantity(netInventory.toStringAsFixed(0))} đơn vị',
-                        bold: true),
-                    _cellText('Chênh lệch nhập - xuất'),
-                  ],
-                ),
-                pw.TableRow(
-                  children: [
-                    _cellText('Tỷ lệ đối soát hoàn hảo'),
-                    _cellText('$matchRate%',
-                        bold: true, color: PdfColors.blue900),
-                    _cellText('$cleanRuns/$totalRuns phiên sạch ngoại lệ'),
+                      '${AppFormat.quantity(netInventory.toStringAsFixed(0))} đơn vị',
+                      align: pw.TextAlign.right,
+                      bold: true,
+                    ),
+                    _cellText('Chênh lệch thuần nhập trừ xuất'),
                   ],
                 ),
               ],
             ),
-            pw.SizedBox(height: 12),
+            pw.SizedBox(height: 10),
 
-            // Mục 2: Điểm nóng tồn đọng
+            // 4. Phần II: Bảng tổng hợp sổ quỹ tiền mặt
             pw.Text(
-              'II. PHÂN TÍCH RỦI RO & ĐIỂM NÓNG TỒN ĐỌNG VẬT TƯ',
+              'II. BẢNG TỔNG HỢP SỔ QUỸ & DÒNG TIỀN MẶT',
               style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.blue900),
+                fontSize: 9.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              ),
             ),
             pw.SizedBox(height: 4),
-            pw.Text(
-              'Phân tầng: Nghiêm trọng (>=90 ngày): ${critical.length} mặt hàng | Tồn đọng (>=60 ngày): ${stagnant.length} | Cần theo dõi (>=30 ngày): ${watch.length}',
-              style:
-                  const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800),
-            ),
-            pw.SizedBox(height: 6),
-            if (critical.isEmpty)
-              pw.Container(
-                padding: const pw.EdgeInsets.all(6),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.green50,
-                  border: pw.Border.all(color: PdfColors.green200),
-                  borderRadius:
-                      const pw.BorderRadius.all(pw.Radius.circular(4)),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    _cellHeader('STT', width: 24, align: pw.TextAlign.center),
+                    _cellHeader('Chỉ tiêu quỹ tiền mặt'),
+                    _cellHeader('Số tiền (VND)', align: pw.TextAlign.right),
+                    _cellHeader('Ghi chú / Trạng thái đối chiếu'),
+                  ],
                 ),
-                child: pw.Text(
-                  'Không có nguyên liệu nào tồn đọng trên 90 ngày. Tốc độ sử dụng đang trong ngưỡng an toàn.',
-                  style: const pw.TextStyle(
-                      fontSize: 8.5, color: PdfColors.green900),
+                pw.TableRow(
+                  children: [
+                    _cellText('1', align: pw.TextAlign.center),
+                    _cellText('Tổng thu tiền mặt (Thu quỹ)'),
+                    _cellText(AppFormat.money(totalIn.toStringAsFixed(0)),
+                        align: pw.TextAlign.right, bold: true),
+                    _cellText('Doanh thu bán hàng & nộp quỹ đầu ca'),
+                  ],
                 ),
-              )
-            else
-              pw.Table(
-                border:
-                    pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                children: [
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.red50),
-                    children: [
-                      _cellHeader('Mã SKU'),
-                      _cellHeader('Tên nguyên liệu'),
-                      _cellHeader('Số lượng tồn'),
-                      _cellHeader('Thời gian chưa xuất'),
-                    ],
-                  ),
-                  for (final item in critical.take(4))
-                    pw.TableRow(
-                      children: [
-                        _cellText(item.sku, bold: true),
-                        _cellText(item.name),
-                        _cellText(item.quantity),
-                        _cellText(
-                          item.daysSinceLastIssue != null
-                              ? '${item.daysSinceLastIssue} ngày'
-                              : 'Chưa từng xuất',
-                          color: PdfColors.red900,
-                        ),
-                      ],
+                pw.TableRow(
+                  children: [
+                    _cellText('2', align: pw.TextAlign.center),
+                    _cellText('Tổng chi tiền mặt (Chi quỹ)'),
+                    _cellText(AppFormat.money(totalOut.toStringAsFixed(0)),
+                        align: pw.TextAlign.right, bold: true),
+                    _cellText('Chi mua gấp nguyên liệu & chi phí vận hành'),
+                  ],
+                ),
+                pw.TableRow(
+                  children: [
+                    _cellText('3', align: pw.TextAlign.center),
+                    _cellText('Dòng tiền thuần ròng (Net Cashflow)', bold: true),
+                    _cellText(
+                      AppFormat.money(netCash.toStringAsFixed(0)),
+                      align: pw.TextAlign.right,
+                      bold: true,
                     ),
-                ],
-              ),
-            pw.SizedBox(height: 12),
+                    _cellText(netCash >= 0 ? 'Thặng dư ngân quỹ' : 'Thâm hụt dòng tiền'),
+                  ],
+                ),
+                pw.TableRow(
+                  children: [
+                    _cellText('4', align: pw.TextAlign.center),
+                    _cellText('Tổng số lượng bút toán phát sinh'),
+                    _cellText('$totalJournals bút toán',
+                        align: pw.TextAlign.right, bold: true),
+                    _cellText('Đã đối chiếu sổ cái két quầy'),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
 
-            // Mục 3: Đề xuất điều hành & Kế hoạch
+            // 5. Phần III: Kết quả đối soát kiểm kê ca & Đề xuất
             pw.Text(
-              'III. ĐỀ XUẤT ĐIỀU HÀNH & KẾ HOẠCH VẬN HÀNH TIẾP THEO',
+              'III. KẾT QUẢ ĐỐI SOÁT KIỂM KÊ CA & ĐỀ XUẤT ĐIỀU HÀNH',
               style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.blue900),
+                fontSize: 9.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              ),
             ),
             pw.SizedBox(height: 4),
-            pw.Bullet(
-              text: critical.isNotEmpty
-                  ? 'Đề nghị Hội đồng thanh lý / Tổ quản lý kho rà soát ${critical.length} mặt hàng tồn đọng lâu ngày.'
-                  : 'Duy trì định mức tồn kho tối thiểu - tối đa theo kế hoạch quý.',
-              style: const pw.TextStyle(fontSize: 8.5),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
+              children: [
+                pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            '1. Tỷ lệ đối soát chốt ca đạt chuẩn: $matchRate% ($cleanRuns/$totalRuns phiên kiểm đếm khớp 100% số lượng).',
+                            style: const pw.TextStyle(fontSize: 8),
+                          ),
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            critical.isNotEmpty
+                                ? '2. Cảnh báo: Có ${critical.length} mặt hàng nguyên vật liệu tồn đọng lâu chưa xuất dùng. Đề nghị ưu tiên xuất dùng theo nguyên tắc FEFO.'
+                                : '2. Quản lý kho: Tất cả nguyên vật liệu đều lưu chuyển đúng quy chuẩn hạn dùng.',
+                            style: const pw.TextStyle(fontSize: 8),
+                          ),
+                          if (staffNotes != null && staffNotes.trim().isNotEmpty) ...[
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              '3. Ý kiến chỉ đạo từ quản lý: ${staffNotes.trim()}',
+                              style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            pw.Bullet(
-              text: netCash < 0
-                  ? 'Cân đối thanh khoản do dòng tiền chi đang cao hơn dòng tiền thu trong kỳ báo cáo.'
-                  : 'Thanh khoản quỹ ổn định, đảm bảo đáp ứng đầy đủ hạn mức chi trả của chi nhánh.',
-              style: const pw.TextStyle(fontSize: 8.5),
-            ),
-            pw.Bullet(
-              text:
-                  'Tuân thủ nghiêm ngặt quy trình kiểm soát phê duyệt và bảo mật hệ thống.',
-              style: const pw.TextStyle(fontSize: 8.5),
-            ),
-            if (staffNotes != null && staffNotes.trim().isNotEmpty) ...[
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'Ý kiến đề xuất bổ sung: ${staffNotes.trim()}',
-                style: pw.TextStyle(
-                    fontSize: 8.5,
-                    fontStyle: pw.FontStyle.italic,
-                    color: PdfColors.grey800),
-              ),
-            ],
 
             pw.Spacer(),
 
-            // Chữ ký 3 bên chuẩn doanh nghiệp
+            // 6. Phần Chữ ký 3 bên chuẩn hành chính doanh nghiệp
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _signatureBlock('NGƯỜI LẬP BÁO CÁO\n(Nhân viên phụ trách)',
-                    'Ký và ghi rõ họ tên'),
-                _signatureBlock('THỦ KHO / THỦ QUỸ\n(Phụ trách kho vận)',
-                    'Ký và ghi rõ họ tên'),
-                _signatureBlock('GIÁM ĐỐC / QUẢN LÝ\n(Phê duyệt)',
-                    'Ký và đóng dấu xác nhận'),
+                _signatureBlock('NGƯỜI LẬP BIỂU', '(Ký và ghi rõ họ tên)'),
+                _signatureBlock('THỦ KHO / THỦ QUỸ', '(Ký và ghi rõ họ tên)'),
+                _signatureBlock('CỬA HÀNG TRƯỞNG / CHỦ HỘ', '(Ký, đóng dấu và ghi rõ họ tên)'),
               ],
             ),
-            pw.SizedBox(height: 8),
+            pw.SizedBox(height: 6),
             pw.Center(
               child: pw.Text(
-                'Hệ thống Quản trị Doanh nghiệp BankOps · Báo cáo vận hành kinh doanh',
-                style:
-                    const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey500),
+                'Biểu mẫu Báo cáo Xuất Nhập Tồn & Quỹ Tiền Mặt · Trích xuất từ Hệ thống Quản trị Doanh nghiệp BankOps',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.black),
               ),
             ),
           ],
@@ -377,51 +413,75 @@ class MeetingReportPdf {
     return doc.save();
   }
 
-  static pw.Widget _cellHeader(String text) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+  static pw.Widget _cellHeader(
+    String text, {
+    double? width,
+    pw.TextAlign align = pw.TextAlign.left,
+  }) {
+    final widget = pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
       child: pw.Text(
         text,
+        textAlign: align,
         style: pw.TextStyle(
-            fontSize: 8.5,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColors.blue900),
+          fontSize: 8,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.black,
+        ),
       ),
     );
+    if (width != null) {
+      return pw.SizedBox(width: width, child: widget);
+    }
+    return widget;
   }
 
-  static pw.Widget _cellText(String text,
-      {bool bold = false, PdfColor color = PdfColors.black}) {
+  static pw.Widget _cellText(
+    String text, {
+    bool bold = false,
+    pw.TextAlign align = pw.TextAlign.left,
+  }) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       child: pw.Text(
         text,
+        textAlign: align,
         style: pw.TextStyle(
-            fontSize: 8,
-            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-            color: color),
+          fontSize: 7.5,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: PdfColors.black,
+        ),
       ),
     );
   }
 
   static pw.Widget _signatureBlock(String title, String hint) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
-      children: [
-        pw.Text(
-          title,
-          textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(
+    return pw.Container(
+      width: 140,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.Text(
+            title,
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(
               fontSize: 8.5,
               fontWeight: pw.FontWeight.bold,
-              color: PdfColors.black),
-        ),
-        pw.SizedBox(height: 38),
-        pw.Text(
-          hint,
-          style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600),
-        ),
-      ],
+              color: PdfColors.black,
+            ),
+          ),
+          pw.SizedBox(height: 2),
+          pw.Text(
+            hint,
+            style: pw.TextStyle(
+              fontSize: 7,
+              fontStyle: pw.FontStyle.italic,
+              color: PdfColors.black,
+            ),
+          ),
+          pw.SizedBox(height: 42),
+        ],
+      ),
     );
   }
 }

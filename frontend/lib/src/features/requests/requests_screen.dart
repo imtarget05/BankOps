@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/i18n/app_i18n.dart';
 import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/formatting.dart';
@@ -944,7 +945,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Quản Lý & Lập Phiếu Yêu Cầu',
+                        context.tr('requests_header_title'),
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5,
@@ -952,7 +953,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Khởi tạo phiếu nhập, xuất và điều chỉnh nguyên liệu để quản lý phê duyệt',
+                        context.tr('requests_header_subtitle'),
                         style: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 13,
@@ -970,7 +971,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         onPressed:
                             _busy ? null : () => _openCreateStockDialog(data),
                         icon: const Icon(Icons.add_box_outlined, size: 18),
-                        label: const Text('Nhập/Xuất kho'),
+                        label: Text(context.isVietnamese
+                            ? 'Nhập/Xuất kho'
+                            : 'Stock In/Out'),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF2563EB),
                           shape: RoundedRectangleBorder(
@@ -987,7 +990,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   isSpoilage: true,
                                 ),
                         icon: const Icon(Icons.broken_image_outlined, size: 18),
-                        label: const Text('Báo cáo hư hỏng'),
+                        label: Text(context.isVietnamese
+                            ? 'Báo cáo hư hỏng'
+                            : 'Spoilage Report'),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFFD97706),
                           shape: RoundedRectangleBorder(
@@ -999,7 +1004,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         onPressed:
                             _busy ? null : () => _openCreateCashDialog(data),
                         icon: const Icon(Icons.payments_outlined, size: 18),
-                        label: const Text('Tạo phiếu quỹ'),
+                        label: Text(context.isVietnamese
+                            ? 'Tạo phiếu quỹ'
+                            : 'Cash Voucher'),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF059669),
                           shape: RoundedRectangleBorder(
@@ -1040,7 +1047,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     FilterChip(
                       selected: _statusFilter == null,
                       label: Text(
-                          'Tất cả (${data.stockRequests.length + data.cashRequests.length})'),
+                          '${context.tr('requests_filter_all')} (${data.stockRequests.length + data.cashRequests.length})'),
                       onSelected: (_) => setState(() => _statusFilter = null),
                     ),
                     const SizedBox(width: 8),
@@ -1049,7 +1056,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                       avatar: const Icon(Icons.assignment_return_outlined,
                           size: 16, color: Color(0xFFD97706)),
                       label: Text(
-                        'Cần chỉnh sửa (${data.stockRequests.where((r) => r.status == RequestStatus.returned).length + data.cashRequests.where((r) => r.status == RequestStatus.returned).length})',
+                        '${context.tr('requests_filter_rework')} (${data.stockRequests.where((r) => r.status == RequestStatus.returned).length + data.cashRequests.where((r) => r.status == RequestStatus.returned).length})',
                         style: TextStyle(
                           color: _statusFilter == RequestStatus.returned
                               ? null
@@ -1064,7 +1071,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     FilterChip(
                       selected: _statusFilter == RequestStatus.pending,
                       label: Text(
-                          'Chờ duyệt (${data.stockRequests.where((r) => r.status == RequestStatus.pending).length + data.cashRequests.where((r) => r.status == RequestStatus.pending).length})'),
+                          '${context.tr('requests_filter_pending')} (${data.stockRequests.where((r) => r.status == RequestStatus.pending).length + data.cashRequests.where((r) => r.status == RequestStatus.pending).length})'),
                       onSelected: (_) =>
                           setState(() => _statusFilter = RequestStatus.pending),
                     ),
@@ -1072,7 +1079,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     FilterChip(
                       selected: _statusFilter == RequestStatus.draft,
                       label: Text(
-                          'Bản nháp (${data.stockRequests.where((r) => r.status == RequestStatus.draft).length + data.cashRequests.where((r) => r.status == RequestStatus.draft).length})'),
+                          '${context.tr('requests_filter_draft')} (${data.stockRequests.where((r) => r.status == RequestStatus.draft).length + data.cashRequests.where((r) => r.status == RequestStatus.draft).length})'),
                       onSelected: (_) =>
                           setState(() => _statusFilter = RequestStatus.draft),
                     ),
@@ -1080,7 +1087,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     FilterChip(
                       selected: _statusFilter == RequestStatus.posted,
                       label: Text(
-                          'Đã ghi sổ (${data.stockRequests.where((r) => r.status == RequestStatus.posted).length + data.cashRequests.where((r) => r.status == RequestStatus.posted).length})'),
+                          '${context.tr('requests_filter_posted')} (${data.stockRequests.where((r) => r.status == RequestStatus.posted).length + data.cashRequests.where((r) => r.status == RequestStatus.posted).length})'),
                       onSelected: (_) =>
                           setState(() => _statusFilter = RequestStatus.posted),
                     ),
@@ -1097,13 +1104,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
                 runSpacing: 4,
                 children: [
                   Text(
-                    'Phiếu Kho Nguyên Liệu (${_statusFilter == null ? data.stockRequests.length : data.stockRequests.where((r) => r.status == _statusFilter).length})',
+                    '${context.tr('requests_section_stock')} (${_statusFilter == null ? data.stockRequests.length : data.stockRequests.where((r) => r.status == _statusFilter).length})',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    'Kiểm soát viên duyệt trước khi ghi nhận nhập/xuất',
+                    context.isVietnamese
+                        ? 'Kiểm soát viên duyệt trước khi ghi nhận nhập/xuất'
+                        : 'Requires supervisor approval before posting',
                     style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant),
@@ -1314,13 +1323,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
                 runSpacing: 4,
                 children: [
                   Text(
-                    'Phiếu Điều Chỉnh Kho (${_statusFilter == null ? data.cashRequests.length : data.cashRequests.where((r) => r.status == _statusFilter).length})',
+                    '${context.tr('requests_section_cash')} (${_statusFilter == null ? data.cashRequests.length : data.cashRequests.where((r) => r.status == _statusFilter).length})',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    'Ảnh hưởng số dư két sau khi được phê duyệt',
+                    context.isVietnamese
+                        ? 'Ảnh hưởng số dư két sau khi được phê duyệt'
+                        : 'Updates safe balance once approved',
                     style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant),

@@ -239,7 +239,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             sectionGap,
 
             // Section Giao diện
-            const SectionHeader(title: 'Giao diện', showCount: false),
+            SectionHeader(
+              title: isVi ? 'Giao diện' : 'Appearance',
+              showCount: false,
+            ),
             titleGap,
             Card(
               shape: RoundedRectangleBorder(
@@ -265,21 +268,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     SegmentedButton<ThemeMode>(
-                      segments: const [
+                      segments: [
                         ButtonSegment(
                           value: ThemeMode.system,
-                          icon: Icon(Icons.settings_suggest_outlined, size: 18),
-                          label: Text('Hệ thống'),
+                          icon: const Icon(Icons.settings_suggest_outlined, size: 18),
+                          label: Text(isVi ? 'Hệ thống' : 'System'),
                         ),
                         ButtonSegment(
                           value: ThemeMode.light,
-                          icon: Icon(Icons.light_mode_outlined, size: 18),
-                          label: Text('Sáng'),
+                          icon: const Icon(Icons.light_mode_outlined, size: 18),
+                          label: Text(isVi ? 'Sáng' : 'Light'),
                         ),
                         ButtonSegment(
                           value: ThemeMode.dark,
-                          icon: Icon(Icons.dark_mode_outlined, size: 18),
-                          label: Text('Tối'),
+                          icon: const Icon(Icons.dark_mode_outlined, size: 18),
+                          label: Text(isVi ? 'Tối' : 'Dark'),
                         ),
                       ],
                       selected: {currentMode},
@@ -462,7 +465,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             sectionGap,
-            const SectionHeader(title: 'Hồ Sơ Của Tôi', showCount: false),
+            SectionHeader(
+              title: isVi ? 'Hồ Sơ Của Tôi' : 'My Profile',
+              showCount: false,
+            ),
             titleGap,
             Card(
               shape: RoundedRectangleBorder(
@@ -721,19 +727,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             sectionGap,
-            const SectionHeader(title: 'Tài khoản & Bảo mật', showCount: false),
+            SectionHeader(
+              title: isVi ? 'Tài khoản & Bảo mật' : 'Account & Security',
+              showCount: false,
+            ),
             titleGap,
             Card(
               child: ListTile(
                 key: const Key('settings-change-password-tile'),
                 leading: const Icon(Icons.lock_outline),
-                title: const Text('Đổi mật khẩu đăng nhập'),
-                subtitle: const Text('Cập nhật mật khẩu tài khoản hiện tại'),
+                title: Text(isVi ? 'Đổi mật khẩu đăng nhập' : 'Change Password'),
+                subtitle: Text(isVi
+                    ? 'Cập nhật mật khẩu tài khoản hiện tại'
+                    : 'Update your account login password'),
                 trailing: const Icon(Icons.chevron_right, size: 20),
                 onTap: () async {
                   final updated = await ChangePasswordDialog.show(context);
                   if (updated == true && context.mounted) {
-                    AppToast.success(context, 'Đổi mật khẩu thành công!');
+                    AppToast.success(context, isVi ? 'Đổi mật khẩu thành công!' : 'Password changed successfully!');
                   }
                 },
               ),
@@ -742,8 +753,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (RoleVisibility.canManageEmployees(user) ||
                 RoleVisibility.rolesOf(user).contains('admin') ||
                 RoleVisibility.rolesOf(user).contains('system_admin')) ...[
-              const SectionHeader(
-                  title: 'IAM & Quản trị Hệ thống', showCount: false),
+              SectionHeader(
+                title: isVi ? 'IAM & Quản trị Hệ thống' : 'IAM & System Administration',
+                showCount: false,
+              ),
               titleGap,
               Card(
                 child: Column(
@@ -813,27 +826,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               sectionGap,
             ],
-            const SectionHeader(title: 'Ứng dụng', showCount: false),
+            SectionHeader(
+              title: isVi ? 'Ứng dụng' : 'Application',
+              showCount: false,
+            ),
             titleGap,
             const _AppDownloadCard(),
             sectionGap,
             Card(
               child: Column(
                 children: [
-                  const ListTile(
-                    leading: StoreLogo(size: 28),
+                  ListTile(
+                    leading: const StoreLogo(size: 28),
                     title: Text(
-                      'Quản lý kho',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      isVi ? 'Quản lý kho' : 'BankOps Inventory',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     subtitle: Text(
-                      'Hệ thống quản lý bán hàng và kho hàng',
+                      isVi
+                          ? 'Hệ thống quản lý bán hàng và kho hàng'
+                          : 'Retail and warehouse management system',
                     ),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.exit_to_app),
-                    title: const Text('Đăng xuất'),
+                    title: Text(isVi ? 'Đăng xuất' : 'Sign Out'),
                     onTap: () async {
                       await context.read<AuthService>().signOut();
                       if (context.mounted) {

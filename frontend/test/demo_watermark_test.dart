@@ -52,15 +52,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('ReportsScreen mounts the demo watermark', (tester) async {
+  testWidgets('ReportsScreen operates in live enterprise mode without demo watermark', (tester) async {
     await pumpScreen(tester, const ReportsScreen());
-    expect(find.byType(DemoBanner), findsOneWidget);
-    expect(find.text(watermark), findsOneWidget);
+    expect(find.byType(DemoBanner), findsNothing);
+    expect(find.text(watermark), findsNothing);
   });
 
-  testWidgets('ImportScreen mounts the demo watermark', (tester) async {
+  testWidgets('ImportScreen operates in live enterprise mode without demo watermark', (tester) async {
     await pumpScreen(tester, const ImportScreen());
-    expect(find.byType(DemoBanner), findsOneWidget);
-    expect(find.text(watermark), findsOneWidget);
+    expect(find.byType(DemoBanner), findsNothing);
+    expect(find.text(watermark), findsNothing);
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/i18n/app_i18n.dart';
 import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
@@ -516,14 +517,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Quỹ tiền mặt & Ca trực chi nhánh',
+                            context.isVietnamese
+                                ? 'Quỹ tiền mặt & Ca trực chi nhánh'
+                                : 'Store Cash & Shift Safes',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'Theo dõi số dư từng quầy POS, từng ca làm việc và két lưu trữ',
+                            context.isVietnamese
+                                ? 'Theo dõi số dư từng quầy POS, từng ca làm việc và két lưu trữ'
+                                : 'Track POS register balance, active shifts, and storage safes',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -850,7 +855,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   size: 20, color: Color(0xFFF59E0B)),
               const SizedBox(width: 8),
               Text(
-                'Thao tác nhanh cho ca làm việc',
+                context.isVietnamese
+                    ? 'Thao tác nhanh cho ca làm việc'
+                    : 'Quick Shift Actions',
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -868,7 +875,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _actionButton(
                     context,
                     icon: Icons.savings_outlined,
-                    label: 'Lập phiếu nhập nguyên liệu',
+                    label: context.isVietnamese
+                        ? 'Lập phiếu nhập nguyên liệu'
+                        : 'New Stock Inward',
                     color: const Color(0xFF059669),
                     tabIndex: 3,
                   ),
@@ -876,7 +885,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _actionButton(
                     context,
                     icon: Icons.inventory_2_outlined,
-                    label: 'Lập phiếu Xuất/Nhập kho',
+                    label: context.isVietnamese
+                        ? 'Lập phiếu Xuất/Nhập kho'
+                        : 'Stock In/Out Voucher',
                     color: const Color(0xFF2563EB),
                     tabIndex: 3,
                   ),
@@ -884,7 +895,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _actionButton(
                     context,
                     icon: Icons.verified_outlined,
-                    label: 'Phê duyệt Kiểm Soát Kép',
+                    label: context.isVietnamese
+                        ? 'Phê duyệt Kiểm Soát Kép'
+                        : 'Dual Control Approval',
                     color: const Color(0xFF7C3AED),
                     tabIndex: 4,
                   )
@@ -892,14 +905,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _actionButton(
                     context,
                     icon: Icons.fact_check_outlined,
-                    label: 'Theo dõi Yêu cầu của tôi',
+                    label: context.isVietnamese
+                        ? 'Theo dõi Yêu cầu của tôi'
+                        : 'Track My Requests',
                     color: const Color(0xFFD97706),
                     tabIndex: 3,
                   ),
                 _actionButton(
                   context,
                   icon: Icons.sync_alt_outlined,
-                  label: 'Đối soát Sổ cái tức thì',
+                  label: context.isVietnamese
+                      ? 'Đối soát Sổ cái tức thì'
+                      : 'Instant Reconciliation',
                   color: const Color(0xFF0891B2),
                   tabIndex: 7,
                 ),
@@ -1426,6 +1443,8 @@ class _DashboardHeader extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isVeryNarrow = screenWidth < 420;
 
+    final isVi = context.isVietnamese;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(isVeryNarrow ? 16 : 24, 20, isVeryNarrow ? 16 : 24, 16),
@@ -1446,8 +1465,8 @@ class _DashboardHeader extends StatelessWidget {
               children: [
                 Text(
                   canApprove
-                      ? 'Tổng quan vận hành'
-                      : 'Bàn vận hành Giao dịch viên',
+                      ? (isVi ? 'Tổng quan vận hành' : 'Operations Overview')
+                      : (isVi ? 'Bàn vận hành Giao dịch viên' : 'Operator Workspace'),
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.5,
@@ -1462,7 +1481,7 @@ class _DashboardHeader extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Kho đang hoạt động',
+                        isVi ? 'Kho đang hoạt động' : 'Active Store & Warehouse',
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurfaceVariant,
@@ -1503,12 +1522,12 @@ class _DashboardHeader extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     canApprove
-                        ? (screenWidth < 680
-                            ? 'QUẢN LÝ DUYỆT'
-                            : 'QUY TRÌNH PHÊ DUYỆT')
-                        : (screenWidth < 680
-                            ? 'NHÂN VIÊN CA'
-                            : 'NHÂN VIÊN CA TRỰC'),
+                        ? (isVi
+                            ? (screenWidth < 680 ? 'QUẢN LÝ DUYỆT' : 'QUY TRÌNH PHÊ DUYỆT')
+                            : (screenWidth < 680 ? 'MANAGER' : 'APPROVAL WORKFLOW'))
+                        : (isVi
+                            ? (screenWidth < 680 ? 'NHÂN VIÊN CA' : 'NHÂN VIÊN CA TRỰC')
+                            : (screenWidth < 680 ? 'OPERATOR' : 'SHIFT OPERATOR')),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -1962,22 +1981,23 @@ class DashboardKpiGrid extends StatelessWidget {
       canApprove ? data.inbox.length : approvedCount,
     ];
 
+    final isVi = context.isVietnamese;
     final tiles = [
-      const _KpiTile(
-          'Điểm lưu kho', Icons.warehouse_rounded, Color(0xFF2563EB)),
-      const _KpiTile(
-          'Chủng loại vật tư', Icons.category_rounded, Color(0xFF0891B2)),
-      const _KpiTile(
-          'Bản ghi tồn kho', Icons.checklist_rounded, Color(0xFF059669)),
-      const _KpiTile(
-          'Mã nguyên liệu', Icons.qr_code_rounded, Color(0xFF7C3AED)),
-      const _KpiTile(
-          'Phiếu yêu cầu', Icons.receipt_long_rounded, Color(0xFFEA580C)),
+      _KpiTile(
+          isVi ? 'Điểm lưu kho' : 'Stock Locations', Icons.warehouse_rounded, const Color(0xFF2563EB)),
+      _KpiTile(
+          isVi ? 'Chủng loại vật tư' : 'Categories', Icons.category_rounded, const Color(0xFF0891B2)),
+      _KpiTile(
+          isVi ? 'Bản ghi tồn kho' : 'Inventory Records', Icons.checklist_rounded, const Color(0xFF059669)),
+      _KpiTile(
+          isVi ? 'Mã nguyên liệu' : 'Material SKUs', Icons.qr_code_rounded, const Color(0xFF7C3AED)),
+      _KpiTile(
+          isVi ? 'Phiếu yêu cầu' : 'Requests', Icons.receipt_long_rounded, const Color(0xFFEA580C)),
       canApprove
-          ? const _KpiTile(
-              'Hàng đợi duyệt', Icons.verified_rounded, Color(0xFF16A34A))
-          : const _KpiTile(
-              'Phiếu đã duyệt', Icons.verified_rounded, Color(0xFF16A34A)),
+          ? _KpiTile(
+              isVi ? 'Hàng đợi duyệt' : 'Approval Queue', Icons.verified_rounded, const Color(0xFF16A34A))
+          : _KpiTile(
+              isVi ? 'Phiếu đã duyệt' : 'Approved Vouchers', Icons.verified_rounded, const Color(0xFF16A34A)),
     ];
 
     return SliverGrid(

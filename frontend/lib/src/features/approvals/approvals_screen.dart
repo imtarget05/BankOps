@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_shell.dart';
+import '../../core/i18n/app_i18n.dart';
 import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/approval_pdf.dart';
 import '../../core/util/report_share.dart';
@@ -728,7 +729,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hộp Thư Phê Duyệt Yêu Cầu',
+                        context.tr('approvals_header_title'),
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5,
@@ -736,7 +737,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Quản lý kiểm tra chứng từ và quyết định phê duyệt ghi sổ',
+                        context.tr('approvals_header_subtitle'),
                         style: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 13,
@@ -762,7 +763,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                             size: 16, color: Color(0xFFD97706)),
                         const SizedBox(width: 6),
                         Text(
-                          '${items.length} YÊU CẦU CHỜ DUYỆT',
+                          context.tr('approvals_badge_pending',
+                              {'count': '${items.length}'}),
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -843,14 +845,14 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          'Hộp thư phê duyệt hoàn toàn trống',
-                          style: TextStyle(
+                        Text(
+                          context.tr('approvals_empty_title'),
+                          style: const TextStyle(
                               fontWeight: FontWeight.w800, fontSize: 16),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Tất cả các phiếu xuất/nhập kho và nạp/rút quỹ đã được kiểm soát xử lý xong.',
+                          context.tr('approvals_empty_sub'),
                           style: TextStyle(
                             fontSize: 12,
                             color: theme.colorScheme.onSurfaceVariant,
@@ -1394,8 +1396,12 @@ class _SelectionBar extends StatelessWidget {
           Flexible(
             child: Text(
               selected.isEmpty
-                  ? 'Chọn để duyệt hàng loạt'
-                  : 'Đã chọn ${selected.length}/${allIds.length}',
+                  ? (context.isVietnamese
+                      ? 'Chọn để duyệt hàng loạt'
+                      : 'Select for batch approval')
+                  : (context.isVietnamese
+                      ? 'Đã chọn ${selected.length}/${allIds.length}'
+                      : 'Selected ${selected.length}/${allIds.length}'),
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1406,7 +1412,9 @@ class _SelectionBar extends StatelessWidget {
               key: const Key('approve-selected-btn'),
               onPressed: busy ? null : onApproveSelected,
               icon: const Icon(Icons.verified_rounded, size: 16),
-              label: Text('Duyệt ${selected.length} phiếu'),
+              label: Text(context.isVietnamese
+                  ? 'Duyệt ${selected.length} phiếu'
+                  : 'Approve ${selected.length} vouchers'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF059669),
                 padding:
