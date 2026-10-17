@@ -119,9 +119,9 @@ void main() {
     });
   });
 
-  group('ReportsScreen Executive Meeting UI Tests', () {
+  group('ReportsScreen Executive Business UI Tests', () {
     testWidgets(
-        'Renders Executive KPI Deck and allows entering presentation mode',
+        'Renders Executive KPI Deck, opens Voucher Print Modal, and views Report Summary',
         (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -139,12 +139,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Check header and meeting action buttons
+      // Check header and business action buttons
       expect(find.text('Báo cáo & Biểu đồ'), findsOneWidget);
-      expect(find.byKey(const Key('btn-meeting-mode-header')), findsOneWidget);
-      expect(find.byKey(const Key('btn-copy-meeting-header')), findsOneWidget);
       expect(find.byKey(const Key('btn-print-meeting-pdf-header')),
           findsOneWidget);
+      expect(find.byKey(const Key('btn-print-vouchers-modal')), findsOneWidget);
+      expect(find.byKey(const Key('btn-export-csv-reports')), findsOneWidget);
 
       // Check 4 Executive KPI cards
       expect(find.byKey(const Key('kpi-cash-liquidity')), findsOneWidget);
@@ -152,34 +152,31 @@ void main() {
       expect(find.byKey(const Key('kpi-reconciliation-rate')), findsOneWidget);
       expect(find.byKey(const Key('kpi-stagnation-risk')), findsOneWidget);
 
-      // Open Meeting Presentation Mode (Slide Deck)
-      await tester.tap(find.byKey(const Key('btn-meeting-mode-header')));
+      // Open Ministry of Finance Voucher Print Center Modal
+      await tester.tap(find.byKey(const Key('btn-print-vouchers-modal')));
       await tester.pumpAndSettle();
 
-      expect(
-          find.textContaining(
-              'Báo Cáo Điều Hành Cuộc Họp Giao Ban · Slide 1/4'),
-          findsOneWidget);
-      expect(find.text('1. TỔNG QUAN TÌNH HÌNH VẬN HÀNH TRONG KỲ'),
-          findsOneWidget);
-
-      // Navigate to Slide 2
-      await tester.tap(find.text('Tiếp theo'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Slide 2/4'), findsOneWidget);
-      expect(find.text('2. PHÂN TÍCH HÀNG TỒN ĐỌNG & RỦI RO LỖI THỜI'),
+      expect(find.text('Trung Tâm In Chứng Từ & Biểu Mẫu'), findsOneWidget);
+      expect(find.text('Phiếu Nhập Kho (Mẫu 01-VT)'), findsOneWidget);
+      expect(find.text('Phiếu Xuất Kho (Mẫu 02-VT)'), findsOneWidget);
+      expect(find.text('Phiếu Thu Tiền Mặt (Mẫu 01-TT)'), findsOneWidget);
+      expect(find.text('Phiếu Chi Tiền Mặt (Mẫu 02-TT)'), findsOneWidget);
+      expect(find.text('Biên Bản Kiểm Kê Kho & Bàn Giao Ca (Mẫu 05-VT)'),
           findsOneWidget);
 
-      // Close presentation dialog
-      await tester.tap(find.byIcon(Icons.close));
+      // Close modal by tapping outside or popping
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+      navigator.pop();
       await tester.pumpAndSettle();
 
-      // Switch to Meeting Notes Tab
-      await tester.tap(find.byKey(const Key('tab-reports-meeting-notes')));
+      // Switch to Meeting Notes / Executive Summary Tab
+      final tabFinder = find.byKey(const Key('tab-reports-meeting-notes'));
+      await tester.ensureVisible(tabFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(tabFinder);
       await tester.pumpAndSettle();
 
-      expect(find.text('Bàn Làm Việc Giao Ban & Chuẩn Bị Cuộc Họp'),
-          findsOneWidget);
+      expect(find.text('Báo Cáo Đánh Giá Hoạt Động & Vận Hành'), findsOneWidget);
       expect(find.text('1. ĐÁNH GIÁ TRẠNG THÁI VẬN HÀNH (STAFF ASSESSMENT)'),
           findsOneWidget);
       expect(find.textContaining('TRỌNG TÂM PHÁT BIỂU & KIẾN NGHỊ CUỘC HỌP'),

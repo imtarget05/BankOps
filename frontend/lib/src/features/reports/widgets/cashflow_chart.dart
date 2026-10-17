@@ -20,7 +20,7 @@ class CashflowChart extends StatelessWidget {
       return const EmptyView(
         title: 'Chưa có dữ liệu dòng tiền mô phỏng',
         subtitle:
-            'Tạo phiếu quỹ và được Checker duyệt — biểu đồ thu/chi sẽ hiện ở đây.',
+            'Tạo phiếu quỹ và được cấp quản lý duyệt — biểu đồ thu/chi sẽ hiện ở đây.',
         icon: Icons.savings_outlined,
       );
     }
@@ -54,11 +54,11 @@ class CashflowChart extends StatelessWidget {
                 children: [
                   _LegendDot(
                     color: statusColors.success,
-                    label: 'Thu quỹ mô phỏng (VND): ${AppFormat.money(totalIn.toStringAsFixed(0))}',
+                    label: 'Thu quỹ tiền mặt (VND): ${AppFormat.money(totalIn.toStringAsFixed(0))}',
                   ),
                   _LegendDot(
                     color: statusColors.danger,
-                    label: 'Chi quỹ mô phỏng (VND): ${AppFormat.money(totalOut.toStringAsFixed(0))}',
+                    label: 'Chi quỹ tiền mặt (VND): ${AppFormat.money(totalOut.toStringAsFixed(0))}',
                   ),
                 ],
               ),

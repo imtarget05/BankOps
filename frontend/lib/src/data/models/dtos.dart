@@ -263,6 +263,10 @@ class StocktakeItem {
   final List<StocktakeLineItem> lines;
   final String? shiftCode;
   final String? businessDate;
+
+  int get discrepancyCount => lines
+      .where((l) => (double.tryParse(l.variance) ?? 0).abs() > 0.0001)
+      .length;
 }
 
 /// Tài sản theo serial.

@@ -91,7 +91,7 @@ class MeetingReportPdf {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      'QUẢN LÝ KHO TRÀ SỮA',
+                      'HỆ THỐNG CỬA HÀNG & KHO F&B BANKOPS',
                       style: pw.TextStyle(
                         fontSize: 10,
                         fontWeight: pw.FontWeight.bold,
@@ -99,7 +99,7 @@ class MeetingReportPdf {
                       ),
                     ),
                     pw.Text(
-                      'Vận hành nhập · xuất · tồn nguyên liệu',
+                      'Chi nhánh Vận hành Trung tâm',
                       style: const pw.TextStyle(
                           fontSize: 8.5, color: PdfColors.grey700),
                     ),
@@ -109,15 +109,15 @@ class MeetingReportPdf {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      'BẢN LƯU HÀNH NỘI BỘ',
+                      'BÁO CÁO VẬN HÀNH ĐIỀU HÀNH',
                       style: pw.TextStyle(
                         fontSize: 8.5,
                         fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.red900,
+                        color: PdfColors.blue900,
                       ),
                     ),
                     pw.Text(
-                      'ISO 27001 · DUAL CONTROL',
+                      'Hệ thống Quản trị Doanh nghiệp BankOps',
                       style: const pw.TextStyle(
                           fontSize: 8, color: PdfColors.grey600),
                     ),
@@ -134,7 +134,7 @@ class MeetingReportPdf {
               child: pw.Column(
                 children: [
                   pw.Text(
-                    'BÁO CÁO VẬN HÀNH KHO NGUYÊN LIỆU',
+                    'BÁO CÁO TỔNG HỢP VẬN HÀNH KINH DOANH & TỒN KHO',
                     style: pw.TextStyle(
                       fontSize: 14,
                       fontWeight: pw.FontWeight.bold,
@@ -185,16 +185,16 @@ class MeetingReportPdf {
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Tổng thu quỹ mô phỏng'),
+                    _cellText('Tổng thu tiền mặt (Thu quỹ)'),
                     _cellText(AppFormat.money(totalIn.toStringAsFixed(0))),
                     _cellText('$totalJournals bút toán thực hiện'),
                   ],
                 ),
                 pw.TableRow(
                   children: [
-                    _cellText('Tổng chi quỹ mô phỏng'),
+                    _cellText('Tổng chi tiền mặt (Chi quỹ)'),
                     _cellText(AppFormat.money(totalOut.toStringAsFixed(0))),
-                    _cellText('Điều chỉnh tồn kho'),
+                    _cellText('Điều chỉnh & xuất kho'),
                   ],
                 ),
                 pw.TableRow(
@@ -310,9 +310,9 @@ class MeetingReportPdf {
               ),
             pw.SizedBox(height: 12),
 
-            // Mục 3: Trọng tâm thảo luận & Kiến nghị
+            // Mục 3: Đề xuất điều hành & Kế hoạch
             pw.Text(
-              'III. TRỌNG TÂM THẢO LUẬN & KIẾN NGHỊ CUỘC HỌP GIAO BAN',
+              'III. ĐỀ XUẤT ĐIỀU HÀNH & KẾ HOẠCH VẬN HÀNH TIẾP THEO',
               style: pw.TextStyle(
                   fontSize: 10,
                   fontWeight: pw.FontWeight.bold,
@@ -333,7 +333,7 @@ class MeetingReportPdf {
             ),
             pw.Bullet(
               text:
-                  'Tuân thủ nghiêm ngặt quy trình kiểm soát 4 mắt (Maker-Checker) và bảo mật mã PIN kiểm soát.',
+                  'Tuân thủ nghiêm ngặt quy trình kiểm soát phê duyệt và bảo mật hệ thống.',
               style: const pw.TextStyle(fontSize: 8.5),
             ),
             if (staffNotes != null && staffNotes.trim().isNotEmpty) ...[
@@ -349,22 +349,22 @@ class MeetingReportPdf {
 
             pw.Spacer(),
 
-            // Chữ ký 3 bên
+            // Chữ ký 3 bên chuẩn doanh nghiệp
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                _signatureBlock('NGƯỜI LẬP BÁO CÁO\n(Maker / Nhân viên)',
+                _signatureBlock('NGƯỜI LẬP BÁO CÁO\n(Nhân viên phụ trách)',
                     'Ký và ghi rõ họ tên'),
-                _signatureBlock('KIỂM SOÁT VIÊN\n(Checker / Phê duyệt)',
+                _signatureBlock('THỦ KHO / THỦ QUỸ\n(Phụ trách kho vận)',
                     'Ký và ghi rõ họ tên'),
-                _signatureBlock('CHỦ TỌA CUỘC HỌP\n(Giám đốc / Trưởng phòng)',
+                _signatureBlock('GIÁM ĐỐC / QUẢN LÝ\n(Phê duyệt)',
                     'Ký và đóng dấu xác nhận'),
               ],
             ),
             pw.SizedBox(height: 8),
             pw.Center(
               child: pw.Text(
-                'Quản Lý Kho Trà Sữa · Báo cáo vận hành nội bộ',
+                'Hệ thống Quản trị Doanh nghiệp BankOps · Báo cáo vận hành kinh doanh',
                 style:
                     const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey500),
               ),

@@ -277,13 +277,13 @@ class HttpBankOpsRepository implements BankOpsRepository {
       AppUser(
         id: 'u_maker',
         username: 'demo_maker',
-        displayName: 'Nguyễn Thị Mai (Pha Chế / Bán Hàng)',
+        displayName: 'Nguyễn Thị Mai',
         roles: ['staff', 'inventory_manager'],
       ),
       AppUser(
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
         username: 'demo_checker',
-        displayName: 'Trần Văn Quản Lý (Quản Lý Cửa Hàng)',
+        displayName: 'Trần Văn Quản Lý',
         roles: ['admin', 'approver', 'inventory_manager'],
         capabilities: [
           'iam:admin',
@@ -295,7 +295,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
       AppUser(
         id: 'u_auditor',
         username: 'demo_auditor',
-        displayName: 'Lê Khánh Chi (Kiểm Soát Chất Lượng)',
+        displayName: 'Lê Khánh Chi',
         roles: ['auditor'],
       ),
     ];
@@ -595,8 +595,7 @@ class HttpBankOpsRepository implements BankOpsRepository {
     if (itemIds.isEmpty) return;
     try {
       final res = await _post('/inventory/items/batch-delete', {'item_ids': itemIds});
-      if (res is Map &&
-          res['skipped_items'] is List &&
+      if (res['skipped_items'] is List &&
           (res['skipped_items'] as List).isNotEmpty &&
           res['deleted_count'] == 0) {
         final firstReason = (res['skipped_items'] as List).first;
@@ -1113,15 +1112,19 @@ class HttpBankOpsRepository implements BankOpsRepository {
   Future<Cashbox> updateCashbox({
     required String id,
     String? name,
+    String? balance,
+    bool? active,
   }) async {
     final body = await _put('/cash-sim/boxes/$id', {
       if (name != null) 'name': name,
+      if (balance != null) 'balance': balance,
+      if (active != null) 'active': active,
     });
     return Cashbox(
       id: _str(body, 'id', id),
       code: _str(body, 'code'),
       name: _str(body, 'name'),
-      openingBalance: _str(body, 'opening_balance', '0'),
+      openingBalance: _str(body, 'balance', _str(body, 'opening_balance', '0')),
     );
   }
 

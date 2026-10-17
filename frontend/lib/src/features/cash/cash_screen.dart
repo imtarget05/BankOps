@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_shell.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/error_text.dart';
+import '../../core/util/role_visibility.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
@@ -126,8 +127,208 @@ class _CashScreenState extends State<CashScreen> {
     }
   }
 
-  Future<void> _showEditCashboxDialog(Cashbox box) async {
+  Future<void> _showCashboxDetailSheet({
+    required Cashbox box,
+    required double currentAmount,
+    required List<JournalEntry> journals,
+    required bool isAdmin,
+  }) async {
+    final relatedJournals = journals.where((j) =>
+      j.cashboxId == box.id ||
+      j.reason.toLowerCase().contains(box.code.toLowerCase()) ||
+      j.reason.toLowerCase().contains(box.name.toLowerCase())
+    ).toList();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+        return DraggableScrollableSheet(
+          initialChildSize: 0.65,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollCtrl) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: ListView(
+                controller: scrollCtrl,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF059669).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.savings_rounded, color: Color(0xFF059669), size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              box.name,
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              'Mã két: ${box.code} • Đang hoạt động',
+                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isAdmin)
+                        FilledButton.tonalIcon(
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Chỉnh sửa'),
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _showEditCashboxDialog(box, currentAmount);
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'SỐ DƯ THỰC TẾ HIỆN TẠI',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              AppFormat.money(currentAmount.toStringAsFixed(0)),
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'SỐ DƯ BAN ĐẦU',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              AppFormat.money(box.openingBalance),
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Lịch Sử Bút Toán Phát Sinh (${relatedJournals.length})',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  if (relatedJournals.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Chưa có bút toán nào phát sinh cho két này.',
+                        style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    ...relatedJournals.take(10).map((j) {
+                      final isDeposit = j.kind.toLowerCase() == 'deposit' || j.kind.toLowerCase() == 'in';
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isDeposit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                              color: isDeposit ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    j.reason.isEmpty ? 'Giao dịch két quỹ' : j.reason,
+                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    AppFormat.dateTime(j.createdAt),
+                                    style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${isDeposit ? '+' : '-'}${AppFormat.money(j.amount, currency: j.currency)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: isDeposit ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditCashboxDialog(Cashbox box, [double? currentAmount]) async {
     final nameCtrl = TextEditingController(text: box.name);
+    final initialBal = currentAmount != null ? currentAmount.toStringAsFixed(0) : box.openingBalance;
+    final balanceCtrl = TextEditingController(text: initialBal);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -137,15 +338,35 @@ class _CashScreenState extends State<CashScreen> {
           children: [
             const Icon(Icons.edit_outlined, color: Color(0xFF059669)),
             const SizedBox(width: 8),
-            Text('Đổi Tên Két: ${box.code}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text('Chỉnh Sửa Két: ${box.code}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
-        content: TextField(
-          controller: nameCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Tên Két Sắt Mới *',
-            border: OutlineInputBorder(),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Tên Két Sắt *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: balanceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Điều Chỉnh Số Dư Quỹ (VND) *',
+                helperText: 'Dành cho Quản lý / Admin cập nhật tiền quỹ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Hủy')),
@@ -161,10 +382,14 @@ class _CashScreenState extends State<CashScreen> {
     if (ok == true && mounted) {
       try {
         final repo = RepositoryScope.of(context);
-        await repo.updateCashbox(id: box.id, name: nameCtrl.text.trim());
+        await repo.updateCashbox(
+          id: box.id,
+          name: nameCtrl.text.trim(),
+          balance: balanceCtrl.text.trim().isEmpty ? '0' : balanceCtrl.text.trim(),
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã cập nhật tên két sắt!'), behavior: SnackBarBehavior.floating),
+            const SnackBar(content: Text('Đã cập nhật thông tin két sắt thành công!'), behavior: SnackBarBehavior.floating),
           );
           _refresh();
         }
@@ -404,12 +629,15 @@ class _CashScreenState extends State<CashScreen> {
                           (b) => b?.cashboxId == box.id,
                           orElse: () => null,
                         );
-                    final currentAmount = balance?.amount ?? box.openingBalance;
+                    final currentAmountStr = balance?.amount ?? box.openingBalance;
+                    final currentAmount = double.tryParse(currentAmountStr) ?? 0.0;
                     final currency = balance?.currency ?? 'VND';
+                    final user = SessionScope.maybeOf(context)?.user;
+                    final roles = RoleVisibility.rolesOf(user);
+                    final isAdmin = RoleVisibility.isAdmin(roles) || user?.email == 'tanmainguyenbinh@gmail.com';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E293B) : Colors.white,
                         borderRadius: BorderRadius.circular(16),
@@ -424,138 +652,174 @@ class _CashScreenState extends State<CashScreen> {
                           ),
                         ],
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF059669).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(
-                              Icons.savings_rounded,
-                              size: 28,
-                              color: Color(0xFF059669),
-                            ),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _showCashboxDetailSheet(
+                            box: box,
+                            currentAmount: currentAmount,
+                            journals: data.journals,
+                            isAdmin: isAdmin,
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(6),
+                                Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF059669).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                    Icons.savings_rounded,
+                                    size: 28,
+                                    color: Color(0xFF059669),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              box.code,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 12,
+                                                color: Color(0xFF1E3A8A),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              box.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 16,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: const Text(
+                                              'ĐANG MỞ',
+                                              style: TextStyle(
+                                                color: Color(0xFF059669),
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      child: Text(
-                                        box.code,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 12,
-                                          color: Color(0xFF1E3A8A),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        box.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 16,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'ĐANG MỞ',
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Số dư ban đầu: ${AppFormat.money(box.openingBalance, currency: currency)} • Nhấn để xem chi tiết',
                                         style: TextStyle(
-                                          color: Color(0xFF059669),
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.onSurfaceVariant,
                                         ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'SỐ DƯ THỰC TẾ',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      AppFormat.money(currentAmountStr, currency: currency),
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF059669),
+                                        letterSpacing: -0.5,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Số dư đầu ngày: ${AppFormat.money(box.openingBalance, currency: currency)}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
+                                const SizedBox(width: 8),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 18),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  itemBuilder: (ctx) => [
+                                    const PopupMenuItem(
+                                      value: 'detail',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.info_outline_rounded, size: 16),
+                                          SizedBox(width: 8),
+                                          Text('Xem chi tiết két'),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isAdmin)
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit_outlined, size: 16),
+                                            SizedBox(width: 8),
+                                            Text('Chỉnh sửa két (Admin)'),
+                                          ],
+                                        ),
+                                      ),
+                                    if (isAdmin)
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                            SizedBox(width: 8),
+                                            Text('Đóng & Xóa két', style: TextStyle(color: Colors.red)),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                  onSelected: (v) {
+                                    if (v == 'detail') {
+                                      _showCashboxDetailSheet(
+                                        box: box,
+                                        currentAmount: currentAmount,
+                                        journals: data.journals,
+                                        isAdmin: isAdmin,
+                                      );
+                                    }
+                                    if (v == 'edit') _showEditCashboxDialog(box, currentAmount);
+                                    if (v == 'delete') _confirmDeleteCashbox(box);
+                                  },
                                 ),
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'SỐ DƯ THỰC TẾ',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                AppFormat.money(currentAmount, currency: currency),
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFF059669),
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 8),
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert, size: 18),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            itemBuilder: (ctx) => [
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit_outlined, size: 16),
-                                    SizedBox(width: 8),
-                                    Text('Đổi tên két'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Đóng & Xóa két', style: TextStyle(color: Colors.red)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            onSelected: (v) {
-                              if (v == 'edit') _showEditCashboxDialog(box);
-                              if (v == 'delete') _confirmDeleteCashbox(box);
-                            },
-                          ),
-                        ],
+                        ),
                       ),
                     );
                   },

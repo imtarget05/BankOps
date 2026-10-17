@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/report_share.dart';
@@ -7,7 +6,6 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../data/models/dtos.dart';
 import '../reports_filter.dart';
 import 'meeting_report_pdf.dart';
-import 'meeting_summary_formatter.dart';
 
 /// Tab đánh giá vận hành & chuẩn bị nội dung họp giao ban cho nhân viên.
 class MeetingNotesTab extends StatefulWidget {
@@ -51,21 +49,6 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
   void dispose() {
     _notesController.dispose();
     super.dispose();
-  }
-
-  void _copySummary() {
-    final md = MeetingSummaryFormatter.generateMarkdown(
-      inventoryBuckets: widget.inventoryBuckets,
-      cashflowBuckets: widget.cashflowBuckets,
-      stagnationItems: widget.stagnationItems,
-      reconciliations: widget.reconciliations,
-      granularity: widget.granularity,
-      dateRange: widget.dateRange,
-      staffAssessment: _selectedStatus,
-      staffNotes: _notesController.text,
-    );
-    Clipboard.setData(ClipboardData(text: md));
-    AppToast.success(context, 'Đã sao chép tóm tắt cuộc họp vào Clipboard.');
   }
 
   void _printPdf() {
@@ -126,11 +109,11 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.meeting_room_outlined,
+                    Icon(Icons.assessment_outlined,
                         color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
-                      'Bàn Làm Việc Giao Ban & Chuẩn Bị Cuộc Họp',
+                      'Báo Cáo Đánh Giá Hoạt Động & Vận Hành',
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: theme.colorScheme.primary,
@@ -138,28 +121,11 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                     ),
                   ],
                 ),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      key: const Key('btn-meeting-presentation-mode'),
-                      onPressed: widget.onOpenPresentation,
-                      icon: const Icon(Icons.co_present_outlined, size: 18),
-                      label: const Text('Chế độ Cuộc họp (Slide Deck)'),
-                    ),
-                    OutlinedButton.icon(
-                      key: const Key('btn-copy-meeting-briefing'),
-                      onPressed: _copySummary,
-                      icon: const Icon(Icons.content_copy_outlined, size: 18),
-                      label: const Text('Sao chép Tóm tắt Họp'),
-                    ),
-                    OutlinedButton.icon(
-                      key: const Key('btn-export-meeting-pdf'),
-                      onPressed: _printPdf,
-                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                      label: const Text('In / Xuất PDF A4'),
-                    ),
-                  ],
+                FilledButton.icon(
+                  key: const Key('btn-export-meeting-pdf'),
+                  onPressed: _printPdf,
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: const Text('Xuất Báo Cáo A4'),
                 ),
               ],
             ),
@@ -279,8 +245,8 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                   context,
                   title: 'Kiểm soát & Đối soát:',
                   content: totalRuns - cleanRuns > 0
-                      ? 'Có ${totalRuns - cleanRuns} phiên đối soát phát hiện ngoại lệ chênh lệch. Đề nghị Checker giải trình biên bản đối soát.'
-                      : '100% phiên đối soát khớp số liệu, tuân thủ chặt chẽ quy chế Maker-Checker và mã PIN kiểm soát.',
+                      ? 'Có ${totalRuns - cleanRuns} phiên đối soát phát hiện ngoại lệ chênh lệch. Đề nghị người phụ trách giải trình biên bản đối soát.'
+                      : '100% phiên đối soát khớp số liệu, tuân thủ chặt chẽ quy trình phê duyệt kiểm soát.',
                   isAlert: totalRuns - cleanRuns > 0,
                 ),
               ],

@@ -28,7 +28,7 @@ void main() {
       // Verify tabs and daily buckets
       expect(find.text('Báo cáo & Biểu đồ'), findsOneWidget);
       expect(find.text('Nhập/Xuất kho'), findsOneWidget);
-      expect(find.text('Dòng tiền mô phỏng'), findsOneWidget);
+      expect(find.text('Sổ Quỹ Tiền Mặt'), findsOneWidget);
       expect(find.text('Tồn đọng'), findsOneWidget);
       expect(find.text('Đối soát'), findsOneWidget);
       expect(find.text('2026-10-01'), findsOneWidget);
@@ -42,7 +42,7 @@ void main() {
       // Switch to Cashflow tab
       await tester.tap(find.byKey(const Key('tab-reports-cashflow')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Thu quỹ mô phỏng (VND)'), findsOneWidget);
+      expect(find.textContaining('Thu quỹ tiền mặt (VND)'), findsOneWidget);
 
       // Switch to Stagnation tab
       await tester.tap(find.byKey(const Key('tab-reports-stagnation')));

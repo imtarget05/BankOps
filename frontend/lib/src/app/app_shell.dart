@@ -86,6 +86,11 @@ class _AppShellState extends State<AppShell> {
   int _requestsNavId = 0;
   bool _autoOpenStockRequest = false;
   bool _autoOpenCashRequest = false;
+  String? _inventoryInitialCategory;
+  String? _inventoryInitialStockFilter;
+  String? _inventoryInitialViewMode;
+  String? _inventoryInitialLocationId;
+  int _inventoryNavKey = 0;
   /// Tạm thời ẩn chat bot trợ lý theo yêu cầu người dùng
   static const bool _enableAiAssistant = false;
   bool _aiUnavailable = false;
@@ -341,9 +346,14 @@ class _AppShellState extends State<AppShell> {
         return DashboardScreen(onNavigate: _go);
       case 1:
         return InventoryScreen(
+          key: ValueKey('inventory-$_inventoryNavKey'),
           mode: InventoryTabMode.stock,
           onNavigate: _go,
           onCreateStockRequest: () => _go(3, autoOpenStock: true),
+          initialCategory: _inventoryInitialCategory,
+          initialStockFilter: _inventoryInitialStockFilter,
+          initialViewMode: _inventoryInitialViewMode,
+          initialLocationId: _inventoryInitialLocationId,
         );
       case 2:
         return InventoryScreen(
@@ -432,7 +442,15 @@ class _AppShellState extends State<AppShell> {
 
   /// Điều hướng có kiểm tra quyền hiển thị theo vai trò (RoleVisibility).
   /// Tab bị ẩn với role hiện tại -> toast + ở yên, không chuyển.
-  void _go(int i, {bool autoOpenStock = false, bool autoOpenCash = false}) {
+  void _go(
+    int i, {
+    bool autoOpenStock = false,
+    bool autoOpenCash = false,
+    String? category,
+    String? stockFilter,
+    String? viewMode,
+    String? locationId,
+  }) {
     final session = SessionScope.maybeOf(context);
     final roles = RoleVisibility.rolesOf(session?.user);
     if (!RoleVisibility.visibleTabs(roles, session?.user).contains(i)) {
@@ -441,6 +459,13 @@ class _AppShellState extends State<AppShell> {
     }
     setState(() {
       _index = i;
+      if (i == 1) {
+        _inventoryNavKey++;
+        _inventoryInitialCategory = category;
+        _inventoryInitialStockFilter = stockFilter;
+        _inventoryInitialViewMode = viewMode;
+        _inventoryInitialLocationId = locationId;
+      }
       if (autoOpenStock || autoOpenCash) {
         _requestsNavId++;
         _autoOpenStockRequest = autoOpenStock;
@@ -806,7 +831,7 @@ class _AppShellState extends State<AppShell> {
                                 child: Text(
                                   _pendingApprovalCount > 0
                                       ? '$_pendingApprovalCount CHỜ DUYỆT'
-                                      : 'MAKER–CHECKER',
+                                      : 'PHÊ DUYỆT',
                                   style: TextStyle(
                                     color: _pendingApprovalCount > 0
                                         ? const Color(0xFFDC2626)
@@ -1357,7 +1382,7 @@ class _OfflineDemoBanner extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
       liveRegion: true,
-      label: 'Chế độ cục bộ. Dữ liệu demo chưa đồng bộ với cửa hàng.',
+      label: 'Chế độ ngoại tuyến · Dữ liệu lưu trữ cục bộ trên thiết bị.',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1369,7 +1394,7 @@ class _OfflineDemoBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Chế độ cục bộ · Dữ liệu demo — chưa đồng bộ với cửa hàng',
+                'Chế độ ngoại tuyến · Dữ liệu lưu trữ cục bộ trên thiết bị',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(

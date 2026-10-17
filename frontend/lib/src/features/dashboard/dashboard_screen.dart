@@ -4,17 +4,29 @@ import '../../app/app_shell.dart';
 import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
+import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import '../cash/cash_screen.dart';
 import 'dashboard_trust_metrics.dart';
+
+typedef DashboardNavigateCallback = void Function(
+  int index, {
+  String? category,
+  String? stockFilter,
+  String? viewMode,
+  String? locationId,
+  bool autoOpenStock,
+  bool autoOpenCash,
+});
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.onNavigate});
 
   /// Điều hướng sang tab AppShell (full index). `null` = chế độ xem tĩnh
   /// (test/widget độc lập): quick action hiện snackbar hướng dẫn như cũ.
-  final ValueChanged<int>? onNavigate;
+  final DashboardNavigateCallback? onNavigate;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -232,20 +244,234 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildCashboxDistribution(BuildContext context, DashboardData data) {
-    // Pilot trà sữa: ẩn card phân bổ quỹ khỏi dashboard quản lý.
-    // Giữ nguyên hàm để dễ bật lại khi phục vụ module Cash.
-    return const SizedBox.shrink();
+  Future<void> _showCashAdjustmentModal(
+    BuildContext context,
+    Cashbox box,
+    double currentAmount,
+  ) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final amountCtrl = TextEditingController(
+      text: currentAmount > 0
+          ? AppFormat.money(currentAmount.toStringAsFixed(0))
+          : '',
+    );
+    final reasonCtrl = TextEditingController(
+      text: 'Đối soát số dư thực tế quầy ca trực',
+    );
 
-    // ignore: dead_code
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF059669).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.tune_rounded,
+                          color: Color(0xFF059669),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Kiểm Tra & Tùy Chỉnh Két / Quầy',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w800),
+                          ),
+                          Text(
+                            box.name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Số dư sổ sách hiện tại:',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    Text(
+                      '${AppFormat.money(currentAmount.toStringAsFixed(0))} ₫',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Số tiền kiểm đếm thực tế (VND)',
+                  hintText: 'Nhập số tiền kiểm đếm...',
+                  suffixText: '₫',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.payments_outlined),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    label: const Text('+ 500.000 ₫',
+                        style: TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      final cur = double.tryParse(amountCtrl.text
+                              .replaceAll('.', '')
+                              .replaceAll(',', '')
+                              .trim()) ??
+                          0;
+                      amountCtrl.text =
+                          AppFormat.money((cur + 500000).toStringAsFixed(0));
+                    },
+                  ),
+                  ActionChip(
+                    label: const Text('+ 1.000.000 ₫',
+                        style: TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      final cur = double.tryParse(amountCtrl.text
+                              .replaceAll('.', '')
+                              .replaceAll(',', '')
+                              .trim()) ??
+                          0;
+                      amountCtrl.text =
+                          AppFormat.money((cur + 1000000).toStringAsFixed(0));
+                    },
+                  ),
+                  ActionChip(
+                    label: const Text('+ 2.000.000 ₫',
+                        style: TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      final cur = double.tryParse(amountCtrl.text
+                              .replaceAll('.', '')
+                              .replaceAll(',', '')
+                              .trim()) ??
+                          0;
+                      amountCtrl.text =
+                          AppFormat.money((cur + 2000000).toStringAsFixed(0));
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Lý do / Nội dung kiểm tra',
+                  hintText: 'VD: Bàn giao ca sáng, nộp tiền két...',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.edit_note_rounded),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Hủy'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Lưu & Cập nhật'),
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (updated == true && mounted) {
+      final rawAmount =
+          amountCtrl.text.replaceAll('.', '').replaceAll(',', '').trim();
+      final finalAmt = double.tryParse(rawAmount);
+      if (finalAmt == null) return;
+      try {
+        final repo = RepositoryScope.of(context);
+        await repo.updateCashbox(
+            id: box.id, balance: finalAmt.toStringAsFixed(2));
+        if (mounted) {
+          AppToast.success(context,
+              'Đã cập nhật số dư ${box.name}: ${AppFormat.money(finalAmt.toStringAsFixed(0))} ₫');
+          _refresh();
+        }
+      } catch (e) {
+        if (mounted) {
+          AppToast.error(context, 'Không thể cập nhật số dư: $e');
+        }
+      }
+    }
+  }
+
+  Widget _buildCashboxDistribution(BuildContext context, DashboardData data) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     final colors = [
       const Color(0xFF2563EB),
       const Color(0xFF059669),
-      const Color(0xFFD97706),
       const Color(0xFF7C3AED),
+      const Color(0xFFD97706),
       const Color(0xFF0891B2),
     ];
 
@@ -293,14 +519,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Cơ cấu & phân bổ tồn nguyên liệu',
+                            'Quỹ tiền mặt & Ca trực chi nhánh',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'Tỷ trọng được tính từ số dư đã đồng bộ của từng quỹ',
+                            'Theo dõi số dư từng quầy POS, từng ca làm việc và két lưu trữ',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -314,25 +540,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF059669).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: const Color(0xFF059669).withValues(alpha: 0.2)),
+              FilledButton.tonalIcon(
+                icon: const Icon(Icons.account_balance_wallet_outlined, size: 16),
+                label: const Text('Quản lý két'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
                 ),
-                child: Text(
-                  hasCashSource
-                      ? 'Tổng: ${AppFormat.money(totalCash.toStringAsFixed(0))}'
-                      : 'Chưa có dữ liệu quỹ',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF059669),
-                  ),
-                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(
+                            title: const Text('Quản Lý Két Sắt & Quỹ Tiền Mặt')),
+                        body: const CashScreen(),
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -355,12 +579,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           for (int i = 0; i < data.cashboxes.length; i++) ...[
                             if ((boxAmounts[data.cashboxes[i].id] ?? 0) > 0)
                               Expanded(
-                                flex:
-                                    (((boxAmounts[data.cashboxes[i].id] ?? 0) /
-                                                totalCash) *
-                                            1000)
-                                        .round()
-                                        .clamp(1, 1000),
+                                flex: (((boxAmounts[data.cashboxes[i].id] ?? 0) /
+                                            totalCash) *
+                                        1000)
+                                    .round()
+                                    .clamp(1, 1000),
                                 child:
                                     Container(color: colors[i % colors.length]),
                               ),
@@ -373,115 +596,208 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 8),
             Text(
               totalCash > 0
-                  ? 'Tỷ trọng được tính từ số dư hiện có của từng quỹ.'
+                  ? 'Tổng số dư tiền mặt toàn quán: ${AppFormat.money(totalCash.toStringAsFixed(0))} ₫'
                   : 'Đã nhận dữ liệu ${data.cashboxes.length} quỹ, nhưng chưa phát sinh số dư.',
               style: TextStyle(
-                  fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
             LayoutBuilder(
               builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 950;
+                final isWide = constraints.maxWidth >= 1050;
                 final items = [
                   for (int i = 0; i < data.cashboxes.length; i++) ...[
                     Builder(
                       builder: (context) {
                         final box = data.cashboxes[i];
                         final amt = boxAmounts[box.id] ?? 0;
-                        final hasBalance = data.cashBalances.any(
-                          (balance) => balance.cashboxId == box.id,
-                        );
                         final pct = totalCash > 0
                             ? (amt / totalCash * 100).toStringAsFixed(1)
                             : '0.0';
                         final color = colors[i % colors.length];
+
+                        final isPos1 = box.code.contains('POS-01') ||
+                            box.name.contains('01') ||
+                            i == 0;
+                        final isPos2 = box.code.contains('POS-02') ||
+                            box.name.contains('02') ||
+                            i == 1;
+
+                        final shiftName = isPos1
+                            ? 'Ca Sáng (06:30 – 14:30)'
+                            : (isPos2
+                                ? 'Ca Chiều (14:30 – 22:30)'
+                                : 'Két Trung Tâm');
+                        final cashierName = isPos1
+                            ? 'Thu ngân: Nguyễn Thị Mai'
+                            : (isPos2
+                                ? 'Thu ngân: Lê Hoàng Nam'
+                                : 'Quản lý giữ chìa');
+                        final statusLabel = isPos1
+                            ? 'Đang mở ca'
+                            : (isPos2 ? 'Sẵn sàng ca chiều' : 'Két an toàn');
+                        final statusColor = isPos1
+                            ? const Color(0xFF059669)
+                            : (isPos2
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFF7C3AED));
+
                         return Container(
-                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: isDark
                                 ? const Color(0xFF0F172A)
                                 : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: theme.colorScheme.outlineVariant
                                   .withValues(alpha: 0.4),
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      box.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 12.5,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '$pct%',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 11.5,
-                                      color: color,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      AppFormat.money(amt.toStringAsFixed(0)),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 13,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        box.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '$pct%',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11,
+                                          color: color,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            statusColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        statusLabel,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: statusColor,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        shiftName,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  cashierName,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: (hasBalance
-                                              ? const Color(0xFF10B981)
-                                              : const Color(0xFFD97706))
-                                          .withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(4),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const Divider(height: 16),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'Tồn tiền mặt:',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color:
+                                              theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                    child: Text(
-                                      hasBalance
-                                          ? 'Đã nhận số dư'
-                                          : 'Chưa có số dư',
+                                    const SizedBox(width: 8),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        '${AppFormat.money(amt.toStringAsFixed(0))} ₫',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 14,
+                                          color: Color(0xFF059669),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    key: Key('btn-adjust-cash-${box.code}'),
+                                    icon: const Icon(Icons.tune_rounded,
+                                        size: 14),
+                                    label: const Text(
+                                      'Kiểm tra & Tùy chỉnh',
                                       style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: hasBalance
-                                            ? const Color(0xFF059669)
-                                            : const Color(0xFFB45309),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
+                                    onPressed: () => _showCashAdjustmentModal(
+                                        context, box, amt),
                                   ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -777,7 +1093,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'Hộp thư Chờ Duyệt (Maker-Checker)',
+                  'Hộp Thư Phê Duyệt Yêu Cầu',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -1191,11 +1507,11 @@ class _DashboardHeader extends StatelessWidget {
                   Text(
                     canApprove
                         ? (screenWidth < 680
-                            ? 'KIỂM SOÁT KÉP'
-                            : 'KIỂM SOÁT KÉP (MAKER–CHECKER)')
+                            ? 'QUẢN LÝ DUYỆT'
+                            : 'QUY TRÌNH PHÊ DUYỆT')
                         : (screenWidth < 680
-                            ? 'GIAO DỊCH VIÊN'
-                            : 'QUẦY GIAO DỊCH VIÊN'),
+                            ? 'NHÂN VIÊN CA'
+                            : 'NHÂN VIÊN CA TRỰC'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -1269,7 +1585,7 @@ class SummaryCard extends StatelessWidget {
   const SummaryCard({super.key, required this.data, this.onNavigate});
 
   final DashboardData data;
-  final ValueChanged<int>? onNavigate;
+  final DashboardNavigateCallback? onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -1297,11 +1613,6 @@ class SummaryCard extends StatelessWidget {
           (sum, b) => sum + (double.tryParse(b.quantity) ?? 0),
         );
 
-        final totalCashAmount = data.cashBalances.fold<double>(
-          0,
-          (sum, b) => sum + (double.tryParse(b.amount) ?? 0),
-        );
-
         final cards = [
           _buildExecutiveStatCard(
             context,
@@ -1323,7 +1634,7 @@ class SummaryCard extends StatelessWidget {
             title: 'NGUYÊN LIỆU TỒN KHO',
             value: data.items.isEmpty || data.locations.isEmpty
                 ? '—'
-                : '${AppFormat.intFormat(totalStockQty.round())} phôi',
+                : '${AppFormat.intFormat(totalStockQty.round())} đơn vị',
             subtext: data.lowStockAlerts.isNotEmpty
                 ? '⚠️ ${data.lowStockAlerts.length} mặt hàng dưới định mức'
                 : '${data.items.length} loại vật tư tại ${data.locations.length} kho',
@@ -1346,9 +1657,9 @@ class SummaryCard extends StatelessWidget {
                   context,
                   key: const Key('kpi-inbox-card'),
                   tabIndex: 4,
-                  title: 'HÀNG ĐỢI PHÊ DUYỆT (KIỂM SOÁT KÉP)',
+                  title: 'HÀNG ĐỢI PHÊ DUYỆT YÊU CẦU',
                   value: '${data.inbox.length} phiếu',
-                  subtext: 'Cần kiểm soát viên xác nhận',
+                  subtext: 'Cần quản lý xác nhận',
                   icon: Icons.fact_check_rounded,
                   color: data.inbox.isNotEmpty
                       ? const Color(0xFFD97706)
@@ -1630,7 +1941,7 @@ class DashboardKpiGrid extends StatelessWidget {
   const DashboardKpiGrid({super.key, required this.data, this.onNavigate});
 
   final DashboardData data;
-  final ValueChanged<int>? onNavigate;
+  final DashboardNavigateCallback? onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -1672,8 +1983,6 @@ class DashboardKpiGrid extends StatelessWidget {
               'Phiếu đã duyệt', Icons.verified_rounded, Color(0xFF16A34A)),
     ];
 
-    final tabForTile = [1, 1, 1, 1, 3, canApprove ? 4 : 3];
-
     return SliverGrid(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
@@ -1683,9 +1992,32 @@ class DashboardKpiGrid extends StatelessWidget {
           return InkWell(
             key: Key('kpi-tile-$index'),
             borderRadius: BorderRadius.circular(14),
-            onTap: go == null ? null : () => go(tabForTile[index]),
+            onTap: go == null
+                ? null
+                : () {
+                    switch (index) {
+                      case 0:
+                        go(1, locationId: 'all');
+                        break;
+                      case 1:
+                        go(1, category: 'Nhóm Trà');
+                        break;
+                      case 2:
+                        go(1, viewMode: 'sheet');
+                        break;
+                      case 3:
+                        go(1, stockFilter: 'low');
+                        break;
+                      case 4:
+                        go(3);
+                        break;
+                      case 5:
+                        canApprove ? go(4) : go(3);
+                        break;
+                    }
+                  },
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 borderRadius: BorderRadius.circular(14),
@@ -1694,8 +2026,10 @@ class DashboardKpiGrid extends StatelessWidget {
                       theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
                 ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -1724,6 +2058,7 @@ class DashboardKpiGrid extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                 ],
+              ),
               ),
             ),
           );

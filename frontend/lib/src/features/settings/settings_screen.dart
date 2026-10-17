@@ -867,11 +867,11 @@ class _RoleBadge extends StatelessWidget {
   final String role;
 
   static String roleLabel(String role) => switch (role.toUpperCase()) {
-        'MAKER' => 'GIAO DỊCH VIÊN (MAKER)',
-        'STAFF' => 'NHÂN VIÊN (STAFF)',
-        'CHECKER' || 'APPROVER' => 'KIỂM SOÁT VIÊN (CHECKER)',
-        'AUDITOR' => 'KIỂM TOÁN VIÊN (AUDITOR)',
-        'ADMIN' || 'MANAGER' => 'QUẢN LÝ / CHỦ QUÁN (ADMIN)',
+        'MAKER' => 'NHÂN VIÊN LẬP PHIẾU',
+        'STAFF' => 'NHÂN VIÊN CỬA HÀNG',
+        'CHECKER' || 'APPROVER' => 'NGƯỜI PHÊ DUYỆT / QUẢN LÝ',
+        'AUDITOR' => 'KIỂM TOÁN VIÊN',
+        'ADMIN' || 'MANAGER' => 'QUẢN TRỊ VIÊN / QUẢN LÝ',
         'INVENTORY_CUSTODIAN' => 'THỦ KHO NGUYÊN LIỆU',
         'CASH_SIMULATED_CUSTODIAN' => 'THỦ QUỸ CỬA HÀNG',
         _ => role.toUpperCase(),

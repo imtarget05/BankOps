@@ -112,7 +112,7 @@ class MeetingSummaryFormatter {
     }
     sb.writeln();
 
-    sb.writeln('## 4. KIỂM SOÁT ĐỐI SOÁT & TUÂN THỦ (MAKER-CHECKER)');
+    sb.writeln('## 4. KIỂM SOÁT ĐỐI SOÁT & TUÂN THỦ (QUY TRÌNH PHÊ DUYỆT)');
     sb.writeln('- **Tổng số phiên đối soát:** $totalRuns lượt');
     sb.writeln('- **Tỷ lệ khớp lệnh chuẩn:** $matchRate%');
     sb.writeln('- **Phiên có ngoại lệ:** ${totalRuns - cleanRuns} lượt');
@@ -132,10 +132,10 @@ class MeetingSummaryFormatter {
     }
     if (totalRuns - cleanRuns > 0) {
       sb.writeln(
-          '3. **Xử lý ngoại lệ đối soát:** Đề nghị Checker và bộ phận kiểm toán nội bộ lập biên bản giải trình các chênh lệch.');
+          '3. **Xử lý ngoại lệ đối soát:** Đề nghị người phụ trách và bộ phận quản lý lập biên bản giải trình các chênh lệch.');
     } else {
       sb.writeln(
-          '3. **Kiểm soát quy trình:** Tiếp tục duy trì chuẩn kiểm duyệt 4 mắt và bảo mật mã PIN phê duyệt.');
+          '3. **Kiểm soát quy trình:** Tiếp tục duy trì chuẩn kiểm duyệt phân quyền và bảo mật quy trình.');
     }
 
     if (staffNotes != null && staffNotes.trim().isNotEmpty) {

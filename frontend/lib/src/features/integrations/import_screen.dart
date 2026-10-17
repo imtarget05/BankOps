@@ -9,7 +9,6 @@ import '../../core/theme/app_theme.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/confirm_dialog.dart';
-import '../../core/widgets/demo_banner.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 
@@ -183,7 +182,7 @@ class _ImportScreenState extends State<ImportScreen> {
       message:
           'Sẽ tạo phiếu nháp (Draft) từ ${preview.validCount} dòng hợp lệ '
           'của lượt chạy ${preview.runId}. Phiếu tiếp tục đi qua quy trình '
-          'Maker-Checker chuẩn trước khi ghi sổ.',
+          'phê duyệt chuẩn trước khi ghi sổ.',
       confirmLabel: 'Xác nhận tạo nháp',
     );
     if (!confirmed || !mounted) return;
@@ -221,8 +220,6 @@ class _ImportScreenState extends State<ImportScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const DemoBanner(),
-        const SizedBox(height: 16),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -348,7 +345,7 @@ class _ImportScreenState extends State<ImportScreen> {
                 'Đã tạo ${_confirmed!.draftRequests.length} phiếu nháp: ${_confirmed!.draftRequests.join(', ')}',
               ),
               subtitle: const Text(
-                'Phiếu đang ở trạng thái Draft và sẽ đi qua quy trình Maker-Checker chuẩn.',
+                'Phiếu đang ở trạng thái Nháp và sẽ đi qua quy trình phê duyệt chuẩn.',
               ),
             ),
           ),

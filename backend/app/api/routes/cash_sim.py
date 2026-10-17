@@ -209,14 +209,30 @@ async def update_cashbox(
         box.name = str(payload["name"]).strip()
     if "active" in payload:
         box.active = bool(payload["active"])
+    
+    opening_bal = payload.get("opening_balance") or payload.get("balance") or payload.get("amount")
+    if opening_bal is not None:
+        try:
+            val = Decimal(str(opening_bal).strip())
+            bal = (await db.execute(select(CashBalance).where(CashBalance.cashbox_id == cid))).scalars().first()
+            if bal:
+                bal.amount = val
+                bal.version += 1
+            else:
+                db.add(CashBalance(cashbox_id=cid, amount=val, version=1))
+        except Exception:
+            pass
+
     await db.commit()
     await db.refresh(box)
+    cur_bal = (await db.execute(select(CashBalance).where(CashBalance.cashbox_id == cid))).scalars().first()
     return {
         "id": str(box.id),
         "code": box.code,
         "name": box.name,
         "currency": box.currency,
         "active": box.active,
+        "balance": str(cur_bal.amount) if cur_bal else "0.00",
     }
 
 

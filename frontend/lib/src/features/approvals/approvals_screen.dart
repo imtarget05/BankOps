@@ -245,7 +245,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Phiếu sẽ chuyển về trạng thái [Cần chỉnh sửa]. Maker sẽ nhận được ý kiến để hiệu chỉnh và gửi duyệt lại.',
+              'Phiếu sẽ chuyển về trạng thái [Cần chỉnh sửa]. Người lập phiếu sẽ nhận được ý kiến để hiệu chỉnh và gửi duyệt lại.',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -255,7 +255,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
               maxLines: 2,
               decoration: const InputDecoration(
                 labelText: 'Ý kiến yêu cầu chỉnh sửa *',
-                hintText: 'Nhập nội dung cần Maker bổ sung...',
+                hintText: 'Nhập nội dung cần bổ sung...',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -289,7 +289,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await repo.returnStockRequest(item.id, reason: reason);
       }
       if (!mounted) return;
-      AppToast.info(context, 'Đã trả về phiếu ${item.id} cho Maker chỉnh sửa');
+      AppToast.info(context, 'Đã trả về phiếu ${item.id} cho người lập chỉnh sửa');
       _reload();
     } catch (e) {
       if (!mounted) return;
@@ -730,7 +730,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hộp Thư Phê Duyệt Kiểm Soát Kép (Maker–Checker)',
+                        'Hộp Thư Phê Duyệt Yêu Cầu',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5,
@@ -738,7 +738,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Kiểm soát viên độc lập thẩm định chứng từ và quyết định phê duyệt ghi sổ',
+                        'Quản lý kiểm tra chứng từ và quyết định phê duyệt ghi sổ',
                         style: TextStyle(
                           color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 13,
@@ -798,78 +798,6 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Principle Banner
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A8A).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: const Color(0xFF1E3A8A).withValues(alpha: 0.2)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded,
-                        size: 20, color: Color(0xFF1E3A8A)),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Người lập phiếu không được tự duyệt. Mọi quyết định đều được lưu vào nhật ký kiểm toán.',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E3A8A),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              if (!canApprove) ...[
-                Container(
-                  key: const Key('approvals-readonly-banner'),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.remove_red_eye_outlined,
-                          size: 20, color: Color(0xFFB45309)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Chế độ chỉ xem theo dõi tiến độ',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFFB45309),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Bạn đang theo dõi hàng đợi duyệt. Chỉ nhân viên được phân quyền thẩm định (Kiểm soát viên, Quản trị viên) mới có quyền Phê duyệt, Từ chối hoặc Trả về chứng từ.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.amber.shade900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
 
               if (items.isNotEmpty && canApprove) ...[
                 _SelectionBar(
@@ -1032,7 +960,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: const Text(
-                                        'CHỜ CHECKER DUYỆT',
+                                        'CHỜ PHÊ DUYỆT',
                                         style: TextStyle(
                                           color: Color(0xFFB45309),
                                           fontSize: 10,

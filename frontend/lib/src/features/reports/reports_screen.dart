@@ -7,7 +7,7 @@ import '../../core/util/formatting.dart';
 import '../../core/util/report_share.dart';
 import '../../core/util/role_visibility.dart';
 import '../../core/widgets/app_toast.dart';
-import '../../core/widgets/demo_banner.dart';
+import '../../core/util/approval_pdf.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
@@ -19,7 +19,6 @@ import 'widgets/inventory_chart.dart';
 import 'widgets/meeting_notes_tab.dart';
 import 'widgets/meeting_presentation_modal.dart';
 import 'widgets/meeting_report_pdf.dart';
-import 'widgets/meeting_summary_formatter.dart';
 import 'widgets/stagnation_list.dart';
 
 /// Màn báo cáo điều hành & giao ban cuộc họp — biểu đồ nhập/xuất kho, dòng tiền mô phỏng, cảnh báo tồn đọng, đối soát và công cụ thuyết trình.
@@ -149,12 +148,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Tiêu đề & các nút hành động cuộc họp
+                      // Tiêu đề & các nút hành động điều hành kinh doanh
                       Wrap(
                         spacing: 16,
                         runSpacing: 10,
                         alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +169,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Báo cáo Xuất Nhập Tồn & Tiêu Hao — Giám sát định mức nguyên liệu và hạn sử dụng FEFO',
+                                'Tổng hợp xuất nhập tồn kho, sổ quỹ tiền mặt & giám sát tuân thủ vận hành',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -184,14 +183,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                           Wrap(
                             spacing: 8,
-                            runSpacing: 4,
+                            runSpacing: 6,
                             children: [
                               FilledButton.icon(
                                 key: const Key('btn-print-meeting-pdf-header'),
                                 onPressed: () {
                                   ReportShare.printPdf(
                                     context,
-                                    filename: 'bao-cao-van-hanh-kho-tra-sua.pdf',
+                                    filename: 'bao-cao-tong-hop-kinh-doanh.pdf',
                                     build: () => MeetingReportPdf.encode(
                                       inventoryBuckets: data.inventoryBuckets,
                                       cashflowBuckets: data.cashflowBuckets,
@@ -204,49 +203,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 },
                                 icon: const Icon(Icons.picture_as_pdf_outlined,
                                     size: 18),
-                                label: const Text('In PDF A4'),
+                                label: const Text('In Báo Cáo A4'),
                               ),
                               OutlinedButton.icon(
-                                key: const Key('btn-copy-meeting-header'),
-                                onPressed: () {
-                                  final md =
-                                      MeetingSummaryFormatter.generateMarkdown(
-                                    inventoryBuckets: data.inventoryBuckets,
-                                    cashflowBuckets: data.cashflowBuckets,
-                                    stagnationItems: data.stagnationItems,
-                                    reconciliations: data.reconciliations,
-                                    granularity: _granularity,
-                                    dateRange: _dateRange,
-                                  );
-                                  Clipboard.setData(ClipboardData(text: md));
-                                  AppToast.success(context,
-                                      'Đã sao chép tóm tắt vào Clipboard.');
-                                },
-                                icon: const Icon(Icons.content_copy_outlined,
+                                key: const Key('btn-print-vouchers-modal'),
+                                onPressed: () => _showVoucherPrintModal(context, data),
+                                icon: const Icon(Icons.receipt_long_outlined,
                                     size: 18),
-                                label: const Text('Sao chép Tóm tắt'),
+                                label: const Text('Mẫu Phiếu In (BTC)'),
                               ),
                               OutlinedButton.icon(
-                                key: const Key('btn-meeting-mode-header'),
-                                onPressed: () => MeetingPresentationModal.show(
-                                  context,
-                                  inventoryBuckets: data.inventoryBuckets,
-                                  cashflowBuckets: data.cashflowBuckets,
-                                  stagnationItems: data.stagnationItems,
-                                  reconciliations: data.reconciliations,
-                                  granularity: _granularity,
-                                  dateRange: _dateRange,
-                                ),
-                                icon: const Icon(Icons.co_present_outlined,
+                                key: const Key('btn-export-csv-reports'),
+                                onPressed: () => _exportCsv(context, data),
+                                icon: const Icon(Icons.table_view_outlined,
                                     size: 18),
-                                label: const Text('Chế độ Cuộc họp'),
+                                label: const Text('Xuất CSV / Excel'),
                               ),
                             ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      const DemoBanner(),
                       const SizedBox(height: 12),
                       ReportsFilter(
                         granularity: _granularity,
@@ -281,22 +257,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         text: 'Nhập/Xuất kho'),
                     Tab(
                         key: Key('tab-reports-cashflow'),
-                        text: 'Dòng tiền mô phỏng'),
+                        text: 'Sổ Quỹ Tiền Mặt'),
                     Tab(
                         key: Key('tab-reports-stagnation'),
                         text: 'Tồn đọng'),
-                    Tab(
-                        key: Key('tab-reports-reconciliation'),
-                        text: 'Đối soát'),
-                    Tab(
-                        key: Key('tab-reports-meeting-notes'),
-                        text: 'Biên bản Giao ban & Đánh giá'),
                     Tab(
                         key: Key('tab-reports-consumption-top'),
                         text: 'Top Tiêu Hao F&B'),
                     Tab(
                         key: Key('tab-reports-shift-history'),
                         text: 'Lịch Sử Chốt Ca'),
+                    Tab(
+                        key: Key('tab-reports-reconciliation'),
+                        text: 'Đối soát'),
+                    Tab(
+                        key: Key('tab-reports-meeting-notes'),
+                        text: 'Báo Cáo Tổng Hợp'),
                   ],
                 ),
               ),
@@ -312,6 +288,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: StagnationList(items: data.stagnationItems),
                 ),
+                _ConsumptionTopTab(items: data.consumptionTop),
+                _ShiftHistoryTab(items: data.shiftHistory),
                 _ReconciliationTab(
                   runs: data.reconciliations,
                   canRun: canRunReconciliation,
@@ -335,12 +313,262 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     dateRange: _dateRange,
                   ),
                 ),
-                _ConsumptionTopTab(items: data.consumptionTop),
-                _ShiftHistoryTab(items: data.shiftHistory),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _exportCsv(BuildContext context, _ReportsData data) {
+    final sb = StringBuffer();
+    sb.writeln('Ky,NhapKho_SoLuong,XuatKho_SoLuong,TonRong_SoLuong,SoPhieuNhap,SoPhieuXuat');
+    for (final b in data.inventoryBuckets) {
+      sb.writeln('${b.bucket},${b.inboundQty},${b.outboundQty},${b.netQty},${b.receiptCount},${b.issueCount}');
+    }
+    Clipboard.setData(ClipboardData(text: sb.toString()));
+    AppToast.success(context, 'Đã sao chép dữ liệu CSV vào Clipboard (có thể dán trực tiếp vào Google Sheets / Excel).');
+  }
+
+  void _showVoucherPrintModal(BuildContext context, _ReportsData data) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.receipt_long_rounded,
+                            color: theme.colorScheme.primary, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Trung Tâm In Chứng Từ & Biểu Mẫu',
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Định dạng chuẩn theo Thông tư 200/2014/TT-BTC',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildVoucherTile(
+                    ctx,
+                    title: 'Phiếu Nhập Kho (Mẫu 01-VT)',
+                    subtitle: 'Chứng từ xác nhận nhập nguyên vật liệu vào kho',
+                    icon: Icons.move_to_inbox_rounded,
+                    color: const Color(0xFF059669),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ReportShare.printPdf(
+                        context,
+                        filename: 'phieu-nhap-kho-01-VT.pdf',
+                        build: () => ApprovalPdf.encode(
+                          ApprovalItem(
+                            id: 'PNK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                            kind: 'inbound',
+                            maker: SessionScope.maybeOf(context)?.user?.displayName ?? 'Thủ kho phụ trách',
+                            impact: 'Nhập kho nguyên vật liệu',
+                            detail: data.consumptionTop.isNotEmpty
+                                ? data.consumptionTop.take(3).map((c) => '${c.sku}: 20 kg').join(', ')
+                                : 'TRA-DEN: 20 kg, SUA-TUOI: 50 lit, TRAN-CHAU: 30 goi',
+                            status: 'approved',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildVoucherTile(
+                    ctx,
+                    title: 'Phiếu Xuất Kho (Mẫu 02-VT)',
+                    subtitle: 'Chứng từ xuất nguyên liệu phục vụ quầy pha chế',
+                    icon: Icons.outbox_rounded,
+                    color: const Color(0xFF2563EB),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ReportShare.printPdf(
+                        context,
+                        filename: 'phieu-xuat-kho-02-VT.pdf',
+                        build: () => ApprovalPdf.encode(
+                          ApprovalItem(
+                            id: 'PXK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                            kind: 'outbound',
+                            maker: SessionScope.maybeOf(context)?.user?.displayName ?? 'Nhân viên quầy pha chế',
+                            impact: 'Xuất quầy pha chế',
+                            detail: data.consumptionTop.isNotEmpty
+                                ? data.consumptionTop.take(3).map((c) => '${c.sku}: 10 kg').join(', ')
+                                : 'TRA-DEN: 10 kg, SUA-TUOI: 30 lit, SIRO-DUONG: 15 chai',
+                            status: 'approved',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildVoucherTile(
+                    ctx,
+                    title: 'Phiếu Thu Tiền Mặt (Mẫu 01-TT)',
+                    subtitle: 'Biên lai ghi nhận nguồn thu nộp vào két quỹ',
+                    icon: Icons.add_circle_outline_rounded,
+                    color: const Color(0xFF10B981),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ReportShare.printPdf(
+                        context,
+                        filename: 'phieu-thu-01-TT.pdf',
+                        build: () => ApprovalPdf.encode(
+                          ApprovalItem(
+                            id: 'PT-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                            kind: 'deposit',
+                            maker: SessionScope.maybeOf(context)?.user?.displayName ?? 'Thủ quỹ cửa hàng',
+                            impact: '2.500.000 VND',
+                            detail: 'Thu tiền doanh thu bán lẻ ca trực',
+                            status: 'approved',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildVoucherTile(
+                    ctx,
+                    title: 'Phiếu Chi Tiền Mặt (Mẫu 02-TT)',
+                    subtitle: 'Chứng từ thanh toán / tạm ứng chi tiền từ két',
+                    icon: Icons.remove_circle_outline_rounded,
+                    color: const Color(0xFFDC2626),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ReportShare.printPdf(
+                        context,
+                        filename: 'phieu-chi-02-TT.pdf',
+                        build: () => ApprovalPdf.encode(
+                          ApprovalItem(
+                            id: 'PC-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                            kind: 'withdraw',
+                            maker: SessionScope.maybeOf(context)?.user?.displayName ?? 'Thủ quỹ cửa hàng',
+                            impact: '500.000 VND',
+                            detail: 'Chi mua phụ liệu phát sinh tại quán',
+                            status: 'approved',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildVoucherTile(
+                    ctx,
+                    title: 'Biên Bản Kiểm Kê Kho & Bàn Giao Ca (Mẫu 05-VT)',
+                    subtitle: 'Biên bản đối chiếu tồn sổ sách và thực tế kiểm đếm',
+                    icon: Icons.fact_check_outlined,
+                    color: const Color(0xFF7C3AED),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      ReportShare.printPdf(
+                        context,
+                        filename: 'bien-ban-kiem-ke-05-VT.pdf',
+                        build: () => ApprovalPdf.encode(
+                          ApprovalItem(
+                            id: 'BBKK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                            kind: 'stocktake',
+                            maker: SessionScope.maybeOf(context)?.user?.displayName ?? 'Trưởng ca kiểm đếm',
+                            impact: 'Khớp 100% số lượng',
+                            detail: 'Bàn giao ca trực sáng chiều - kho bảo đảm niêm phong',
+                            status: 'approved',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVoucherTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+        ),
+        trailing: const Icon(Icons.print_outlined, size: 18),
       ),
     );
   }

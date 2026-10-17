@@ -457,7 +457,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
         toAssignee: toAssignee ?? cur.assignee,
         statusBefore: cur.status.name,
         statusAfter: newStatus.name,
-        actorName: 'Trần Văn Quản Lý (Quản Lý)',
+        actorName: 'Trần Văn Quản Lý',
         notes: notes,
         createdAt: DateTime.now().toUtc(),
       ),
@@ -983,7 +983,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
             ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
             : r.approvedBy,
         approvedByName: to == RequestStatus.posted
-            ? 'Trần Văn Quản Lý (Quản Lý)'
+            ? 'Trần Văn Quản Lý'
             : r.approvedByName,
         rejectReason: to == RequestStatus.rejected
             ? (reason ?? r.rejectReason)
@@ -1021,20 +1021,37 @@ class FakeBankOpsRepository implements BankOpsRepository {
     return _delay(box);
   }
 
+  List<CashBalance>? _cashBalances;
+  List<CashBalance> _getCashBalancesList() {
+    return _cashBalances ??= List.of(_seedCashBalances());
+  }
+
   @override
   Future<Cashbox> updateCashbox({
     required String id,
     String? name,
+    String? balance,
+    bool? active,
   }) async {
     final idx = _cashboxes.indexWhere((b) => b.id == id);
-    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy kết sắt');
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy két sắt');
     final cur = _cashboxes[idx];
     _cashboxes[idx] = Cashbox(
       id: cur.id,
       code: cur.code,
       name: name ?? cur.name,
-      openingBalance: cur.openingBalance,
+      openingBalance: balance ?? cur.openingBalance,
     );
+    if (balance != null) {
+      final bals = _getCashBalancesList();
+      final bIdx = bals.indexWhere((b) => b.cashboxId == id);
+      if (bIdx >= 0) {
+        final existingCurrency = bals[bIdx].currency;
+        bals[bIdx] = CashBalance(cashboxId: id, amount: balance, currency: existingCurrency.isNotEmpty ? existingCurrency : 'VND');
+      } else {
+        bals.add(CashBalance(cashboxId: id, amount: balance, currency: 'VND'));
+      }
+    }
     return _delay(_cashboxes[idx]);
   }
 
@@ -1045,7 +1062,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
   }
 
   @override
-  Future<List<CashBalance>> getCashBalances() => _delay(_seedCashBalances());
+  Future<List<CashBalance>> getCashBalances() => _delay(List.of(_getCashBalancesList()));
 
   @override
   Future<List<JournalEntry>> getJournals() => _delay(_seedJournals());
@@ -1143,7 +1160,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
           ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
           : r.approvedBy,
       approvedByName: to == RequestStatus.posted
-          ? 'Trần Văn Quản Lý (Quản Lý)'
+          ? 'Trần Văn Quản Lý'
           : r.approvedByName,
       rejectReason: to == RequestStatus.rejected
           ? (reason ?? r.rejectReason)

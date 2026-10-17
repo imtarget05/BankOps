@@ -14,7 +14,7 @@ void main() {
     AppUser? user,
     required FakeBankOpsRepository repo,
   }) async {
-    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.physicalSize = const Size(1400, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
@@ -44,7 +44,7 @@ void main() {
       await tester.tap(find.text('Phê duyệt Kiểm Soát Kép'));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Hộp Thư Phê Duyệt Kiểm Soát Kép'),
+        find.textContaining('Hộp Thư Phê Duyệt'),
         findsOneWidget,
       );
     },
@@ -61,7 +61,7 @@ void main() {
       await tester.tap(find.byKey(const Key('kpi-inbox-card')));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Hộp Thư Phê Duyệt Kiểm Soát Kép'),
+        find.textContaining('Hộp Thư Phê Duyệt'),
         findsOneWidget,
       );
     },
@@ -168,9 +168,9 @@ void main() {
         repo: FakeBankOpsRepository(latency: Duration.zero),
       );
 
-      // Maker header shows quầy giao dịch viên
+      // Maker header shows role badge
       expect(find.text('Bàn vận hành Giao dịch viên'), findsOneWidget);
-      expect(find.text('QUẦY GIAO DỊCH VIÊN'), findsOneWidget);
+      expect(find.text('NHÂN VIÊN CA TRỰC'), findsOneWidget);
 
       // KPI card shows YÊU CẦU ĐANG CHỜ DUYỆT
       expect(find.text('YÊU CẦU ĐANG CHỜ DUYỆT'), findsOneWidget);

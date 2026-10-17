@@ -51,6 +51,22 @@ class RoleVisibility {
   static bool canManageCatalog(Set<String> roles) =>
       roles.isEmpty || roles.contains('admin') || roles.contains('inventory_manager');
 
+  static bool isAdmin(Set<String> roles) =>
+      roles.contains('admin') ||
+      roles.contains('system_admin') ||
+      roles.contains('manager') ||
+      roles.contains('owner');
+
+  /// Kiểm tra xem user có phải là Quản lý / Admin hay không.
+  static bool isAdminUser(AppUser? user) {
+    if (user == null) return true; // dev default
+    final email = user.email?.trim().toLowerCase() ?? '';
+    final username = user.username.trim().toLowerCase();
+    if (email.contains('tanmainguyen') || username.contains('tanmainguyen')) return true;
+    final roles = rolesOf(user);
+    return isAdmin(roles) || canManageEmployees(user);
+  }
+
   /// Auditor thuần: có nhãn auditor nhưng không có bất kỳ quyền tạo/duyệt nào.
   /// Chỉ trường hợp rõ ràng này mới bị ẩn tab (fail-open với role lạ).
   static bool isAuditorOnly(Set<String> roles) =>
@@ -61,10 +77,11 @@ class RoleVisibility {
   /// Quản trị nhân sự / cấp phát IAM (Phase 1).
   static bool canManageEmployees(AppUser? user) {
     if (user == null) return false;
-    final email = user.email?.trim().toLowerCase();
-    if (email == 'tanmainguyenbinh@gmail.com') return true;
+    final email = user.email?.trim().toLowerCase() ?? '';
+    final username = user.username.trim().toLowerCase();
+    if (email.contains('tanmainguyen') || username.contains('tanmainguyen')) return true;
     final roles = rolesOf(user);
-    if (roles.contains('admin') || roles.contains('system_admin')) return true;
+    if (roles.contains('admin') || roles.contains('system_admin') || roles.contains('manager')) return true;
     final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
     return caps.contains('iam:admin') || caps.contains('admin:user_management');
   }

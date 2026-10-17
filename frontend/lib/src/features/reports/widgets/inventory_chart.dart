@@ -20,7 +20,7 @@ class InventoryChart extends StatelessWidget {
       return const EmptyView(
         title: 'Chưa có dữ liệu nhập/xuất kho',
         subtitle:
-            'Tạo phiếu kho và được Checker duyệt — biểu đồ nhập/xuất sẽ hiện ở đây.',
+            'Tạo phiếu kho và được cấp quản lý duyệt — biểu đồ nhập/xuất sẽ hiện ở đây.',
         icon: Icons.inventory_2_outlined,
       );
     }

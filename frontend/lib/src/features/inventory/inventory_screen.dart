@@ -26,11 +26,19 @@ class InventoryScreen extends StatefulWidget {
     this.mode = InventoryTabMode.all,
     this.onNavigate,
     this.onCreateStockRequest,
+    this.initialCategory,
+    this.initialStockFilter,
+    this.initialViewMode,
+    this.initialLocationId,
   });
 
   final InventoryTabMode mode;
   final ValueChanged<int>? onNavigate;
   final VoidCallback? onCreateStockRequest;
+  final String? initialCategory;
+  final String? initialStockFilter;
+  final String? initialViewMode;
+  final String? initialLocationId;
 
   @override
   State<InventoryScreen> createState() => _InventoryScreenState();
@@ -44,6 +52,40 @@ class _InventoryScreenState extends State<InventoryScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'Tất cả';
   String _stockFilter = 'all';
+  String _stocktakeStatusFilter = 'all';
+  String _sheetViewMode = 'sheet';
+  bool _revealPrices = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialCategory != null) {
+      _selectedCategory = widget.initialCategory!;
+    }
+    if (widget.initialStockFilter != null) {
+      _stockFilter = widget.initialStockFilter!;
+    }
+    if (widget.initialViewMode != null) {
+      _sheetViewMode = widget.initialViewMode!;
+    }
+  }
+
+  @override
+  void didUpdateWidget(InventoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialCategory != null &&
+        widget.initialCategory != oldWidget.initialCategory) {
+      _selectedCategory = widget.initialCategory!;
+    }
+    if (widget.initialStockFilter != null &&
+        widget.initialStockFilter != oldWidget.initialStockFilter) {
+      _stockFilter = widget.initialStockFilter!;
+    }
+    if (widget.initialViewMode != null &&
+        widget.initialViewMode != oldWidget.initialViewMode) {
+      _sheetViewMode = widget.initialViewMode!;
+    }
+  }
 
   double _stockForItem(String itemId, List<StockBalance> balances) {
     return balances
@@ -121,7 +163,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final sellingPriceCtrl = TextEditingController();
     final minStockCtrl = TextEditingController(text: '10');
     final sessionUser = SessionScope.maybeOf(context)?.user;
-    final isAdmin = RoleVisibility.canManageEmployees(sessionUser);
+    final isAdmin = RoleVisibility.isAdminUser(sessionUser);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -348,7 +390,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       text: item.minStock != null ? item.minStock!.toStringAsFixed(0) : '',
     );
     final sessionUser = SessionScope.maybeOf(context)?.user;
-    final isAdmin = RoleVisibility.canManageEmployees(sessionUser);
+    final isAdmin = RoleVisibility.isAdminUser(sessionUser);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -533,6 +575,500 @@ class _InventoryScreenState extends State<InventoryScreen> {
     setState(() {
       _selectedItemIds.clear();
     });
+  }
+
+  void _showItemDetailSheet(
+    BuildContext context,
+    InventoryItem item,
+    _InventoryData data, {
+    required bool isAdmin,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final totalStock = _stockForItem(item.id, data.balances);
+    final minStock = item.minStock;
+    final bool isOutOfStock = totalStock <= 0;
+    final bool isLowStock =
+        !isOutOfStock && minStock != null && totalStock <= minStock;
+
+    // Balances per location
+    final itemBalances =
+        data.balances.where((b) => b.itemId == item.id).toList();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.paddingOf(ctx).bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.inventory_2_outlined,
+                        color: Color(0xFF2563EB),
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 17,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white10
+                                      : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? const Color(0xFF475569)
+                                        : const Color(0xFFCBD5E1),
+                                  ),
+                                ),
+                                child: Text(
+                                  item.sku,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                    color: Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ),
+                              if (item.category != null &&
+                                  item.category!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0891B2)
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    item.category!,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
+                                      color: Color(0xFF0891B2),
+                                    ),
+                                  ),
+                                ),
+                              if (item.packaging != null &&
+                                  item.packaging!.isNotEmpty)
+                                Text(
+                                  item.packaging!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 12),
+
+                // Vị trí lưu kho & Tồn kho thực tế
+                Text(
+                  'VỊ TRÍ LƯU KHO & TỒN KHẢ DỤNG',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Tổng Tồn Hiện Tại',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isOutOfStock
+                                  ? const Color(0xFFEF4444)
+                                      .withValues(alpha: 0.1)
+                                  : (isLowStock
+                                      ? const Color(0xFFD97706)
+                                          .withValues(alpha: 0.1)
+                                      : const Color(0xFF059669)
+                                          .withValues(alpha: 0.1)),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${AppFormat.number(totalStock.toString())} ${item.unit}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: isOutOfStock
+                                    ? const Color(0xFFEF4444)
+                                    : (isLowStock
+                                        ? const Color(0xFFD97706)
+                                        : const Color(0xFF059669)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (item.minStock != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Định Mức Tồn Tối Thiểu (Min)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '${AppFormat.number(item.minStock!.toString())} ${item.unit}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Divider(height: 1),
+                      ),
+                      // Từng địa điểm
+                      if (itemBalances.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            'Chưa có dữ liệu tồn tại từng vị trí kho',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      else
+                        ...itemBalances.map((bal) {
+                          final loc = data.locations.firstWhere(
+                            (l) => l.id == bal.locationId,
+                            orElse: () => InventoryLocation(
+                              id: bal.locationId,
+                              code: bal.locationId,
+                              name: bal.locationId,
+                            ),
+                          );
+                          final qty = double.tryParse(bal.quantity) ?? 0.0;
+                          final locNameLower = loc.name.toLowerCase();
+                          final isCooler = locNameLower.contains('mát') ||
+                              loc.code.toLowerCase().contains('cool');
+                          final isBar = locNameLower.contains('bar') ||
+                              loc.code.toLowerCase().contains('bar');
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isCooler
+                                      ? Icons.ac_unit_rounded
+                                      : (isBar
+                                          ? Icons.local_bar_rounded
+                                          : Icons.warehouse_rounded),
+                                  size: 16,
+                                  color: const Color(0xFF2563EB),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    loc.name,
+                                    style: const TextStyle(fontSize: 12.5),
+                                  ),
+                                ),
+                                Text(
+                                  '${AppFormat.number(qty.toString())} ${item.unit}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Giá & Tài chính
+                Text(
+                  'THÔNG TIN TÀI CHÍNH & GIÁ',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: (!isAdmin || !_revealPrices)
+                      ? Row(
+                          children: [
+                            const Icon(Icons.lock_outline_rounded,
+                                size: 18, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                !isAdmin
+                                    ? 'Chỉ tài khoản Quản trị viên (Admin) mới có quyền xem thông tin tài chính & giá vốn/giá bán.'
+                                    : 'Giá đang ở chế độ ẩn. Bật "Đang ẩn giá" trên bộ lọc để xem.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Giá Bán:',
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600)),
+                                Text(
+                                  item.sellingPrice != null
+                                      ? AppFormat.money(item.sellingPrice!.toStringAsFixed(0), currency: '₫')
+                                      : 'Chưa thiết lập',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: Color(0xFF0284C7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Giá Vốn (Cost):',
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600)),
+                                Text(
+                                  item.costPrice != null
+                                      ? AppFormat.money(item.costPrice!.toStringAsFixed(0), currency: '₫')
+                                      : 'Chưa thiết lập',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (item.costPrice != null &&
+                                item.sellingPrice != null &&
+                                item.sellingPrice! > 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Biên Lợi Nhuận Gộp:',
+                                      style: TextStyle(
+                                          fontSize: 12.5, color: Colors.grey)),
+                                  Text(
+                                    '${((item.sellingPrice! - item.costPrice!) / item.sellingPrice! * 100).toStringAsFixed(1)}% (${AppFormat.money((item.sellingPrice! - item.costPrice!).toStringAsFixed(0), currency: '₫')})',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12.5,
+                                      color: Color(0xFFD97706),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (item.costPrice != null) ...[
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 6),
+                                child: Divider(height: 1),
+                              ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Định Giá Tồn Hiện Tại:',
+                                      style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold)),
+                                  Text(
+                                    AppFormat.money((totalStock * item.costPrice!).toStringAsFixed(0), currency: '₫'),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 13.5,
+                                      color: Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 20),
+
+                // Thao tác Action Buttons
+                Row(
+                  children: [
+                    if (isAdmin) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _showSetStockLevelDialog(
+                              item,
+                              data.locations,
+                              data.stockLevels,
+                            );
+                          },
+                          icon: const Icon(Icons.tune_outlined, size: 16),
+                          label: const Text('Cài Định Mức'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _showEditItemDialog(item);
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Sửa & Đổi Giá'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                          ),
+                        ),
+                      ),
+                    ] else
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Đóng'),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _confirmDeleteItem(InventoryItem item, [List<StockBalance>? balances]) async {
@@ -748,6 +1284,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _showAssetLifecycleDialog(
       AssetRecord asset, _InventoryData data) async {
     final repo = RepositoryScope.of(context);
@@ -1468,7 +2005,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        'Trạng thái: ${stocktake.status == 'open' ? 'Đang kiểm đếm (Open)' : (stocktake.status == 'submitted' ? 'Chờ Checker duyệt (Submitted)' : 'Đã đóng & Điều chỉnh (Closed)')}',
+                        'Trạng thái: ${stocktake.status == 'open' ? 'Đang kiểm đếm (Open)' : (stocktake.status == 'submitted' ? 'Chờ quản lý duyệt (Submitted)' : 'Đã đóng & Điều chỉnh (Closed)')}',
                         style: TextStyle(
                           fontSize: 12,
                           color: stocktake.status == 'open'
@@ -1527,7 +2064,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                 Expanded(
                                   child: Text(
                                     stocktake.status == 'submitted'
-                                        ? 'Ca kiểm kê đang chờ Checker phê duyệt. Dữ liệu đã khóa để đảm bảo tính toàn vẹn.'
+                                        ? 'Ca kiểm kê đang chờ quản lý phê duyệt. Dữ liệu đã khóa để đảm bảo tính toàn vẹn.'
                                         : 'Phiên kiểm kê đã đóng sổ & đối soát hoàn tất.',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
@@ -1786,7 +2323,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         messenger.showSnackBar(
                           const SnackBar(
                               content: Text(
-                                  'Đã gửi kiểm kê sang Checker phê duyệt!'),
+                                  'Đã gửi kiểm kê sang người phê duyệt!'),
                               behavior: SnackBarBehavior.floating),
                         );
                         navigator.pop();
@@ -2156,10 +2693,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         final sessionUser = SessionScope.maybeOf(context)?.user;
         final userRoles = RoleVisibility.rolesOf(sessionUser);
         final canManageCatalog = RoleVisibility.canManageCatalog(userRoles);
-        final isAdmin = sessionUser == null ||
-            userRoles.contains('admin') ||
-            userRoles.contains('system_admin') ||
-            RoleVisibility.canManageEmployees(sessionUser);
+        final isAdmin = RoleVisibility.isAdminUser(sessionUser);
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
 
@@ -2236,47 +2770,58 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ],
         ];
 
-        final pendingCount = data.stocktakes
-            .where((s) => s.status == 'submitted' || s.status == 'open')
-            .length;
-        final approvedCount = data.stocktakes
-            .where((s) => s.status == 'approved' || s.status == 'completed')
-            .length;
-
         final List<Widget> kpiCards;
         if (isShiftOnly) {
+          final pendingCount = data.stocktakes
+              .where((s) => s.status == 'submitted' || s.status == 'open')
+              .length;
+          final approvedCount = data.stocktakes
+              .where((s) => s.status == 'approved' || s.status == 'completed')
+              .length;
+          final discrepancyCount = data.stocktakes
+              .where((s) => s.discrepancyCount > 0 || (s.note?.toLowerCase().contains('lệch') ?? false))
+              .length;
+
           kpiCards = [
             _buildKpiCard(
               context,
-              title: 'CA VẬN HÀNH',
-              value: 'Sáng • Chiều • Tối',
-              subtitle: 'Theo lịch phân bổ quầy',
-              icon: Icons.schedule_rounded,
-              color: const Color(0xFF2563EB),
-            ),
-            _buildKpiCard(
-              context,
-              title: 'TỔNG ĐỢT KIỂM KÊ',
+              title: 'TỔNG ĐỢT',
               value: '${data.stocktakes.length} đợt',
               subtitle: 'Đã lập trong hệ thống',
               icon: Icons.checklist_rounded,
               color: const Color(0xFF0891B2),
+              isSelected: _stocktakeStatusFilter == 'all',
+              onTap: () => setState(() => _stocktakeStatusFilter = 'all'),
             ),
             _buildKpiCard(
               context,
-              title: 'CHỜ DUYỆT ĐỐI SOÁT',
+              title: 'CHỜ DUYỆT',
               value: '$pendingCount phiếu',
-              subtitle: 'Maker-Checker kiểm đếm',
+              subtitle: 'Chờ quản lý đối soát',
               icon: Icons.pending_actions_rounded,
               color: const Color(0xFFF59E0B),
+              isSelected: _stocktakeStatusFilter == 'pending',
+              onTap: () => setState(() => _stocktakeStatusFilter = 'pending'),
             ),
             _buildKpiCard(
               context,
-              title: 'ĐÃ DUYỆT HOÀN TẤT',
+              title: 'ĐÃ DUYỆT',
               value: '$approvedCount phiếu',
               subtitle: 'Khớp số liệu tồn kho',
               icon: Icons.verified_rounded,
               color: const Color(0xFF059669),
+              isSelected: _stocktakeStatusFilter == 'approved',
+              onTap: () => setState(() => _stocktakeStatusFilter = 'approved'),
+            ),
+            _buildKpiCard(
+              context,
+              title: 'CHÊNH LỆCH',
+              value: '$discrepancyCount ca',
+              subtitle: 'Cần giải trình số liệu',
+              icon: Icons.warning_amber_rounded,
+              color: const Color(0xFFEF4444),
+              isSelected: _stocktakeStatusFilter == 'discrepancy',
+              onTap: () => setState(() => _stocktakeStatusFilter = 'discrepancy'),
             ),
           ];
         } else {
@@ -2323,7 +2868,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               context,
               title: 'TỔNG GIÁ TRỊ KHO',
               value: isAdmin
-                  ? '${AppFormat.money(totalValuation.toStringAsFixed(0))} ₫'
+                  ? AppFormat.money(totalValuation.toStringAsFixed(0), currency: '₫')
                   : '••••••',
               subtitle: isAdmin
                   ? 'Định giá vốn tồn hiện tại'
@@ -2408,33 +2953,42 @@ class _InventoryScreenState extends State<InventoryScreen> {
           return !isWideKpis
               ? Column(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: kpiCards[0]),
-                        const SizedBox(width: 12),
-                        Expanded(child: kpiCards[1]),
-                      ],
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: kpiCards[0]),
+                          const SizedBox(width: 12),
+                          Expanded(child: kpiCards[1]),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: kpiCards[2]),
-                        const SizedBox(width: 12),
-                        Expanded(child: kpiCards[3]),
-                      ],
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: kpiCards[2]),
+                          const SizedBox(width: 12),
+                          Expanded(child: kpiCards[3]),
+                        ],
+                      ),
                     ),
                   ],
                 )
-              : Row(
-                  children: [
-                    Expanded(child: kpiCards[0]),
-                    const SizedBox(width: 14),
-                    Expanded(child: kpiCards[1]),
-                    const SizedBox(width: 14),
-                    Expanded(child: kpiCards[2]),
-                    const SizedBox(width: 14),
-                    Expanded(child: kpiCards[3]),
-                  ],
+              : IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: kpiCards[0]),
+                      const SizedBox(width: 14),
+                      Expanded(child: kpiCards[1]),
+                      const SizedBox(width: 14),
+                      Expanded(child: kpiCards[2]),
+                      const SizedBox(width: 14),
+                      Expanded(child: kpiCards[3]),
+                    ],
+                  ),
                 );
         }
 
@@ -2833,6 +3387,47 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 const SizedBox(width: 6),
                 _buildFilterChip('out', 'Hết hàng', isDark,
                     color: const Color(0xFFEF4444)),
+                if (isAdmin) ...[
+                  const SizedBox(width: 8),
+                  ActionChip(
+                    avatar: Icon(
+                      _revealPrices
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      size: 14,
+                      color: _revealPrices ? const Color(0xFF0284C7) : null,
+                    ),
+                    label: Text(
+                      _revealPrices ? 'Đang hiện giá' : 'Đang ẩn giá',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _revealPrices ? const Color(0xFF0284C7) : null,
+                      ),
+                    ),
+                    onPressed: () => setState(() {
+                      _revealPrices = !_revealPrices;
+                    }),
+                  ),
+                ],
+                if (isCompact) ...[
+                  const SizedBox(width: 10),
+                  ActionChip(
+                    avatar: Icon(
+                      _sheetViewMode == 'sheet'
+                          ? Icons.view_agenda_outlined
+                          : Icons.table_chart_outlined,
+                      size: 14,
+                    ),
+                    label: Text(
+                      _sheetViewMode == 'sheet' ? 'Xem dạng Thẻ' : 'Bảng Google Sheets',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => setState(() {
+                      _sheetViewMode = _sheetViewMode == 'sheet' ? 'list' : 'sheet';
+                    }),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2874,8 +3469,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
     );
 
-    // Màn hình di động (isCompact < 960px): Hiển thị Card danh sách tối ưu
-    if (isCompact) {
+    // Nếu màn hình di động (isCompact < 960px) VÀ người dùng chọn 'list': Hiển thị dạng thẻ
+    if (isCompact && _sheetViewMode == 'list') {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2923,7 +3518,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         : null,
                     onTap: _isSelectionMode
                         ? () => _toggleItemSelection(item.id)
-                        : null,
+                        : () => _showItemDetailSheet(context, item, data,
+                            isAdmin: isAdmin),
                     title: Row(
                       children: [
                         Expanded(
@@ -3010,10 +3606,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                         fontSize: 12,
                                         color:
                                             theme.colorScheme.onSurfaceVariant)),
-                                if (isAdmin)
+                                if (isAdmin && _revealPrices)
                                   Text(
                                     item.sellingPrice != null
-                                        ? '${AppFormat.money(item.sellingPrice!.toStringAsFixed(0))} ₫'
+                                        ? AppFormat.money(item.sellingPrice!.toStringAsFixed(0), currency: '₫')
                                         : '—',
                                     style: const TextStyle(
                                         fontSize: 12,
@@ -3022,7 +3618,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                   )
                                 else
                                   Tooltip(
-                                    message: 'Chỉ Admin mới có quyền xem giá',
+                                    message: isAdmin
+                                        ? 'Đang ẩn giá'
+                                        : 'Chỉ Admin mới có quyền xem giá',
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -3161,9 +3759,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ),
                     child: Row(
                       children: [
-                        if (_isSelectionMode)
-                          _buildHeaderCell('#',
-                              width: 44, align: TextAlign.center, isDark: isDark),
+                        _buildHeaderCell('STT',
+                            width: 44, align: TextAlign.center, isDark: isDark),
                         _buildHeaderCell('MÃ SKU', width: 95, isDark: isDark),
                         _buildHeaderCell('TÊN NGUYÊN LIỆU / SP',
                             width: 200, isDark: isDark),
@@ -3175,13 +3772,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         _buildHeaderCell('TỒN MIN',
                             width: 80, align: TextAlign.right, isDark: isDark),
                         _buildHeaderCell(
-                          isAdmin ? 'GIÁ BÁN' : 'GIÁ BÁN (🔒)',
+                          (isAdmin && _revealPrices)
+                              ? 'GIÁ BÁN'
+                              : 'GIÁ BÁN (🔒)',
                           width: 105,
                           align: TextAlign.right,
                           isDark: isDark,
                         ),
                         _buildHeaderCell(
-                          isAdmin ? 'GIÁ VỐN' : 'GIÁ VỐN (🔒)',
+                          (isAdmin && _revealPrices)
+                              ? 'GIÁ VỐN'
+                              : 'GIÁ VỐN (🔒)',
                           width: 105,
                           align: TextAlign.right,
                           isDark: isDark,
@@ -3287,7 +3888,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final bool isLowStock = !isOutOfStock && minStock != null && stock <= minStock;
 
     return InkWell(
-      onTap: _isSelectionMode ? () => _toggleItemSelection(item.id) : null,
+      onTap: _isSelectionMode
+          ? () => _toggleItemSelection(item.id)
+          : () => _showItemDetailSheet(context, item, data, isAdmin: isAdmin),
       child: Container(
         height: 52,
         decoration: BoxDecoration(
@@ -3301,27 +3904,37 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ),
         child: Row(
           children: [
-            // Checkbox if selection mode
-            if (_isSelectionMode)
-              Container(
-                width: 44,
-                height: 52,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  border: Border(
-                    right: BorderSide(
-                      color: isDark
-                          ? const Color(0xFF1E293B)
-                          : const Color(0xFFE2E8F0),
-                    ),
+            // STT hoặc Checkbox
+            Container(
+              width: 44,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(
+                  right: BorderSide(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE2E8F0),
                   ),
                 ),
-                child: Checkbox(
-                  key: Key('checkbox-item-${item.sku}'),
-                  value: isSelected,
-                  onChanged: (_) => _toggleItemSelection(item.id),
-                ),
               ),
+              child: _isSelectionMode
+                  ? Checkbox(
+                      key: Key('checkbox-item-${item.sku}'),
+                      value: isSelected,
+                      onChanged: (_) => _toggleItemSelection(item.id),
+                    )
+                  : Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+            ),
 
             // Mã SKU
             Container(
@@ -3504,9 +4117,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ),
               ),
               child: Text(
-                minStock != null
-                    ? '${AppFormat.number(minStock.toString())}'
-                    : '—',
+                minStock != null ? AppFormat.number(minStock.toString()) : '—',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark
@@ -3531,19 +4142,36 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                 ),
               ),
-              child: isAdmin
-                  ? Text(
-                      item.sellingPrice != null
-                          ? '${AppFormat.money(item.sellingPrice!.toStringAsFixed(0))} ₫'
-                          : '—',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                        color: Color(0xFF0284C7),
-                      ),
-                    )
+              child: (isAdmin && _revealPrices)
+                  ? (item.sellingPrice != null
+                      ? Text(
+                          AppFormat.money(item.sellingPrice!.toStringAsFixed(0), currency: '₫'),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: Color(0xFF0284C7),
+                          ),
+                        )
+                      : TextButton(
+                          onPressed: () => _showEditItemDialog(item),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(50, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            '+ Thêm giá',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0284C7),
+                            ),
+                          ),
+                        ))
                   : Tooltip(
-                      message: 'Chỉ Admin mới có quyền xem giá',
+                      message: isAdmin
+                          ? 'Đang ẩn giá'
+                          : 'Chỉ Admin mới có quyền xem giá',
                       child: Text(
                         '••••••',
                         style: TextStyle(
@@ -3573,21 +4201,38 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                 ),
               ),
-              child: isAdmin
-                  ? Text(
-                      item.costPrice != null
-                          ? '${AppFormat.money(item.costPrice!.toStringAsFixed(0))} ₫'
-                          : '—',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                        color: isDark
-                            ? const Color(0xFFCBD5E1)
-                            : const Color(0xFF475569),
-                      ),
-                    )
+              child: (isAdmin && _revealPrices)
+                  ? (item.costPrice != null
+                      ? Text(
+                          AppFormat.money(item.costPrice!.toStringAsFixed(0), currency: '₫'),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: isDark
+                                ? const Color(0xFFCBD5E1)
+                                : const Color(0xFF475569),
+                          ),
+                        )
+                      : TextButton(
+                          onPressed: () => _showEditItemDialog(item),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(50, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            '+ Thêm giá',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0891B2),
+                            ),
+                          ),
+                        ))
                   : Tooltip(
-                      message: 'Chỉ Admin mới có quyền xem giá',
+                      message: isAdmin
+                          ? 'Đang ẩn giá'
+                          : 'Chỉ Admin mới có quyền xem giá',
                       child: Text(
                         '••••••',
                         style: TextStyle(
@@ -3787,7 +4432,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           color: Color(0xFFDC2626)),
                     ),
                     Text(
-                      'Số lượng tồn thực tế đang dưới định mức an toàn tối thiểu. Đề xuất Maker lập phiếu bổ sung kho kịp thời.',
+                      'Số lượng tồn thực tế đang dưới định mức an toàn tối thiểu. Đề xuất lập phiếu bổ sung kho kịp thời.',
                       style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurfaceVariant),
@@ -3942,7 +4587,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final isCompact = MediaQuery.sizeOf(context).width < 800;
+    final isShiftOnly = widget.mode == InventoryTabMode.shiftWork;
+    final isCompact = MediaQuery.sizeOf(context).width < 960;
     final header = isCompact
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3959,17 +4605,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 style: TextStyle(
                     fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: 10),
-              FilledButton.icon(
-                onPressed: () => _showCreateStocktakeDialog(data.locations),
-                icon: const Icon(Icons.add_task_rounded, size: 16),
-                label: const Text('Mở Đợt Kiểm Kê Mới'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF0891B2),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+              if (!isShiftOnly) ...[
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () => _showCreateStocktakeDialog(data.locations),
+                  icon: const Icon(Icons.add_task_rounded, size: 16),
+                  label: const Text('Mở Đợt Kiểm Kê Mới'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0891B2),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
-              ),
+              ],
             ],
           )
         : Row(
@@ -3995,19 +4643,34 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: () => _showCreateStocktakeDialog(data.locations),
-                icon: const Icon(Icons.add_task_rounded, size: 16),
-                label: const Text('Mở Đợt Kiểm Kê Mới'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF0891B2),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+              if (!isShiftOnly) ...[
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: () => _showCreateStocktakeDialog(data.locations),
+                  icon: const Icon(Icons.add_task_rounded, size: 16),
+                  label: const Text('Mở Đợt Kiểm Kê Mới'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0891B2),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
-              ),
+              ],
             ],
           );
+
+    final filteredStocktakes = data.stocktakes.where((st) {
+      if (_stocktakeStatusFilter == 'pending') {
+        return st.status == 'submitted' || st.status == 'open';
+      }
+      if (_stocktakeStatusFilter == 'approved') {
+        return st.status == 'approved' || st.status == 'completed';
+      }
+      if (_stocktakeStatusFilter == 'discrepancy') {
+        return st.discrepancyCount > 0 || (st.note?.toLowerCase().contains('lệch') ?? false);
+      }
+      return true;
+    }).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4024,21 +4687,24 @@ class _InventoryScreenState extends State<InventoryScreen> {
               color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
             ),
           ),
-          child: data.stocktakes.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(32),
+          child: filteredStocktakes.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(32),
                   child: Center(
                     child: Text(
-                        'Chưa có đợt kiểm kê nào. Bấm "Mở Đợt Kiểm Kê Mới" để bắt đầu kiểm kê.'),
+                      _stocktakeStatusFilter == 'all'
+                          ? 'Chưa có đợt kiểm kê nào. Bấm "Mở Đợt Kiểm Kê Mới" để bắt đầu kiểm kê.'
+                          : 'Không có đợt kiểm kê nào phù hợp với bộ lọc đang chọn.',
+                    ),
                   ),
                 )
               : ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: data.stocktakes.length,
+                  itemCount: filteredStocktakes.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {
-                    final st = data.stocktakes[i];
+                    final st = filteredStocktakes[i];
                     final loc =
                         data.locations.cast<InventoryLocation?>().firstWhere(
                               (l) => l?.id == st.locationId,
@@ -4520,35 +5186,56 @@ class _InventoryScreenState extends State<InventoryScreen> {
     required String subtitle,
     required IconData icon,
     required Color color,
+    VoidCallback? onTap,
+    bool isSelected = false,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
+    final cardContent = Container(
+      constraints: const BoxConstraints(minHeight: 110),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: isSelected
+            ? color.withValues(alpha: isDark ? 0.2 : 0.08)
+            : (isDark ? const Color(0xFF1E293B) : Colors.white),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          color: isSelected
+              ? color
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          width: isSelected ? 2.0 : 1.0,
         ),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurfaceVariant,
-                    letterSpacing: 0.5,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: isSelected ? color : theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ),
@@ -4556,33 +5243,58 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
+                  color: color.withValues(alpha: isSelected ? 0.25 : 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, size: 16, color: color),
+                child: Icon(
+                  isSelected ? Icons.check_circle_rounded : icon,
+                  size: 16,
+                  color: color,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+                color: isSelected ? color : null,
+              ),
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            subtitle,
+            isSelected ? '✓ $subtitle' : subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 11,
-              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+              color: isSelected ? color : theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: cardContent,
+        ),
+      );
+    }
+    return cardContent;
   }
 
   Future<_InventoryData> _load(BankOpsRepository repo) async {

@@ -183,6 +183,8 @@ abstract class BankOpsRepository {
   Future<Cashbox> updateCashbox({
     required String id,
     String? name,
+    String? balance,
+    bool? active,
   });
   Future<void> deleteCashbox(String id);
 

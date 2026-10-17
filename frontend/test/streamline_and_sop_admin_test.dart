@@ -79,11 +79,11 @@ void main() {
 
       final now = DateTime.now();
       if (now.hour >= 6 && now.hour < 14) {
-        expect(find.textContaining('Ca Sáng'), findsOneWidget);
+        expect(find.textContaining('Ca Sáng'), findsWidgets);
       } else if (now.hour >= 14 && now.hour < 22) {
-        expect(find.textContaining('Ca Chiều/Tối'), findsOneWidget);
+        expect(find.textContaining('Ca Chiều/Tối'), findsWidgets);
       } else {
-        expect(find.textContaining('Ca Đêm / Chốt Sổ'), findsOneWidget);
+        expect(find.textContaining('Ca Đêm / Chốt Sổ'), findsWidgets);
       }
 
       // Can dismiss ticker

@@ -896,7 +896,7 @@ class AuthService extends ChangeNotifier {
         return const AppUser(
           id: 'offline-staff-morning',
           username: 'staff_morning',
-          displayName: 'Nguyễn Thị Mai (Pha Chế Ca Sáng)',
+          displayName: 'Nguyễn Thị Mai',
           roles: ['staff'],
         );
       case 'staff_afternoon':
@@ -904,7 +904,7 @@ class AuthService extends ChangeNotifier {
         return const AppUser(
           id: 'offline-staff-afternoon',
           username: 'staff_afternoon',
-          displayName: 'Lê Hoàng Nam (Pha Chế Ca Chiều)',
+          displayName: 'Lê Hoàng Nam',
           roles: ['staff'],
         );
       case 'staff_split':
@@ -912,14 +912,14 @@ class AuthService extends ChangeNotifier {
         return const AppUser(
           id: 'offline-staff-split',
           username: 'staff_split',
-          displayName: 'Phạm Minh Tuấn (Pha Chế Ca Lỡ)',
+          displayName: 'Phạm Minh Tuấn',
           roles: ['staff'],
         );
       case 'demo_checker':
         return const AppUser(
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
           username: 'demo_checker',
-          displayName: 'Trần Văn Quản Lý (Admin / Checker)',
+          displayName: 'Trần Văn Quản Lý',
           roles: ['admin', 'inventory_manager', 'approver'],
           capabilities: [
             'iam:admin',
@@ -938,7 +938,7 @@ class AuthService extends ChangeNotifier {
         return const AppUser(
           id: 'offline-manager',
           username: 'manager_demo',
-          displayName: 'Trần Văn Quản Lý (Chủ Quán)',
+          displayName: 'Trần Văn Quản Lý',
           roles: ['admin', 'inventory_manager', 'approver'],
           capabilities: [
             'iam:admin',

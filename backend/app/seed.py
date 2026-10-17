@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import select
