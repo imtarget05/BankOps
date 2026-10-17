@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kho_tra_sua/src/core/theme/app_theme.dart';
@@ -44,10 +43,10 @@ void main() {
     testWidgets('AppScreen wraps content in SafeArea with left/right enabled for landscape cutouts',
         (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: AppScreen(
-              body: const Text('Inventory Content'),
+              body: Text('Inventory Content'),
             ),
           ),
         ),

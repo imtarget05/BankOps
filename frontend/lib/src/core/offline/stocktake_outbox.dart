@@ -175,7 +175,9 @@ class OfflineMonitor {
     final local = await _tryLocalReach();
     if (local != _online) {
       _online = local;
-      for (final fn in _listeners) fn();
+      for (final fn in _listeners) {
+        fn();
+      }
     }
   }
 

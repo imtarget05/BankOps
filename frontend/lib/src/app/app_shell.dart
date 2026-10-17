@@ -1241,7 +1241,7 @@ class _AppShellState extends State<AppShell> {
     return Column(
       children: [
         if (_isUpdateAvailable)
-          _AppUpdateBanner(onUpdate: forceAppUpdate),
+          const _AppUpdateBanner(onUpdate: forceAppUpdate),
         if (isOfflineDemo)
           const _OfflineDemoBanner()
         else if (showTicker)

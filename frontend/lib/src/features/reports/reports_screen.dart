@@ -57,9 +57,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await RepositoryScope.of(context).runReconciliation(scope: scope);
       _reload();
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Không thể chạy đối soát: ${friendlyError(error)}')));
+      }
     } finally {
       if (mounted) setState(() => _reconciling = false);
     }

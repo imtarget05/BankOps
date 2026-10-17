@@ -393,7 +393,7 @@ void main() {
     test('FormatException khong fallback offline', () async {
       final auth = AuthService(
         baseUrl: 'https://api.example.test',
-        httpClient: MockClient((_) async => throw FormatException('bad body')),
+        httpClient: MockClient((_) async => throw const FormatException('bad body')),
         googleIdTokenProvider: () async => null,
       );
 

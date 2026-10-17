@@ -43,7 +43,9 @@ class OfflineHub {
   }
 
   void _notify() {
-    for (final fn in _listeners) fn();
+    for (final fn in _listeners) {
+      fn();
+    }
   }
 
   /// Gọi khi thiết bị mất kết nối (ví dụ HttpClient trả lỗi khi flush).
@@ -137,8 +139,10 @@ class OfflineBanner extends StatelessWidget {
 
   static void _retry(BuildContext context, int pending) {
     // Khơi động flush từ màn hiện tại (Hub giữ trạng thái).
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Đang thử gửi lại $pending ca đồng bộ...')),
         );
+    }
   }
 }

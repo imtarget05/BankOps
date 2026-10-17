@@ -245,7 +245,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _showCashAdjustmentModal(
-    BuildContext context,
     Cashbox box,
     double currentAmount,
   ) async {
@@ -442,23 +441,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     if (updated == true && mounted) {
+      final repo = RepositoryScope.of(context);
       final rawAmount =
           amountCtrl.text.replaceAll('.', '').replaceAll(',', '').trim();
       final finalAmt = double.tryParse(rawAmount);
       if (finalAmt == null) return;
       try {
-        final repo = RepositoryScope.of(context);
         await repo.updateCashbox(
             id: box.id, balance: finalAmt.toStringAsFixed(2));
-        if (mounted) {
-          AppToast.success(context,
-              'Đã cập nhật số dư ${box.name}: ${AppFormat.money(finalAmt.toStringAsFixed(0))} ₫');
-          _refresh();
-        }
+        if (!mounted) return;
+        AppToast.success(context,
+            'Đã cập nhật số dư ${box.name}: ${AppFormat.money(finalAmt.toStringAsFixed(0))} ₫');
+        _refresh();
       } catch (e) {
-        if (mounted) {
-          AppToast.error(context, 'Không thể cập nhật số dư: $e');
-        }
+        if (!mounted) return;
+        AppToast.error(context, 'Không thể cập nhật số dư: $e');
       }
     }
   }
@@ -792,8 +789,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
-                                    onPressed: () => _showCashAdjustmentModal(
-                                        context, box, amt),
+                                    onPressed: () =>
+                                        _showCashAdjustmentModal(box, amt),
                                   ),
                                 ),
                               ],

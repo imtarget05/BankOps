@@ -35,12 +35,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final repo = RepositoryScope.of(context);
-    if (_future == null) {
-      _future = repo.getApprovalInbox().then((items) {
+    _future ??= repo.getApprovalInbox().then((items) {
         _loadAiAssessments(items, repo);
         return items;
       });
-    }
     final sync = SyncScope.maybeOf(context);
     if (sync != _syncController) {
       _syncController?.removeListener(_onSyncUpdate);

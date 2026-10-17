@@ -1346,8 +1346,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
       var rawImpact = item.impact;
       final decimalMatch =
           RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
-      if (decimalMatch != null)
+      if (decimalMatch != null) {
         rawImpact = rawImpact.substring(0, decimalMatch.start);
+      }
       final digits = rawImpact.replaceAll(RegExp(r'[^\d]'), '');
       final val = int.tryParse(digits) ?? 0;
       final isHigh = (isCash && val >= 500000000) || (!isCash && val >= 50);
@@ -2067,8 +2068,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? status,
   }) async {
     final query = <String, String>{};
-    if (pipelineId != null && pipelineId.isNotEmpty)
+    if (pipelineId != null && pipelineId.isNotEmpty) {
       query['pipeline_id'] = pipelineId;
+    }
     if (status != null && status.isNotEmpty) query['status'] = status;
     final body = await _get('/etl/runs', query.isEmpty ? null : query);
     return _asList(body, 'runs')

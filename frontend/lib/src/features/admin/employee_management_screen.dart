@@ -1775,7 +1775,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                         ? const Color(0xFF059669)
                         : const Color(0xFFDC2626),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
                 user.isLocked ? 'Mở khóa tài khoản' : 'Khóa tài khoản',
                 style: TextStyle(

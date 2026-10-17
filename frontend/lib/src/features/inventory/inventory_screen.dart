@@ -1667,9 +1667,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         context, 'Bàn giao nguyên liệu thành công!');
                   }
                 } catch (e) {
-                  if (mounted)
+                  if (mounted) {
                     AppToast.error(
                         context, 'Lỗi bàn giao: ${friendlyError(e)}');
+                  }
                 }
               },
               child: const Text('Xác nhận bàn giao'),

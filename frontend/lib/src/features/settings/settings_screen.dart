@@ -63,7 +63,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text('Bao gồm giá vốn, giá bán, tồn kho tối thiểu chuẩn',
                       style: TextStyle(fontSize: 12)),
                   value: true,
+                  // ignore: deprecated_member_use
                   groupValue: keepCatalog,
+                  // ignore: deprecated_member_use
                   onChanged: (val) => setDlgState(() => keepCatalog = val ?? true),
                 ),
                 RadioListTile<bool>(
@@ -73,7 +75,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text('Không có mặt hàng nào để bắt đầu nhập từ đầu',
                       style: TextStyle(fontSize: 12)),
                   value: false,
+                  // ignore: deprecated_member_use
                   groupValue: keepCatalog,
+                  // ignore: deprecated_member_use
                   onChanged: (val) => setDlgState(() => keepCatalog = val ?? false),
                 ),
               ],

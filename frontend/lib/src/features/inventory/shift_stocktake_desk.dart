@@ -200,7 +200,7 @@ class _ReconciliationTable extends StatelessWidget {
           child: DataTable(
             headingRowColor: WidgetStatePropertyAll(
                 theme.colorScheme.surfaceContainerHighest),
-            columns: [
+            columns: const [
               DataColumn(label: Text('Nguyên liệu', style: headerStyle)),
               DataColumn(label: Text('ĐVT', style: headerStyle)),
               DataColumn(

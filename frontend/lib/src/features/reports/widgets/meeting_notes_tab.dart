@@ -167,27 +167,30 @@ class _MeetingNotesTabState extends State<MeetingNotesTab> {
                       label: const Text('🟢 Vận hành đạt chuẩn (Ổn định)'),
                       selected: _selectedStatus == 'Vận hành đạt chuẩn',
                       onSelected: (val) {
-                        if (val)
+                        if (val) {
                           setState(
                               () => _selectedStatus = 'Vận hành đạt chuẩn');
+                        }
                       },
                     ),
                     ChoiceChip(
                       label: const Text('🟡 Cần lưu ý theo dõi'),
                       selected: _selectedStatus == 'Cần lưu ý theo dõi',
                       onSelected: (val) {
-                        if (val)
+                        if (val) {
                           setState(
                               () => _selectedStatus = 'Cần lưu ý theo dõi');
+                        }
                       },
                     ),
                     ChoiceChip(
                       label: const Text('🔴 Cảnh báo rủi ro cao'),
                       selected: _selectedStatus == 'Cảnh báo rủi ro cao',
                       onSelected: (val) {
-                        if (val)
+                        if (val) {
                           setState(
                               () => _selectedStatus = 'Cảnh báo rủi ro cao');
+                        }
                       },
                     ),
                   ],
