@@ -29,6 +29,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
   final _passwordCtrl = TextEditingController();
   final _confirmPasswordCtrl = TextEditingController();
 
+  String _previousPassword = '';
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _busy = false;
@@ -38,10 +39,41 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
   void initState() {
     super.initState();
     _tokenCtrl = TextEditingController(text: widget.initialToken ?? '');
+    _passwordCtrl.addListener(_onPasswordChanged);
+    _confirmPasswordCtrl.addListener(_onConfirmPasswordChanged);
+  }
+
+  void _onPasswordChanged() {
+    final newPass = _passwordCtrl.text;
+    if (newPass == _previousPassword) return;
+
+    final isAutofillOrPaste = (newPass.length - _previousPassword.length) > 1;
+    final confirmMatchesPrevious =
+        _confirmPasswordCtrl.text == _previousPassword;
+
+    // Tự động đồng bộ sang ô xác nhận khi:
+    // 1. Trình duyệt / Password manager tự động điền mật khẩu mạnh (chunk length delta > 1)
+    // 2. Hoặc ô xác nhận trước đó đang đồng bộ với mật khẩu cũ
+    if (newPass.isNotEmpty &&
+        (isAutofillOrPaste ||
+            (confirmMatchesPrevious && _previousPassword.isNotEmpty))) {
+      _confirmPasswordCtrl.text = newPass;
+      _confirmPasswordCtrl.selection =
+          TextSelection.collapsed(offset: newPass.length);
+    }
+
+    _previousPassword = newPass;
+    if (mounted) setState(() {});
+  }
+
+  void _onConfirmPasswordChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _passwordCtrl.removeListener(_onPasswordChanged);
+    _confirmPasswordCtrl.removeListener(_onConfirmPasswordChanged);
     _tokenCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmPasswordCtrl.dispose();
@@ -138,10 +170,9 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                 color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 child: Padding(
                   padding: const EdgeInsets.all(32),
-                  child: AutofillGroup(
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -283,97 +314,126 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Input New Password
-                        Text(
-                          'Mật khẩu mới',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? const Color(0xFFCBD5E1)
-                                : const Color(0xFF334155),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _passwordCtrl,
-                          obscureText: _obscurePassword,
-                          keyboardType: TextInputType.visiblePassword,
-                          autofillHints: const [AutofillHints.newPassword],
-                          decoration: InputDecoration(
-                            hintText: 'Tối thiểu 6 ký tự',
-                            prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                size: 20,
+                        // Khối mật khẩu được cô lập trong AutofillGroup riêng
+                        // để trình duyệt / extension nhận diện đúng cặp trường new-password
+                        AutofillGroup(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Input New Password
+                              Text(
+                                'Mật khẩu mới',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? const Color(0xFFCBD5E1)
+                                      : const Color(0xFF334155),
+                                ),
                               ),
-                              onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.length < 6) {
-                              return 'Mật khẩu phải có tối thiểu 6 ký tự';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _passwordCtrl,
+                                obscureText: _obscurePassword,
+                                autofillHints: const [AutofillHints.newPassword],
+                                decoration: InputDecoration(
+                                  hintText: 'Tối thiểu 6 ký tự',
+                                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => setState(
+                                        () => _obscurePassword = !_obscurePassword),
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.length < 6) {
+                                    return 'Mật khẩu phải có tối thiểu 6 ký tự';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
 
-                        // Input Confirm Password
-                        Text(
-                          'Xác nhận mật khẩu mới',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? const Color(0xFFCBD5E1)
-                                : const Color(0xFF334155),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _confirmPasswordCtrl,
-                          obscureText: _obscureConfirm,
-                          keyboardType: TextInputType.visiblePassword,
-                          autofillHints: const [AutofillHints.newPassword],
-                          decoration: InputDecoration(
-                            hintText: 'Nhập lại mật khẩu mới',
-                            prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscureConfirm
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                size: 20,
+                              // Input Confirm Password
+                              Text(
+                                'Xác nhận mật khẩu mới',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? const Color(0xFFCBD5E1)
+                                      : const Color(0xFF334155),
+                                ),
                               ),
-                              onPressed: () => setState(
-                                  () => _obscureConfirm = !_obscureConfirm),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _confirmPasswordCtrl,
+                                obscureText: _obscureConfirm,
+                                autofillHints: const [AutofillHints.newPassword],
+                                decoration: InputDecoration(
+                                  hintText: 'Nhập lại mật khẩu mới',
+                                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                                  suffixIcon: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (_passwordCtrl.text.isNotEmpty &&
+                                          _confirmPasswordCtrl.text != _passwordCtrl.text)
+                                        IconButton(
+                                          tooltip: 'Sao chép từ mật khẩu trên',
+                                          icon: const Icon(
+                                            Icons.sync_rounded,
+                                            size: 20,
+                                            color: Color(0xFF0284C7),
+                                          ),
+                                          onPressed: () {
+                                            _confirmPasswordCtrl.text = _passwordCtrl.text;
+                                            _confirmPasswordCtrl.selection =
+                                                TextSelection.collapsed(
+                                              offset: _passwordCtrl.text.length,
+                                            );
+                                          },
+                                        ),
+                                      IconButton(
+                                        icon: Icon(
+                                          _obscureConfirm
+                                              ? Icons.visibility_outlined
+                                              : Icons.visibility_off_outlined,
+                                          size: 20,
+                                        ),
+                                        onPressed: () => setState(
+                                            () => _obscureConfirm = !_obscureConfirm),
+                                      ),
+                                    ],
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if (v != _passwordCtrl.text) {
+                                    return 'Mật khẩu xác nhận không trùng khớp';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ],
                           ),
-                          validator: (v) {
-                            if (v != _passwordCtrl.text) {
-                              return 'Mật khẩu xác nhận không trùng khớp';
-                            }
-                            return null;
-                          },
                         ),
                         const SizedBox(height: 24),
 
@@ -433,7 +493,6 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                     ),
                   ),
                 ),
-              ),
               ),
             ),
           ),

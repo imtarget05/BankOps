@@ -231,4 +231,103 @@ void main() {
         findsOneWidget);
     expect(auth.user, isNull);
   });
+
+  testWidgets(
+      'AcceptInviteScreen auto-fills confirm password on autofill or paste',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final client = MockClient((req) async {
+      return http.Response(
+        json.encode({
+          'access_token': 'jwt-access-token-autofill',
+          'refresh_token': 'jwt-refresh-token-autofill',
+          'user': {
+            'id': 'user-autofill-id',
+            'username': 'autofill_user',
+            'display_name': 'Autofill Test',
+            'roles': ['cashier'],
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final auth = AuthService(
+      baseUrl: 'http://localhost:8000',
+      storage: _FakeStorage(),
+      httpClient: client,
+    );
+
+    await tester.pumpWidget(
+      buildTestWidget(auth: auth, initialToken: 'autofill-token'),
+    );
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextFormField);
+    expect(fields, findsNWidgets(3));
+
+    // Mô phỏng trình duyệt / extension autofill chuỗi mật khẩu mạnh (chunk > 1 char)
+    const generatedStrongPassword = 'P@ssw0rd!Secure#2026';
+    await tester.enterText(fields.at(1), generatedStrongPassword);
+    await tester.pump();
+
+    // Xác nhận ô thứ 2 (confirm password) đã được tự động điền đồng bộ
+    final confirmFormField = tester.widget<TextFormField>(fields.at(2));
+    expect(confirmFormField.controller?.text, generatedStrongPassword);
+
+    // Bấm kích hoạt ngay không bị lỗi mismatch
+    final submitBtn = find.text('Kích Hoạt & Đăng Nhập Ngay');
+    await tester.ensureVisible(submitBtn);
+    await tester.tap(submitBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mật khẩu xác nhận không trùng khớp'), findsNothing);
+    expect(auth.user, isNotNull);
+    expect(auth.user!.username, 'autofill_user');
+  });
+
+  testWidgets(
+      'AcceptInviteScreen shows 1-click sync button on mismatch and syncs properly',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final client = MockClient((req) async => http.Response('{}', 200));
+    final auth = AuthService(
+      baseUrl: 'http://localhost:8000',
+      storage: _FakeStorage(),
+      httpClient: client,
+    );
+
+    await tester.pumpWidget(
+      buildTestWidget(auth: auth, initialToken: 'test-token'),
+    );
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextFormField);
+
+    // Nhập mật khẩu khác nhau ở 2 ô
+    await tester.enterText(fields.at(1), 'SecretPassword123');
+    await tester.pump();
+    await tester.enterText(fields.at(2), 'DifferentPassword999');
+    await tester.pump();
+
+    // Nút đồng bộ (sync icon) phải xuất hiện
+    final syncBtn = find.byIcon(Icons.sync_rounded);
+    expect(syncBtn, findsOneWidget);
+
+    // Chạm vào nút đồng bộ
+    await tester.tap(syncBtn);
+    await tester.pump();
+
+    // Ô thứ 2 đã được cập nhật thành SecretPassword123 và nút sync biến mất
+    final confirmField = tester.widget<TextFormField>(fields.at(2));
+    expect(confirmField.controller?.text, 'SecretPassword123');
+    expect(find.byIcon(Icons.sync_rounded), findsNothing);
+  });
 }
