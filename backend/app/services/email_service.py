@@ -4,6 +4,7 @@ import html
 import logging
 import re
 import smtplib
+from datetime import UTC, datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -217,6 +218,7 @@ def _build_invite_html(
     display_name: str | None = None,
     roles: list[str] | None = None,
     token: str | None = None,
+    inviter_name: str | None = None,
 ) -> str:
     """HTML nội dung email mời kích hoạt tài khoản chuẩn doanh nghiệp cấp cao."""
     raw_full_name = (display_name or "").strip() or username
@@ -224,38 +226,41 @@ def _build_invite_html(
     safe_username = html.escape(username)
     safe_expires = html.escape(expires_label)
     safe_to_email = html.escape(to_email if to_email else "Email đăng ký của bạn")
-    system_name = html.escape(settings.smtp_from_name or "Quản Lý Kho Trà Sữa")
     safe_invite_link = html.escape(invite_link)
 
     role_labels = [_ROLE_TITLES.get(r.lower(), r) for r in (roles or [])]
     role_desc = html.escape(", ".join(role_labels) if role_labels else "Quản Trị Viên Hệ Thống (Administrator)")
+
+    inviter_intro = (
+        f"Quản trị viên <strong>{html.escape(inviter_name.strip())}</strong>"
+        if inviter_name and inviter_name.strip()
+        else "Ban Quản Trị Hệ Thống"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lời mời kích hoạt tài khoản - {system_name}</title>
+  <title>Lời mời kích hoạt tài khoản - Hệ Thống Quản Trị Doanh Nghiệp</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; -webkit-font-smoothing: antialiased;">
   <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" style="max-width: 620px; background-color: #FFFFFF; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: 1px solid #E2E8F0;">
+        <table role="presentation" width="100%" style="max-width: 600px; background-color: #FFFFFF; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: 1px solid #E2E8F0;">
           
-          <!-- Top Brand Header (Deep Navy) -->
+          <!-- Top Brand Header (Deep Slate / Navy) -->
           <tr>
-            <td style="background-color: #0A2540; padding: 32px 36px 28px 36px;">
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+            <td style="background-color: #0F172A; padding: 28px 36px; border-bottom: 3px solid #2563EB;">
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td>
-                    <span style="color: #FFFFFF; font-size: 21px; font-weight: 800; letter-spacing: 0.5px; display: inline-block; vertical-align: middle;">{system_name}</span>
-                    <span style="color: #FDE68A; font-size: 11px; font-weight: 700; margin-left: 10px; padding: 3px 8px; background: rgba(255, 255, 255, 0.12); border-radius: 4px; letter-spacing: 1px; display: inline-block; vertical-align: middle;">HỆ THỐNG VẬN HÀNH</span>
+                  <td style="background-color: #2563EB; width: 36px; height: 36px; border-radius: 8px; text-align: center; vertical-align: middle;">
+                    <span style="color: #FFFFFF; font-size: 18px; line-height: 36px; font-weight: 800;">⚡</span>
                   </td>
-                </tr>
-                <tr>
-                  <td style="padding-top: 8px;">
-                    <p style="margin: 0; font-size: 13px; color: #94A3B8; letter-spacing: 0.2px;">THƯ MỜI THAM GIA QUẢN TRỊ & PHÂN QUYỀN HỆ THỐNG</p>
+                  <td style="padding-left: 14px;">
+                    <span style="color: #FFFFFF; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; display: block;">HỆ THỐNG QUẢN TRỊ DOANH NGHIỆP</span>
+                    <span style="color: #94A3B8; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;">ENTERPRISE OPERATIONS SYSTEM</span>
                   </td>
                 </tr>
               </table>
@@ -264,19 +269,19 @@ def _build_invite_html(
 
           <!-- Main Content Body -->
           <tr>
-            <td style="padding: 36px 36px 24px 36px;">
-              <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 800; color: #0F172A; line-height: 1.4;">
+            <td style="padding: 32px 36px 24px 36px;">
+              <h1 style="margin: 0 0 16px 0; font-size: 19px; font-weight: 800; color: #0F172A; line-height: 1.4;">
                 Lời Mời Kích Hoạt Tài Khoản Quản Trị
               </h1>
-              <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #334155;">
+              <p style="margin: 0 0 14px 0; font-size: 14.5px; line-height: 1.6; color: #334155;">
                 Kính gửi Anh/Chị <strong>{full_name}</strong>,
               </p>
-              <p style="margin: 0 0 24px 0; font-size: 14.5px; line-height: 1.65; color: #475569;">
-                Tài khoản của bạn đã được thiết lập thành công trên hệ thống <strong>{system_name}</strong>. Vui lòng kiểm tra thông tin định danh và kích hoạt tài khoản của bạn theo các chi tiết dưới đây:
+              <p style="margin: 0 0 22px 0; font-size: 14px; line-height: 1.65; color: #475569;">
+                {inviter_intro} đã cấp quyền truy cập và mời bạn tham gia làm việc trên <strong>Hệ Thống Quản Trị Doanh Nghiệp</strong>. Vui lòng kiểm tra thông tin tài khoản và kích hoạt theo hướng dẫn dưới đây:
               </p>
 
               <!-- Account Details Card -->
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; margin-bottom: 28px; overflow: hidden;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; margin-bottom: 24px; overflow: hidden;">
                 <tr>
                   <td style="background-color: #F1F5F9; padding: 12px 18px; border-bottom: 1px solid #E2E8F0;">
                     <span style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.8px;">THÔNG TIN TÀI KHOẢN & PHÂN QUYỀN</span>
@@ -311,20 +316,36 @@ def _build_invite_html(
               </table>
 
               <!-- Hero CTA Button -->
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 8px 0 24px 0;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 8px 0 20px 0;">
                 <tr>
                   <td align="center">
-                    <a href="{safe_invite_link}" target="_blank" style="display: inline-block; background-color: #1D4ED8; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 40px; border-radius: 8px; box-shadow: 0 4px 14px rgba(29, 78, 216, 0.35); letter-spacing: 0.3px;">
-                      🚀 KÍCH HOẠT TÀI KHOẢN & ĐẶT MẬT KHẨU
+                    <a href="{safe_invite_link}" target="_blank" style="display: inline-block; background-color: #2563EB; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 36px; border-radius: 8px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25); letter-spacing: 0.3px;">
+                      Kích Hoạt Tài Khoản Quản Trị
                     </a>
                   </td>
                 </tr>
               </table>
 
-              <p style="margin: 28px 0 0 0; font-size: 13.5px; line-height: 1.5; color: #475569;">
+              <!-- Enterprise Direct Link Fallback -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 18px; margin-bottom: 24px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px;">
+                <tr>
+                  <td>
+                    <p style="margin: 0 0 6px 0; font-size: 12px; color: #64748B; font-weight: 600;">
+                      Nếu nút bấm phía trên không hoạt động, sao chép liên kết trực tiếp sau vào trình duyệt:
+                    </p>
+                    <p style="margin: 0; font-size: 12px; word-break: break-all; line-height: 1.5;">
+                      <a href="{safe_invite_link}" style="color: #2563EB; text-decoration: underline; font-family: 'SF Mono', Consolas, Monaco, monospace;">
+                        {safe_invite_link}
+                      </a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 24px 0 0 0; font-size: 13.5px; line-height: 1.5; color: #475569;">
                 Trân trọng,<br>
                 <strong style="color: #0F172A;">Ban Vận Hành & Chuyển Giao Công Nghệ</strong><br>
-                <span style="font-size: 12px; color: #64748B;">{system_name} Core Operations</span>
+                <span style="font-size: 12px; color: #64748B;">Hệ Thống Quản Trị Doanh Nghiệp Core Operations</span>
               </p>
             </td>
           </tr>
@@ -333,10 +354,10 @@ def _build_invite_html(
           <tr>
             <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 22px 36px; text-align: center;">
               <p style="margin: 0 0 6px 0; font-size: 11.5px; color: #94A3B8; line-height: 1.4;">
-                Đây là thư điện tử được gửi tự động từ hệ thống {system_name}. Vui lòng không trả lời trực tiếp email này.
+                Đây là thư điện tử được gửi tự động từ Hệ Thống Quản Trị Doanh Nghiệp. Vui lòng không trả lời trực tiếp email này.
               </p>
               <p style="margin: 0; font-size: 11px; color: #CBD5E1;">
-                © 2026 {system_name}. All rights reserved. Tiêu chuẩn bảo mật ISO 27001 & Maker-Checker Dual Control.
+                © 2026 Hệ Thống Quản Trị Doanh Nghiệp. All rights reserved. Tiêu chuẩn bảo mật ISO 27001 & Maker-Checker Dual Control.
               </p>
             </td>
           </tr>
@@ -357,6 +378,7 @@ def _build_invite_plain(
     display_name: str | None = None,
     roles: list[str] | None = None,
     token: str | None = None,
+    inviter_name: str | None = None,
 ) -> str:
     """Nội dung văn bản thuần (plain text) hỗ trợ bộ lọc email chống spam."""
     full_name = (display_name or "").strip() or username
@@ -365,24 +387,30 @@ def _build_invite_plain(
         if roles
         else "Quản Trị Viên Hệ Thống (Administrator)"
     )
-    system_name = settings.smtp_from_name or "Quản Lý Kho Trà Sữa"
+    inviter_intro = (
+        f"Quản trị viên {inviter_name.strip()}"
+        if inviter_name and inviter_name.strip()
+        else "Ban Quản Trị Hệ Thống"
+    )
 
     return (
         f"=== THƯ MỜI THAM GIA QUẢN TRỊ HỆ THỐNG ===\n"
-        f"{system_name.upper()}\n\n"
+        f"HỆ THỐNG QUẢN TRỊ DOANH NGHIỆP\n\n"
         f"Kính gửi Anh/Chị {full_name},\n\n"
-        f"Tài khoản của bạn đã được thiết lập thành công trên hệ thống {system_name}.\n\n"
+        f"{inviter_intro} đã cấp quyền truy cập và mời bạn tham gia làm việc trên Hệ Thống Quản Trị Doanh Nghiệp.\n\n"
         f"--- THÔNG TIN TÀI KHOẢN ---\n"
         f"• Họ và tên: {full_name}\n"
         f"• Tên đăng nhập: @{username}\n"
         f"• Email liên kết: {to_email}\n"
         f"• Vai trò phân quyền: {role_desc}\n"
         f"• Thời hạn kích hoạt: 7 ngày (Hết hạn: {expires_label})\n\n"
-        f"--- LIÊN KẾT KÍCH HOẠT & ĐẶT MẬT KHẨU ---\n"
+        f"--- LIÊN KẾT KÍCH HOẠT TÀI KHOẢN ---\n"
         f"{invite_link}\n\n"
+        f"Nếu không bấm được nút, vui lòng sao chép liên kết trên vào trình duyệt.\n\n"
         f"Trân trọng,\n"
-        f"Ban Vận Hành & Chuyển Giao Công Nghệ {system_name}\n"
-        f"© 2026 {system_name}. All rights reserved.\n"
+        f"Ban Vận Hành & Chuyển Giao Công Nghệ\n"
+        f"Hệ Thống Quản Trị Doanh Nghiệp Core Operations\n"
+        f"© 2026 Hệ Thống Quản Trị Doanh Nghiệp. All rights reserved.\n"
     )
 
 
@@ -394,6 +422,7 @@ async def send_invite_email(
     display_name: str | None = None,
     roles: list[str] | None = None,
     token: str | None = None,
+    inviter_name: str | None = None,
 ) -> EmailSendResult:
     """Gửi email mời kích hoạt tài khoản (onboarding `invite_email`).
 
@@ -418,7 +447,14 @@ async def send_invite_email(
         expires_at.strftime("%d/%m/%Y %H:%M") if getattr(expires_at, "year", None) else "7 ngày"
     )
     full_name = (display_name or "").strip() or username
-    subject = f"[{settings.smtp_from_name}] Lời mời kích hoạt tài khoản quản trị cho {full_name}"
+    subject = f"[Hệ Thống] Lời mời kích hoạt tài khoản cho {full_name}"
+
+    inviter_display = (inviter_name or "").strip()
+    if inviter_display:
+        from_name = f"{inviter_display} (Hệ Thống Quản Trị)"
+    else:
+        from_name = settings.smtp_from_name or "Ban Quản Trị Hệ Thống"
+
     html_body = _build_invite_html(
         username=username,
         invite_link=invite_link,
@@ -427,6 +463,7 @@ async def send_invite_email(
         display_name=display_name,
         roles=roles,
         token=token,
+        inviter_name=inviter_name,
     )
     plain_body = _build_invite_plain(
         username=username,
@@ -436,6 +473,7 @@ async def send_invite_email(
         display_name=display_name,
         roles=roles,
         token=token,
+        inviter_name=inviter_name,
     )
 
     ok, msg = await asyncio.to_thread(
@@ -448,7 +486,197 @@ async def send_invite_email(
         subject=subject,
         html_content=html_body,
         plain_text_content=plain_body,
-        from_name=settings.smtp_from_name,
+        from_name=from_name,
+    )
+    return EmailSendResult(ok, msg)
+
+
+def _build_activation_confirmation_html(
+    username: str,
+    display_name: str | None = None,
+    activated_at_str: str = "",
+    app_url: str = "",
+) -> str:
+    """HTML nội dung email xác nhận kích hoạt tài khoản thành công và đóng luồng."""
+    raw_full_name = (display_name or "").strip() or username
+    full_name = html.escape(raw_full_name)
+    safe_username = html.escape(username)
+    safe_time = html.escape(activated_at_str)
+    safe_app_url = html.escape(app_url)
+
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xác nhận kích hoạt tài khoản thành công - Hệ Thống Quản Trị Doanh Nghiệp</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 600px; background-color: #FFFFFF; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: 1px solid #E2E8F0;">
+          
+          <!-- Top Brand Header (Deep Slate / Navy) -->
+          <tr>
+            <td style="background-color: #0F172A; padding: 28px 36px; border-bottom: 3px solid #10B981;">
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="background-color: #10B981; width: 36px; height: 36px; border-radius: 8px; text-align: center; vertical-align: middle;">
+                    <span style="color: #FFFFFF; font-size: 18px; line-height: 36px; font-weight: 800;">✓</span>
+                  </td>
+                  <td style="padding-left: 14px;">
+                    <span style="color: #FFFFFF; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; display: block;">HỆ THỐNG QUẢN TRỊ DOANH NGHIỆP</span>
+                    <span style="color: #94A3B8; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;">XÁC NHẬN KÍCH HOẠT THÀNH CÔNG</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content Body -->
+          <tr>
+            <td style="padding: 32px 36px 24px 36px;">
+              <h1 style="margin: 0 0 16px 0; font-size: 19px; font-weight: 800; color: #0F172A; line-height: 1.4;">
+                Tài Khoản Đã Kích Hoạt Thành Công
+              </h1>
+              <p style="margin: 0 0 14px 0; font-size: 14.5px; line-height: 1.6; color: #334155;">
+                Kính gửi Anh/Chị <strong>{full_name}</strong>,
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.65; color: #475569;">
+                Tài khoản của bạn (<strong>@{safe_username}</strong>) đã hoàn tất kích hoạt và đăng nhập thành công vào Hệ Thống Quản Trị Doanh Nghiệp lúc <strong>{safe_time}</strong>.
+              </p>
+
+              <!-- Security Notice / Resource Release -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; margin-bottom: 24px; padding: 16px 18px;">
+                <tr>
+                  <td>
+                    <span style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #166534; letter-spacing: 0.8px; display: block; margin-bottom: 6px;">
+                      🔒 BẢO MẬT & THU HỒI TÀI NGUYÊN HOÀN TẤT
+                    </span>
+                    <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #15803D;">
+                      Toàn bộ liên kết mời và mã token dùng một lần trước đó đã được hệ thống <strong>thu hồi và hủy bỏ vĩnh viễn (Revoked & Released)</strong>. Bạn có thể sử dụng mật khẩu mới vừa thiết lập để đăng nhập cho các phiên làm việc tiếp theo.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA Button -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 8px 0 20px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="{safe_app_url}" target="_blank" style="display: inline-block; background-color: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 36px; border-radius: 8px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25); letter-spacing: 0.3px;">
+                      Truy Cập Hệ Thống Ngay
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 16px 0 0 0; font-size: 12.5px; line-height: 1.5; color: #DC2626;">
+                ⚠️ <strong>Cảnh báo an ninh:</strong> Nếu bạn không thực hiện việc kích hoạt tài khoản này, vui lòng thông báo khẩn cấp cho Quản Trị Viên để phong tỏa tài khoản ngay lập tức.
+              </p>
+
+              <p style="margin: 24px 0 0 0; font-size: 13.5px; line-height: 1.5; color: #475569;">
+                Trân trọng,<br>
+                <strong style="color: #0F172A;">Ban Vận Hành & An Ninh Hệ Thống</strong><br>
+                <span style="font-size: 12px; color: #64748B;">Hệ Thống Quản Trị Doanh Nghiệp Core Operations</span>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 22px 36px; text-align: center;">
+              <p style="margin: 0 0 6px 0; font-size: 11.5px; color: #94A3B8; line-height: 1.4;">
+                Đây là thư điện tử được gửi tự động từ Hệ Thống Quản Trị Doanh Nghiệp. Vui lòng không trả lời trực tiếp email này.
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #CBD5E1;">
+                © 2026 Hệ Thống Quản Trị Doanh Nghiệp. All rights reserved. Tiêu chuẩn bảo mật ISO 27001.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _build_activation_confirmation_plain(
+    username: str,
+    display_name: str | None = None,
+    activated_at_str: str = "",
+    app_url: str = "",
+) -> str:
+    """Nội dung plain-text cho email xác nhận kích hoạt tài khoản."""
+    full_name = (display_name or "").strip() or username
+    return (
+        f"=== XÁC NHẬN KÍCH HOẠT TÀI KHOẢN THÀNH CÔNG ===\n"
+        f"HỆ THỐNG QUẢN TRỊ DOANH NGHIỆP\n\n"
+        f"Kính gửi Anh/Chị {full_name},\n\n"
+        f"Tài khoản của bạn (@{username}) đã hoàn tất kích hoạt và đăng nhập thành công vào Hệ Thống Quản Trị Doanh Nghiệp lúc {activated_at_str}.\n\n"
+        f"--- BẢO MẬT & THU HỒI TÀI NGUYÊN ---\n"
+        f"Toàn bộ liên kết mời và mã token dùng một lần trước đó đã được hệ thống thu hồi và hủy bỏ vĩnh viễn (Revoked & Released).\n\n"
+        f"Truy cập hệ thống: {app_url}\n\n"
+        f"Nếu không phải bạn thực hiện, vui lòng liên hệ ngay Quản Trị Viên để khóa tài khoản.\n\n"
+        f"Trân trọng,\n"
+        f"Ban Vận Hành & An Ninh Hệ Thống\n"
+        f"© 2026 Hệ Thống Quản Trị Doanh Nghiệp. All rights reserved.\n"
+    )
+
+
+async def send_activation_confirmation_email(
+    to_email: str,
+    username: str,
+    display_name: str | None = None,
+    activated_at: datetime | None = None,
+) -> EmailSendResult:
+    """Gửi email xác nhận sau khi user kích hoạt tài khoản thành công và đóng luồng tác vụ."""
+    clean_email = (to_email or "").strip().lower()
+    if not is_valid_email(clean_email):
+        return EmailSendResult(False, f"Email '{to_email}' không có định dạng hợp lệ")
+
+    smtp_user = settings.smtp_user.strip()
+    smtp_pass = settings.smtp_password.strip()
+    if not smtp_user or not smtp_pass:
+        return EmailSendResult(False, "Chưa cấu hình tài khoản SMTP (SMTP_USER hoặc SMTP_PASSWORD)")
+
+    now_dt = activated_at or datetime.now(UTC)
+    # Định dạng hiển thị giờ UTC+7
+    tz_vn = timezone(timedelta(hours=7))
+    time_str = now_dt.astimezone(tz_vn).strftime("%H:%M:%S ngày %d/%m/%Y (Giờ Việt Nam)")
+
+    full_name = (display_name or "").strip() or username
+    subject = f"[Hệ Thống] Kích hoạt tài khoản thành công - {full_name}"
+    from_name = settings.smtp_from_name or "Ban Quản Trị Hệ Thống"
+    app_url = settings.frontend_base_url.rstrip("/")
+
+    html_body = _build_activation_confirmation_html(
+        username=username,
+        display_name=display_name,
+        activated_at_str=time_str,
+        app_url=app_url,
+    )
+    plain_body = _build_activation_confirmation_plain(
+        username=username,
+        display_name=display_name,
+        activated_at_str=time_str,
+        app_url=app_url,
+    )
+
+    ok, msg = await asyncio.to_thread(
+        _send_smtp_sync,
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        user=smtp_user,
+        password=smtp_pass,
+        to_email=clean_email,
+        subject=subject,
+        html_content=html_body,
+        plain_text_content=plain_body,
+        from_name=from_name,
     )
     return EmailSendResult(ok, msg)
 

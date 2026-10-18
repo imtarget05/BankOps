@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     smtp_from_name: str = Field(
         default_factory=lambda: os.environ.get("SMTP_FROM_NAME")
         or _env_vals.get("SMTP_FROM_NAME")
-        or "quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
+        or "Ban Quản Trị Hệ Thống"
     )
 
     ai_provider: Literal['disabled', 'cloudflare', 'ollama', 'modal_llm'] = 'disabled'

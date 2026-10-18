@@ -427,6 +427,7 @@ async def create_user(
                 display_name=new_user.display_name_demo,
                 roles=assigned_roles,
                 token=invite_token,
+                inviter_name=current_user.display_name_demo or current_user.username,
             )
             invite_email_sent = bool(res)
             delivery_msg = getattr(res, "message", "Đã gửi email thành công" if invite_email_sent else "Không gửi được email")
@@ -728,6 +729,7 @@ async def resend_invite(
             display_name=user.display_name_demo,
             roles=user_roles,
             token=invite_token,
+            inviter_name=current_user.display_name_demo or current_user.username,
         )
         invite_email_sent = bool(res)
         delivery_msg = getattr(res, "message", "Đã gửi email thành công" if invite_email_sent else "Không gửi được email")

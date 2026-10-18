@@ -32,6 +32,6 @@ services:
       - key: SMTP_USER
         value: binhtan5734@gmail.com
       - key: SMTP_FROM_NAME
-        value: quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev
+        value: Ban Quản Trị Hệ Thống
       - key: SMTP_PASSWORD
         sync: false

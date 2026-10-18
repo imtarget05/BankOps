@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -29,7 +31,12 @@ from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent
 from app.models.iam import User, UserStatus
-from app.services.email_service import send_password_reset_email
+from app.services.email_service import (
+    send_activation_confirmation_email,
+    send_password_reset_email,
+)
+
+logger = logging.getLogger("bankops.auth")
 
 router = APIRouter()
 
@@ -194,12 +201,26 @@ async def accept_invite(
             action="USER_INVITE_ACCEPTED",
             subject=f"iam_users:{user.id}",
             occurred_at=now,
-            metadata_json={"username": user.username},
+            metadata_json={"username": user.username, "invite_closed": True, "token_dropped": True},
         )
     )
 
     await db.commit()
     await db.refresh(user)
+
+    # Gửi email xác nhận sau khi user vào được web/app thành công và đóng luồng thu hồi tài nguyên
+    if user.email:
+        try:
+            asyncio.create_task(
+                send_activation_confirmation_email(
+                    to_email=user.email,
+                    username=user.username,
+                    display_name=user.display_name_demo,
+                    activated_at=now,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - không làm ảnh hưởng phiên đăng nhập
+            logger.warning("Không thể gửi email xác nhận kích hoạt cho user %s (%s): %s", user.username, user.email, exc)
 
     roles = await get_user_roles(db, user.id)
     capabilities = await get_user_capabilities(db, user.id)
