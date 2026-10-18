@@ -1858,7 +1858,12 @@ class HttpBankOpsRepository implements BankOpsRepository {
       'onboarding_method': onboardingMethod,
     };
     final body = await _post('/admin/users', payload, extraHeaders: _idem());
-    final userMap = body['user'] as Map<String, dynamic>? ?? body;
+    final userMap = Map<String, dynamic>.from(body['user'] as Map<String, dynamic>? ?? body);
+    userMap['last_invite_link'] = body['invite_link'];
+    userMap['last_invite_token'] = body['invite_token'];
+    userMap['last_invite_email_sent'] = body['invite_email_sent'];
+    userMap['last_email_delivery_message'] = body['email_delivery_message'];
+    userMap['last_temporary_password'] = body['temporary_password'];
     return EmployeeUserDto.fromJson(userMap);
   }
 

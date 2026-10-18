@@ -98,6 +98,11 @@ image = (
             "MODAL_LLM_MODEL": "Qwen2.5-1.5B-Instruct.Q4_K_M",
             "SERVER_RELOAD": "false",
             "ALLOWED_ORIGINS": '["http://localhost:3000","http://localhost:8080","http://localhost:5000","https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"]',
+            "FRONTEND_BASE_URL": "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev",
+            "SMTP_HOST": "smtp.gmail.com",
+            "SMTP_PORT": "587",
+            "SMTP_USER": "binhtan5734@gmail.com",
+            "SMTP_FROM_NAME": "quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev",
         }
     )
 )

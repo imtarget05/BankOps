@@ -38,7 +38,11 @@ from app.models.iam import (
     UserRole,
     UserStatus,
 )
-from app.services.email_service import is_valid_email, send_invite_email
+from app.services.email_service import (
+    check_smtp_health,
+    is_valid_email,
+    send_invite_email,
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin IAM"])
 
@@ -331,7 +335,7 @@ async def create_user(
         user_status = UserStatus.active
     else:
         # invite_email
-        invite_token = secrets.token_hex(32)
+        invite_token = secrets.token_hex(8)
         token_hash = hashlib.sha256(invite_token.encode("utf-8")).hexdigest()
         expires_at = now + timedelta(days=7)
         # Placeholder unusable password until invite is accepted via /auth/accept-invite
@@ -407,27 +411,37 @@ async def create_user(
     # Gửi thư mời tới email thật (best-effort): SMTP chưa cấu hình thì log demo
     # mode, không làm hỏng việc tạo tài khoản; admin vẫn nhận invite_link để chia sẻ.
     invite_email_sent = False
+    delivery_msg = ""
+    full_invite_link = (
+        f"{settings.frontend_base_url.rstrip('/')}/accept-invite?token={invite_token}"
+        if invite_token else None
+    )
     if invite_token and clean_email:
         try:
-            invite_email_sent = await send_invite_email(
+            assigned_roles = [r.strip().lower() for r in body.roles if r.strip().lower() in valid_roles]
+            res = await send_invite_email(
                 to_email=clean_email,
                 username=clean_username,
-                invite_link=(
-                    f"{settings.frontend_base_url.rstrip('/')}"
-                    f"/accept-invite?token={invite_token}"
-                ),
+                invite_link=full_invite_link,
                 expires_at=new_user.invite_expires_at,
+                display_name=new_user.display_name_demo,
+                roles=assigned_roles,
+                token=invite_token,
             )
-        except Exception:  # noqa: BLE001 - email không bao giờ làm fail provisioning
+            invite_email_sent = bool(res)
+            delivery_msg = getattr(res, "message", "Đã gửi email thành công" if invite_email_sent else "Không gửi được email")
+        except Exception as exc:  # noqa: BLE001 - email không bao giờ làm fail provisioning
             invite_email_sent = False
+            delivery_msg = str(exc)
 
     user_data = await _user_to_dict(db, new_user)
     return {
         "user": user_data,
         "temporary_password": temp_password,
         "invite_token": invite_token,
-        "invite_link": f"/accept-invite?token={invite_token}" if invite_token else None,
+        "invite_link": full_invite_link,
         "invite_email_sent": invite_email_sent,
+        "email_delivery_message": delivery_msg,
         "message": f"Tài khoản '{clean_username}' đã được khởi tạo thành công.",
     }
 
@@ -682,7 +696,7 @@ async def resend_invite(
             "Người dùng chưa có email hợp lệ. Hãy cập nhật email thật trước khi gửi lời mời.",
         )
 
-    invite_token = secrets.token_hex(32)
+    invite_token = secrets.token_hex(8)
     token_hash = hashlib.sha256(invite_token.encode("utf-8")).hexdigest()
     now = _now()
     user.invite_token_hash = token_hash
@@ -700,23 +714,32 @@ async def resend_invite(
 
     # Gửi thư mời best-effort (SMTP chưa cấu hình thì log demo mode, không fail API).
     invite_email_sent = False
+    delivery_msg = ""
+    full_invite_link = (
+        f"{settings.frontend_base_url.rstrip('/')}/accept-invite?token={invite_token}"
+    )
     try:
-        invite_email_sent = await send_invite_email(
+        user_roles = await get_user_roles(db, user.id)
+        res = await send_invite_email(
             to_email=clean_email,
             username=user.username,
-            invite_link=(
-                f"{settings.frontend_base_url.rstrip('/')}"
-                f"/accept-invite?token={invite_token}"
-            ),
+            invite_link=full_invite_link,
             expires_at=user.invite_expires_at,
+            display_name=user.display_name_demo,
+            roles=user_roles,
+            token=invite_token,
         )
-    except Exception:  # noqa: BLE001 - email không bao giờ làm fail resend
+        invite_email_sent = bool(res)
+        delivery_msg = getattr(res, "message", "Đã gửi email thành công" if invite_email_sent else "Không gửi được email")
+    except Exception as exc:  # noqa: BLE001 - email không bao giờ làm fail resend
         invite_email_sent = False
+        delivery_msg = str(exc)
 
     return {
         "invite_token": invite_token,
-        "invite_link": f"/accept-invite?token={invite_token}",
+        "invite_link": full_invite_link,
         "invite_email_sent": invite_email_sent,
+        "email_delivery_message": delivery_msg,
         "expires_at": user.invite_expires_at.isoformat(),
         "message": "Đã tạo mã mời mới (hạn sử dụng 7 ngày).",
     }
@@ -793,3 +816,12 @@ async def revoke_user_sessions(
         "message": f"Toàn bộ phiên đăng nhập của '{user.username}' đã bị thu hồi ngay lập tức.",
         "auth_version": user.auth_version,
     }
+
+
+@router.get("/smtp-status")
+async def get_smtp_status(
+    current_user: User = Depends(require_any_capability(*_ADMIN_CAPS)),
+):
+    """Check health and connectivity of configured SMTP server."""
+    return await check_smtp_health()
+

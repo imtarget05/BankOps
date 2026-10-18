@@ -361,15 +361,29 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
             ),
           );
         } else {
+          final emailSent = result.lastInviteEmailSent ?? false;
+          final inviteLink = result.lastInviteLink ??
+              (result.lastInviteToken != null
+                  ? '/accept-invite?token=${result.lastInviteToken}'
+                  : null);
+
           await showDialog(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.mark_email_read_rounded,
-                      color: Color(0xFF059669)),
-                  SizedBox(width: 8),
-                  Text('Đã tạo lời mời kích hoạt'),
+                  Icon(
+                    emailSent
+                        ? Icons.mark_email_read_rounded
+                        : Icons.mail_outline_rounded,
+                    color: emailSent
+                        ? const Color(0xFF059669)
+                        : const Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(emailSent
+                      ? 'Đã gửi thư mời kích hoạt'
+                      : 'Đã tạo lời mời kích hoạt'),
                 ],
               ),
               content: Column(
@@ -383,25 +397,88 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDF4),
+                      color: emailSent
+                          ? const Color(0xFFF0FDF4)
+                          : const Color(0xFFFFFBEB),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                      border: Border.all(
+                        color: emailSent
+                            ? const Color(0xFFBBF7D0)
+                            : const Color(0xFFFDE68A),
+                      ),
                     ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.check_circle_outline,
-                            color: Color(0xFF16A34A)),
+                        Icon(
+                          emailSent
+                              ? Icons.check_circle_outline
+                              : Icons.info_outline,
+                          color: emailSent
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFD97706),
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Lời mời kích hoạt tài khoản có hiệu lực 7 ngày đã được gửi tới email "${result.email}". Nhân viên bấm liên kết trong thư để kích hoạt tài khoản.',
-                            style: const TextStyle(
-                                fontSize: 13, color: Color(0xFF166534)),
+                            emailSent
+                                ? 'Thư mời kích hoạt tài khoản đã được gửi trực tiếp tới email "${result.email}". Vui lòng nhắc nhân sự kiểm tra hộp thư đến (hoặc hòm thư Spam/Quảng cáo).'
+                                : 'Hệ thống chưa gửi được email trực tiếp tới "${result.email}" (${result.lastEmailDeliveryMessage ?? "SMTP chưa bật"}). Bạn có thể sao chép liên kết kích hoạt dưới đây để gửi cho nhân sự.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: emailSent
+                                  ? const Color(0xFF166534)
+                                  : const Color(0xFF92400E),
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
+                  if (inviteLink != null) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Liên kết kích hoạt (Hiệu lực 7 ngày):',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SelectableText(
+                              inviteLink,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            key: const Key('admin-copy-invite-link-btn'),
+                            icon: const Icon(Icons.copy_rounded,
+                                color: Color(0xFF2563EB), size: 18),
+                            tooltip: 'Sao chép liên kết',
+                            onPressed: () => _copyToClipboard(
+                                'liên kết kích hoạt', inviteLink),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
               actions: [

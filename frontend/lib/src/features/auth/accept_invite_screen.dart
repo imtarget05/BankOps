@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/widgets/store_logo.dart';
@@ -11,10 +12,12 @@ class AcceptInviteScreen extends StatefulWidget {
     super.key,
     this.initialToken,
     this.onBackToLogin,
+    this.onSuccess,
   });
 
   final String? initialToken;
   final VoidCallback? onBackToLogin;
+  final VoidCallback? onSuccess;
 
   @override
   State<AcceptInviteScreen> createState() => _AcceptInviteScreenState();
@@ -78,6 +81,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
               'Kích hoạt tài khoản thất bại. Vui lòng kiểm tra mã mời.';
         });
       } else {
+        TextInput.finishAutofillContext();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF059669),
@@ -96,6 +100,10 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
             ),
           ),
         );
+        widget.onSuccess?.call();
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -130,9 +138,10 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                 color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 child: Padding(
                   padding: const EdgeInsets.all(32),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
+                  child: AutofillGroup(
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -252,7 +261,11 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                           controller: _tokenCtrl,
                           decoration: InputDecoration(
                             hintText: 'Dán mã mời kích hoạt...',
-                            prefixIcon: const Icon(Icons.key, size: 20),
+                            prefixIcon: const Icon(
+                              Icons.vpn_key_rounded,
+                              size: 20,
+                              color: Color(0xFF0284C7),
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -285,6 +298,8 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                         TextFormField(
                           controller: _passwordCtrl,
                           obscureText: _obscurePassword,
+                          keyboardType: TextInputType.visiblePassword,
+                          autofillHints: const [AutofillHints.newPassword],
                           decoration: InputDecoration(
                             hintText: 'Tối thiểu 6 ký tự',
                             prefixIcon: const Icon(Icons.lock_outline, size: 20),
@@ -330,6 +345,8 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                         TextFormField(
                           controller: _confirmPasswordCtrl,
                           obscureText: _obscureConfirm,
+                          keyboardType: TextInputType.visiblePassword,
+                          autofillHints: const [AutofillHints.newPassword],
                           decoration: InputDecoration(
                             hintText: 'Nhập lại mật khẩu mới',
                             prefixIcon: const Icon(Icons.lock_outline, size: 20),
@@ -416,6 +433,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                     ),
                   ),
                 ),
+              ),
               ),
             ),
           ),

@@ -126,6 +126,7 @@ class _AuthGateState extends State<_AuthGate> {
         return AcceptInviteScreen(
           initialToken: _inviteToken,
           onBackToLogin: () => setState(() => _showAcceptInvite = false),
+          onSuccess: () => setState(() => _showAcceptInvite = false),
         );
       }
       return const LoginScreen();

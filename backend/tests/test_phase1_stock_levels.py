@@ -190,12 +190,31 @@ class TestStocktake:
         """A count below book stock must post a reducing adjustment, never a receipt."""
         mgr = _login(client, MANAGER)
         checker = _login(client, CHECKER)
-        item_id, _, loc_id, _ = _seed_loc_item(client, mgr)
-        balance = client.get(
-            "/inventory/balances",
-            headers=mgr,
-            params={"location_id": loc_id, "item_id": item_id},
-        ).json()["balances"][0]
+        all_balances = client.get("/inventory/balances", headers=mgr).json()["balances"]
+        positive = next((b for b in all_balances if float(b.get("quantity", 0)) > 1.0), None)
+        if positive:
+            loc_id = positive["location_id"]
+            item_id = positive["item_id"]
+            balance = positive
+        else:
+            item_id, _, loc_id, _ = _seed_loc_item(client, mgr)
+            req = client.post(
+                "/inventory/requests",
+                headers=_idem(mgr),
+                json={
+                    "kind": "receipt",
+                    "destination_location_id": loc_id,
+                    "reason": "Seed stock for shortage test",
+                    "lines": [{"item_id": item_id, "quantity": "100"}],
+                },
+            ).json()
+            client.post(f"/inventory/requests/{req['id']}/submit", headers=_idem(mgr))
+            client.post(f"/inventory/requests/{req['id']}/approve", headers=_idem(checker))
+            balance = client.get(
+                "/inventory/balances",
+                headers=mgr,
+                params={"location_id": loc_id, "item_id": item_id},
+            ).json()["balances"][0]
         assert float(balance["quantity"]) > 0
 
         st_id = self._open(client, mgr, loc_id)["id"]

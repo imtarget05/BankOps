@@ -7,13 +7,14 @@ Bất biến docs/00:
 4. xuất/chuyển quá tồn -> 409, balance giữ nguyên (I1).
 5. mọi write đều audit + outbox trong cùng transaction.
 """
+import os
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
@@ -613,6 +614,10 @@ async def create_item(
     return _item_out(item)
 
 
+MAX_BATCH_ITEMS = 100
+MAX_OPEN_DRAFTS_PER_USER = int(os.environ.get("MAX_OPEN_DRAFTS_PER_USER", "0"))
+
+
 @router.post("/inventory/items/batch", status_code=201)
 async def create_items_batch(
     payload: dict,
@@ -622,6 +627,12 @@ async def create_items_batch(
     raw_items = payload.get("items", [])
     if not isinstance(raw_items, list) or not raw_items:
         raise AppError(422, "EMPTY_BATCH", "Danh sách mặt hàng không được để trống")
+    if len(raw_items) > MAX_BATCH_ITEMS:
+        raise AppError(
+            422,
+            "BATCH_TOO_LARGE",
+            f"Mỗi lô tải lên tối đa {MAX_BATCH_ITEMS} mặt hàng để đảm bảo an toàn hệ thống.",
+        )
 
     skus = [str(r.get("sku", "")).strip().upper() for r in raw_items if r.get("sku")]
     existing_items_res = await db.execute(select(Item).where(Item.sku.in_(skus)))
@@ -1092,6 +1103,23 @@ async def create_request(
     dst = _uuid(payload["dest_id"], "dest_id") if payload.get("dest_id") else None
     if kind == "transfer" and (src is None or dst is None):
         raise AppError(422, "DESTINATION_REQUIRED", "transfer yêu cầu source_id và dest_id")
+
+    # Chống spam mở hàng loạt phiếu nháp làm rác DB: tối đa MAX_OPEN_DRAFTS_PER_USER phiếu draft/maker (nếu được kích hoạt)
+    if MAX_OPEN_DRAFTS_PER_USER > 0:
+        open_drafts_count = (
+            await db.execute(
+                select(func.count(InventoryRequest.id)).where(
+                    InventoryRequest.maker_id == user.id,
+                    InventoryRequest.status == "draft",
+                )
+            )
+        ).scalar() or 0
+        if open_drafts_count >= MAX_OPEN_DRAFTS_PER_USER:
+            raise AppError(
+                422,
+                "DRAFT_QUOTA_EXCEEDED",
+                f"Bạn đã đạt giới hạn tối đa {MAX_OPEN_DRAFTS_PER_USER} phiếu nháp chưa hoàn tất. Vui lòng nộp duyệt hoặc xóa bớt phiếu cũ.",
+            )
 
     req = InventoryRequest(
         id=uuid.uuid4(),

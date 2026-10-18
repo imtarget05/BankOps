@@ -1,10 +1,20 @@
 """Application configuration."""
 import os
 import secrets
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from dotenv import dotenv_values
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+_backend_env = Path(__file__).resolve().parent.parent / ".env"
+_root_env = Path(__file__).resolve().parent.parent.parent / ".env"
+_env_vals: dict[str, str | None] = {}
+if _root_env.exists():
+    _env_vals.update(dotenv_values(_root_env))
+if _backend_env.exists():
+    _env_vals.update(dotenv_values(_backend_env))
 
 # Secret ephemeral per-process cho môi trường demo/test: không hardcode hằng
 # công khai, không ký JWT bằng key rỗng, và không thể forge từ bên ngoài
@@ -22,14 +32,18 @@ class Settings(BaseSettings):
     app_env: str = Field(default="demo")
     app_name: str = Field(default="kho-tra-sua-api")
 
-    database_url: str = Field(...)
+    database_url: str = Field(
+        default_factory=lambda: os.environ.get("DATABASE_URL")
+        or _env_vals.get("DATABASE_URL")
+        or "postgresql+psycopg2://kho-tra-sua:kho-tra-sua@localhost:5432/kho-tra-sua"
+    )
 
     jwt_signing_key_ref: str = Field(default="signing")
     jwt_algorithm: str = Field(default="HS256")
     access_token_expire_minutes: int = Field(default=30)
     refresh_token_expire_days: int = Field(default=7)
 
-    allowed_origins: list[str] = Field(
+    allowed_origins: list[str] | str = Field(
         default=[
             "http://localhost:3000",
             "http://localhost:5000",
@@ -37,16 +51,28 @@ class Settings(BaseSettings):
             "http://127.0.0.1:3000",
             "http://127.0.0.1:5000",
             "http://127.0.0.1:8080",
+            "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev",
             # Thay bằng domain deploy của bạn ở đây (https://...).
             "https://your-domain.example.com",
         ]
     )
 
+    @field_validator("allowed_origins", mode="after")
+    @classmethod
+    def _parse_allowed_origins(cls, v: list[str] | str) -> list[str]:
+        if isinstance(v, str):
+            return [x.strip() for x in v.split(",") if x.strip()]
+        return v
+
     idempotency_key_retention_hours: int = Field(default=24)
 
     # Origin của frontend để tạo link absolute trong email mời (invite) / OTP.
     # Local mặc định; production bắt buộc set FRONTEND_BASE_URL=https://domain-cua-ban.
-    frontend_base_url: str = Field(default="http://localhost:3000")
+    frontend_base_url: str = Field(
+        default_factory=lambda: os.environ.get("FRONTEND_BASE_URL")
+        or _env_vals.get("FRONTEND_BASE_URL")
+        or "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
+    )
 
     server_host: str = Field(default="0.0.0.0")
     server_port: int = Field(default=8000)
@@ -65,11 +91,31 @@ class Settings(BaseSettings):
     rate_limit_login_window_minutes: int = Field(default=15)
 
     # SMTP Email Configuration (Gmail / Transactional Email)
-    smtp_host: str = Field(default=os.environ.get("SMTP_HOST", "smtp.gmail.com"))
-    smtp_port: int = Field(default=int(os.environ.get("SMTP_PORT", "587")))
-    smtp_user: str = Field(default=os.environ.get("SMTP_USER", ""))
-    smtp_password: str = Field(default=os.environ.get("SMTP_PASSWORD", ""))
-    smtp_from_name: str = Field(default=os.environ.get("SMTP_FROM_NAME", "Quản Lý Kho Trà Sữa"))
+    smtp_host: str = Field(
+        default_factory=lambda: os.environ.get("SMTP_HOST")
+        or _env_vals.get("SMTP_HOST")
+        or "smtp.gmail.com"
+    )
+    smtp_port: int = Field(
+        default_factory=lambda: int(
+            os.environ.get("SMTP_PORT") or _env_vals.get("SMTP_PORT") or 587
+        )
+    )
+    smtp_user: str = Field(
+        default_factory=lambda: os.environ.get("SMTP_USER")
+        or _env_vals.get("SMTP_USER")
+        or ""
+    )
+    smtp_password: str = Field(
+        default_factory=lambda: os.environ.get("SMTP_PASSWORD")
+        or _env_vals.get("SMTP_PASSWORD")
+        or ""
+    )
+    smtp_from_name: str = Field(
+        default_factory=lambda: os.environ.get("SMTP_FROM_NAME")
+        or _env_vals.get("SMTP_FROM_NAME")
+        or "quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
+    )
 
     ai_provider: Literal['disabled', 'cloudflare', 'ollama', 'modal_llm'] = 'disabled'
     cloudflare_account_id: str = Field(default='', pattern=r'^([a-fA-F0-9]{32})?$')
@@ -187,9 +233,4 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings(
-    database_url=os.environ.get(
-        "DATABASE_URL",
-        "postgresql+psycopg2://kho-tra-sua:kho-tra-sua@localhost:5432/kho-tra-sua",
-    ),
-)
+settings = Settings()

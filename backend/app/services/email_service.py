@@ -1,5 +1,6 @@
 """Email notification service for Quản Lý Kho Trà Sữa."""
 import asyncio
+import html
 import logging
 import re
 import smtplib
@@ -20,6 +21,8 @@ def is_valid_email(value: str | None) -> bool:
 
 
 def _build_otp_html(username: str, otp: str) -> str:
+    safe_user = html.escape(username)
+    safe_otp = html.escape(otp)
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -51,7 +54,7 @@ def _build_otp_html(username: str, otp: str) -> str:
             <td style="padding: 36px 32px 24px 32px;">
               <h2 style="margin: 0 0 16px 0; font-size: 19px; font-weight: 700; color: #0f172a;">Yêu Cầu Khôi Phục Mật Khẩu</h2>
               <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #475569;">
-                Xin chào <strong>{username}</strong>,
+                Xin chào <strong>{safe_user}</strong>,
               </p>
               <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #475569;">
                 Hệ thống Quản Lý Kho Trà Sữa vừa nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Vui lòng sử dụng mã xác thực OTP dùng một lần dưới đây để hoàn tất:
@@ -60,7 +63,7 @@ def _build_otp_html(username: str, otp: str) -> str:
               <!-- OTP Code Display -->
               <div style="background-color: #f8fafc; border: 2px dashed #0A2540; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
                 <span style="display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 6px; letter-spacing: 1px;">MÃ XÁC THỰC OTP</span>
-                <span style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #0A2540;">{otp}</span>
+                <span style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #0A2540;">{safe_otp}</span>
                 <span style="display: block; font-size: 12px; color: #dc2626; margin-top: 8px; font-weight: 600;">Hiệu lực trong vòng 15 phút (900 giây)</span>
               </div>
 
@@ -94,6 +97,24 @@ def _build_otp_html(username: str, otp: str) -> str:
 </html>"""
 
 
+class EmailSendResult:
+    """Wrapper cho kết quả gửi email, hỗ trợ evaluate như boolean và cung cấp thông điệp chi tiết."""
+
+    def __init__(self, success: bool, message: str = ""):
+        self.success = bool(success)
+        self.message = str(message)
+
+    @property
+    def ok(self) -> bool:
+        return self.success
+
+    def __bool__(self) -> bool:
+        return self.success
+
+    def __repr__(self) -> str:
+        return f"<EmailSendResult success={self.success} message={self.message!r}>"
+
+
 def _send_smtp_sync(
     host: str,
     port: int,
@@ -102,8 +123,9 @@ def _send_smtp_sync(
     to_email: str,
     subject: str,
     html_content: str,
+    plain_text_content: str | None = None,
     from_name: str = "Quản Lý Kho Trà Sữa",
-) -> bool:
+) -> tuple[bool, str]:
     """Synchronous SMTP email sender designed to run inside asyncio.to_thread."""
     try:
         msg = MIMEMultipart("alternative")
@@ -111,8 +133,12 @@ def _send_smtp_sync(
         msg["From"] = f"{from_name} <{user}>"
         msg["To"] = to_email
 
-        part = MIMEText(html_content, "html", "utf-8")
-        msg.attach(part)
+        if plain_text_content:
+            part_plain = MIMEText(plain_text_content, "plain", "utf-8")
+            msg.attach(part_plain)
+
+        part_html = MIMEText(html_content, "html", "utf-8")
+        msg.attach(part_html)
 
         # Support STARTTLS (port 587) and SSL (port 465)
         if port == 465:
@@ -125,11 +151,11 @@ def _send_smtp_sync(
                 server.login(user, password)
                 server.send_message(msg)
 
-        logger.info("Successfully sent OTP email to %s via %s:%d", to_email, host, port)
-        return True
+        logger.info("Successfully sent email to %s (subject: %s) via %s:%d", to_email, subject, host, port)
+        return True, "Gửi email thành công"
     except Exception as exc:
         logger.error("Failed to send email to %s: %s", to_email, exc)
-        return False
+        return False, str(exc)
 
 
 async def send_password_reset_email(to_email: str, username: str, otp: str) -> bool:
@@ -156,8 +182,9 @@ async def send_password_reset_email(to_email: str, username: str, otp: str) -> b
 
     subject = f"[{settings.smtp_from_name}] Mã xác thực OTP khôi phục mật khẩu: {otp}"
     html_body = _build_otp_html(username=username, otp=otp)
+    plain_body = f"Xin chào {username},\n\nMã xác thực OTP của bạn là: {otp}\nHiệu lực trong 15 phút.\n"
 
-    return await asyncio.to_thread(
+    ok, _ = await asyncio.to_thread(
         _send_smtp_sync,
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -166,68 +193,217 @@ async def send_password_reset_email(to_email: str, username: str, otp: str) -> b
         to_email=clean_email,
         subject=subject,
         html_content=html_body,
+        plain_text_content=plain_body,
         from_name=settings.smtp_from_name,
     )
+    return ok
 
 
-def _build_invite_html(username: str, invite_link: str, expires_label: str) -> str:
-    """HTML nội dung email mời kích hoạt tài khoản nhân viên."""
+_ROLE_TITLES = {
+    "admin": "Chủ Quán / Quản Trị Viên (Administrator)",
+    "superadmin": "Tổng Quản Trị Hệ Thống (Super Administrator)",
+    "manager": "Quản Lý Cửa Hàng / Trưởng Ca (Store Manager)",
+    "staff": "Nhân Viên Vận Hành / Pha Chế (Store Staff)",
+    "auditor": "Kiểm Toán Viên Độc Lập (Auditor)",
+    "supervisor": "Kiểm Soát Viên (Supervisor)",
+}
+
+
+def _build_invite_html(
+    username: str,
+    invite_link: str,
+    expires_label: str,
+    to_email: str = "",
+    display_name: str | None = None,
+    roles: list[str] | None = None,
+    token: str | None = None,
+) -> str:
+    """HTML nội dung email mời kích hoạt tài khoản chuẩn doanh nghiệp cấp cao."""
+    raw_full_name = (display_name or "").strip() or username
+    full_name = html.escape(raw_full_name)
+    safe_username = html.escape(username)
+    safe_expires = html.escape(expires_label)
+    safe_to_email = html.escape(to_email if to_email else "Email đăng ký của bạn")
+    system_name = html.escape(settings.smtp_from_name or "Quản Lý Kho Trà Sữa")
+    safe_invite_link = html.escape(invite_link)
+
+    role_labels = [_ROLE_TITLES.get(r.lower(), r) for r in (roles or [])]
+    role_desc = html.escape(", ".join(role_labels) if role_labels else "Quản Trị Viên Hệ Thống (Administrator)")
+
     return f"""<!DOCTYPE html>
 <html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:32px 12px;">
-    <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
-        <tr>
-          <td style="background:linear-gradient(135deg,#2563eb,#0891b2);padding:28px 32px;">
-            <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">Mời kích hoạt tài khoản</p>
-            <p style="margin:6px 0 0;font-size:13px;color:#dbeafe;">{settings.smtp_from_name}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:28px 32px;">
-            <p style="margin:0 0 12px;font-size:14px;color:#334155;">Xin chào <strong>{username}</strong>,</p>
-            <p style="margin:0 0 20px;font-size:14px;color:#334155;line-height:1.6;">
-              Quản trị viên đã mời bạn tham gia hệ thống. Bấm nút bên dưới để đặt mật khẩu và kích hoạt tài khoản
-              (hạn sử dụng: <strong>{expires_label}</strong>).
-            </p>
-            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-              <tr>
-                <td style="background-color:#2563eb;border-radius:10px;">
-                  <a href="{invite_link}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Kích hoạt tài khoản</a>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0;font-size:12.5px;color:#92400e;background-color:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;line-height:1.5;">
-              <strong>Lưu ý bảo mật:</strong> Không chuyển tiếp email này cho người khác. Nếu bạn không được mời,
-              vui lòng bỏ qua email và báo ngay cho quản lý cửa hàng.
-            </p>
-            <p style="margin:20px 0 0;font-size:13px;color:#64748b;">Trân trọng,<br><strong>Ban Vận Hành Quản Lý Kho Trà Sữa</strong></p>
-          </td>
-        </tr>
-        <tr>
-          <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 32px;text-align:center;">
-            <p style="margin:0;font-size:11.5px;color:#94a3b8;">Đây là email tự động từ hệ thống {settings.smtp_from_name}. Vui lòng không trả lời trực tiếp email này.</p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lời mời kích hoạt tài khoản - {system_name}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 620px; background-color: #FFFFFF; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: 1px solid #E2E8F0;">
+          
+          <!-- Top Brand Header (Deep Navy) -->
+          <tr>
+            <td style="background-color: #0A2540; padding: 32px 36px 28px 36px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="color: #FFFFFF; font-size: 21px; font-weight: 800; letter-spacing: 0.5px; display: inline-block; vertical-align: middle;">{system_name}</span>
+                    <span style="color: #FDE68A; font-size: 11px; font-weight: 700; margin-left: 10px; padding: 3px 8px; background: rgba(255, 255, 255, 0.12); border-radius: 4px; letter-spacing: 1px; display: inline-block; vertical-align: middle;">HỆ THỐNG VẬN HÀNH</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-top: 8px;">
+                    <p style="margin: 0; font-size: 13px; color: #94A3B8; letter-spacing: 0.2px;">THƯ MỜI THAM GIA QUẢN TRỊ & PHÂN QUYỀN HỆ THỐNG</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content Body -->
+          <tr>
+            <td style="padding: 36px 36px 24px 36px;">
+              <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 800; color: #0F172A; line-height: 1.4;">
+                Lời Mời Kích Hoạt Tài Khoản Quản Trị
+              </h1>
+              <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #334155;">
+                Kính gửi Anh/Chị <strong>{full_name}</strong>,
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 14.5px; line-height: 1.65; color: #475569;">
+                Tài khoản của bạn đã được thiết lập thành công trên hệ thống <strong>{system_name}</strong>. Vui lòng kiểm tra thông tin định danh và kích hoạt tài khoản của bạn theo các chi tiết dưới đây:
+              </p>
+
+              <!-- Account Details Card -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; margin-bottom: 28px; overflow: hidden;">
+                <tr>
+                  <td style="background-color: #F1F5F9; padding: 12px 18px; border-bottom: 1px solid #E2E8F0;">
+                    <span style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.8px;">THÔNG TIN TÀI KHOẢN & PHÂN QUYỀN</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px 18px;">
+                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="6">
+                      <tr>
+                        <td width="38%" style="font-size: 13px; color: #64748B; font-weight: 600;">Họ và tên:</td>
+                        <td style="font-size: 13.5px; color: #0F172A; font-weight: 700;">{full_name}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13px; color: #64748B; font-weight: 600;">Tên đăng nhập:</td>
+                        <td style="font-size: 13.5px; color: #2563EB; font-weight: 700; font-family: 'SF Mono', Consolas, monospace;">@{safe_username}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13px; color: #64748B; font-weight: 600;">Hộp thư nhận:</td>
+                        <td style="font-size: 13.5px; color: #0F172A;">{safe_to_email}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13px; color: #64748B; font-weight: 600;">Vai trò phân quyền:</td>
+                        <td style="font-size: 13.5px; color: #059669; font-weight: 700;">{role_desc}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13px; color: #64748B; font-weight: 600;">Thời hạn kích hoạt:</td>
+                        <td style="font-size: 13px; color: #DC2626; font-weight: 600;">7 ngày (Hết hạn: {safe_expires})</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Hero CTA Button -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 8px 0 24px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="{safe_invite_link}" target="_blank" style="display: inline-block; background-color: #1D4ED8; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 40px; border-radius: 8px; box-shadow: 0 4px 14px rgba(29, 78, 216, 0.35); letter-spacing: 0.3px;">
+                      🚀 KÍCH HOẠT TÀI KHOẢN & ĐẶT MẬT KHẨU
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 28px 0 0 0; font-size: 13.5px; line-height: 1.5; color: #475569;">
+                Trân trọng,<br>
+                <strong style="color: #0F172A;">Ban Vận Hành & Chuyển Giao Công Nghệ</strong><br>
+                <span style="font-size: 12px; color: #64748B;">{system_name} Core Operations</span>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 22px 36px; text-align: center;">
+              <p style="margin: 0 0 6px 0; font-size: 11.5px; color: #94A3B8; line-height: 1.4;">
+                Đây là thư điện tử được gửi tự động từ hệ thống {system_name}. Vui lòng không trả lời trực tiếp email này.
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #CBD5E1;">
+                © 2026 {system_name}. All rights reserved. Tiêu chuẩn bảo mật ISO 27001 & Maker-Checker Dual Control.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
   </table>
 </body>
 </html>"""
 
 
-async def send_invite_email(to_email: str, username: str, invite_link: str, expires_at) -> bool:
+def _build_invite_plain(
+    username: str,
+    invite_link: str,
+    expires_label: str,
+    to_email: str = "",
+    display_name: str | None = None,
+    roles: list[str] | None = None,
+    token: str | None = None,
+) -> str:
+    """Nội dung văn bản thuần (plain text) hỗ trợ bộ lọc email chống spam."""
+    full_name = (display_name or "").strip() or username
+    role_desc = (
+        ", ".join(_ROLE_TITLES.get(r.lower(), r) for r in roles)
+        if roles
+        else "Quản Trị Viên Hệ Thống (Administrator)"
+    )
+    system_name = settings.smtp_from_name or "Quản Lý Kho Trà Sữa"
+
+    return (
+        f"=== THƯ MỜI THAM GIA QUẢN TRỊ HỆ THỐNG ===\n"
+        f"{system_name.upper()}\n\n"
+        f"Kính gửi Anh/Chị {full_name},\n\n"
+        f"Tài khoản của bạn đã được thiết lập thành công trên hệ thống {system_name}.\n\n"
+        f"--- THÔNG TIN TÀI KHOẢN ---\n"
+        f"• Họ và tên: {full_name}\n"
+        f"• Tên đăng nhập: @{username}\n"
+        f"• Email liên kết: {to_email}\n"
+        f"• Vai trò phân quyền: {role_desc}\n"
+        f"• Thời hạn kích hoạt: 7 ngày (Hết hạn: {expires_label})\n\n"
+        f"--- LIÊN KẾT KÍCH HOẠT & ĐẶT MẬT KHẨU ---\n"
+        f"{invite_link}\n\n"
+        f"Trân trọng,\n"
+        f"Ban Vận Hành & Chuyển Giao Công Nghệ {system_name}\n"
+        f"© 2026 {system_name}. All rights reserved.\n"
+    )
+
+
+async def send_invite_email(
+    to_email: str,
+    username: str,
+    invite_link: str,
+    expires_at,
+    display_name: str | None = None,
+    roles: list[str] | None = None,
+    token: str | None = None,
+) -> EmailSendResult:
     """Gửi email mời kích hoạt tài khoản (onboarding `invite_email`).
 
-    Yêu cầu email thật (format hợp lệ). Nếu SMTP chưa cấu hình thì log cảnh báo
-    và trả False (không raise) — caller vẫn trả invite_link trong response.
+    Yêu cầu email thật (format hợp lệ). Trả về EmailSendResult hỗ trợ evaluate boolean
+    và cung cấp thông báo trạng thái/lỗi chi tiết.
     """
     clean_email = (to_email or "").strip().lower()
     if not is_valid_email(clean_email):
         logger.warning("Invite skipped: email không hợp lệ cho user '%s': %s", username, to_email)
-        return False
+        return EmailSendResult(False, f"Email '{to_email}' không có định dạng hợp lệ")
 
     smtp_user = settings.smtp_user.strip()
     smtp_pass = settings.smtp_password.strip()
@@ -236,15 +412,33 @@ async def send_invite_email(to_email: str, username: str, invite_link: str, expi
             "[EmailService (Demo mode)] SMTP not configured. Invite for user '%s' (%s) link: %s",
             username, clean_email, invite_link,
         )
-        return False
+        return EmailSendResult(False, "Chưa cấu hình tài khoản SMTP (SMTP_USER hoặc SMTP_PASSWORD)")
 
     expires_label = (
         expires_at.strftime("%d/%m/%Y %H:%M") if getattr(expires_at, "year", None) else "7 ngày"
     )
-    subject = f"[{settings.smtp_from_name}] Lời mời kích hoạt tài khoản cho {username}"
-    html_body = _build_invite_html(username=username, invite_link=invite_link, expires_label=expires_label)
+    full_name = (display_name or "").strip() or username
+    subject = f"[{settings.smtp_from_name}] Lời mời kích hoạt tài khoản quản trị cho {full_name}"
+    html_body = _build_invite_html(
+        username=username,
+        invite_link=invite_link,
+        expires_label=expires_label,
+        to_email=clean_email,
+        display_name=display_name,
+        roles=roles,
+        token=token,
+    )
+    plain_body = _build_invite_plain(
+        username=username,
+        invite_link=invite_link,
+        expires_label=expires_label,
+        to_email=clean_email,
+        display_name=display_name,
+        roles=roles,
+        token=token,
+    )
 
-    return await asyncio.to_thread(
+    ok, msg = await asyncio.to_thread(
         _send_smtp_sync,
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -253,6 +447,39 @@ async def send_invite_email(to_email: str, username: str, invite_link: str, expi
         to_email=clean_email,
         subject=subject,
         html_content=html_body,
+        plain_text_content=plain_body,
         from_name=settings.smtp_from_name,
     )
+    return EmailSendResult(ok, msg)
+
+
+async def check_smtp_health() -> dict:
+    """Kiểm tra sức khỏe kết nối tới máy chủ SMTP."""
+    smtp_user = settings.smtp_user.strip()
+    smtp_pass = settings.smtp_password.strip()
+    if not smtp_user or not smtp_pass:
+        return {"configured": False, "status": "unconfigured", "message": "SMTP chưa được cấu hình"}
+
+    def _probe() -> tuple[bool, str]:
+        try:
+            if settings.smtp_port == 465:
+                with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=8) as server:
+                    server.login(smtp_user, smtp_pass)
+            else:
+                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=8) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pass)
+            return True, "Kết nối và xác thực SMTP thành công"
+        except Exception as exc:
+            return False, str(exc)
+
+    ok, msg = await asyncio.to_thread(_probe)
+    return {
+        "configured": True,
+        "host": settings.smtp_host,
+        "port": settings.smtp_port,
+        "user": smtp_user,
+        "status": "connected" if ok else "failed",
+        "message": msg,
+    }
 

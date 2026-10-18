@@ -1911,6 +1911,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
       roles: roles,
       mustChangePassword: onboardingMethod == 'temporary_password',
       hasPendingInvite: onboardingMethod != 'temporary_password',
+      lastInviteEmailSent: onboardingMethod == 'invite_email',
+      lastInviteToken: onboardingMethod == 'invite_email' ? 'fake_invite_token_123' : null,
+      lastInviteLink: onboardingMethod == 'invite_email' ? 'http://localhost:3000/accept-invite?token=fake_invite_token_123' : null,
     );
     _employees.add(emp);
     return _delay(emp);

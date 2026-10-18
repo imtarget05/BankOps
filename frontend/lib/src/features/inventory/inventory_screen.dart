@@ -1,10 +1,18 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/app_shell.dart';
 import '../../core/i18n/app_i18n.dart';
+import '../../core/offline/offline_ui.dart';
+import '../../core/offline/stocktake_outbox.dart';
 import '../../core/sync/data_sync_controller.dart';
 import '../../core/util/formatting.dart';
 import '../../core/util/role_visibility.dart';
+import '../../core/util/report_share.dart';
 import '../../core/util/error_text.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
@@ -56,10 +64,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
   String _stocktakeStatusFilter = 'all';
   String _sheetViewMode = 'sheet';
   bool _revealPrices = true;
+  SharedPreferences? _prefs;
 
   @override
   void initState() {
     super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) setState(() => _prefs = p);
+    }).catchError((_) {});
     if (widget.initialCategory != null) {
       _selectedCategory = widget.initialCategory!;
     }
@@ -1964,10 +1976,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final canEdit = stocktake.status == 'open';
     final canApprove = stocktake.status == 'submitted';
 
-    // Map existing counted lines or initialize
+    // Map existing counted lines or initialize (with offline draft support)
     final countCtrls = <String, TextEditingController>{};
     final usedCtrls = <String, TextEditingController>{};
     final reasonCtrls = <String, TextEditingController>{};
+
+    Map<String, dynamic>? localDraft;
+    bool hasRestoredDraft = false;
+    try {
+      final draftRaw = _prefs?.getString('stocktake_draft_${stocktake.id}');
+      if (draftRaw != null && draftRaw.isNotEmpty) {
+        localDraft = jsonDecode(draftRaw) as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+
+    final draftUsed = (localDraft?['used'] as Map<String, dynamic>?) ?? {};
+    final draftCount = (localDraft?['counted'] as Map<String, dynamic>?) ?? {};
+    final draftReason = (localDraft?['reason'] as Map<String, dynamic>?) ?? {};
 
     for (final it in items) {
       final existingLine =
@@ -1975,15 +2000,42 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 (l) => l?.itemId == it.id,
                 orElse: () => null,
               );
-      usedCtrls[it.id] = TextEditingController(
-        text: existingLine != null ? existingLine.usedQty : '0',
-      );
-      countCtrls[it.id] = TextEditingController(
-        text: existingLine != null ? existingLine.countedQty : (existingLine?.bookQty ?? '0'),
-      );
-      reasonCtrls[it.id] = TextEditingController(
-        text: existingLine?.reason ?? '',
-      );
+      String initialUsed = existingLine != null ? existingLine.usedQty : '0';
+      String initialCount = existingLine != null ? existingLine.countedQty : (existingLine?.bookQty ?? '0');
+      String initialReason = existingLine?.reason ?? '';
+
+      if (canEdit && localDraft != null) {
+        if (draftUsed[it.id] != null) {
+          initialUsed = draftUsed[it.id].toString();
+          hasRestoredDraft = true;
+        }
+        if (draftCount[it.id] != null) {
+          initialCount = draftCount[it.id].toString();
+          hasRestoredDraft = true;
+        }
+        if (draftReason[it.id] != null) {
+          initialReason = draftReason[it.id].toString();
+        }
+      }
+
+      usedCtrls[it.id] = TextEditingController(text: initialUsed);
+      countCtrls[it.id] = TextEditingController(text: initialCount);
+      reasonCtrls[it.id] = TextEditingController(text: initialReason);
+    }
+
+    Future<void> persistLocalDraft() async {
+      final prefs = _prefs;
+      if (prefs == null) return;
+      try {
+        final draftData = {
+          'stocktake_id': stocktake.id,
+          'saved_at': DateTime.now().toIso8601String(),
+          'used': {for (final it in items) it.id: usedCtrls[it.id]?.text.trim() ?? '0'},
+          'counted': {for (final it in items) it.id: countCtrls[it.id]?.text.trim() ?? '0'},
+          'reason': {for (final it in items) it.id: reasonCtrls[it.id]?.text.trim() ?? ''},
+        };
+        await prefs.setString('stocktake_draft_${stocktake.id}', jsonEncode(draftData));
+      } catch (_) {}
     }
 
     await showDialog(
@@ -2021,6 +2073,25 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: 'In Phiếu Ca',
+                  icon: const Icon(Icons.print_outlined, color: Color(0xFF0891B2)),
+                  onPressed: () async {
+                    await ReportShare.printPdf(
+                      context,
+                      filename:
+                          'phieu_kiem_ke_${stocktake.shiftCode}_${stocktake.id.substring(0, 8)}.pdf',
+                      build: () => _generateStocktakePdf(
+                        stocktake,
+                        items,
+                        locName,
+                        countCtrls,
+                        usedCtrls,
+                        reasonCtrls,
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
             content: SizedBox(
@@ -2035,6 +2106,36 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (hasRestoredDraft)
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: const Color(0xFF0284C7).withValues(alpha: 0.3)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.offline_pin_outlined,
+                                  color: Color(0xFF0284C7),
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Đã khôi phục số liệu kiểm đếm từ bản nháp ngoại tuyến trên thiết bị.',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                    color: Color(0xFF0369A1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         if (!canEdit)
                           Container(
                             padding: const EdgeInsets.all(10),
@@ -2224,7 +2325,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                 countCtrl: countCtrls[items[idx].id]!,
                                 reasonCtrl: reasonCtrls[items[idx].id]!,
                                 stockLevels: stockLevels,
-                                onChanged: () => setDlgState(() {}),
+                                onChanged: () {
+                                  persistLocalDraft();
+                                  setDlgState(() {});
+                                },
                               ),
                           ],
                         ),
@@ -2243,31 +2347,37 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
                     final navigator = Navigator.of(ctx);
+                    final repo = RepositoryScope.of(context);
+                    await persistLocalDraft();
+                    final linesPayload = items.map((it) {
+                      final existingLine = stocktake.lines
+                          .cast<StocktakeLineItem?>()
+                          .firstWhere(
+                            (l) => l?.itemId == it.id,
+                            orElse: () => null,
+                          );
+                      final opening = double.tryParse(existingLine?.openingQty ?? '') ??
+                          (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
+                      final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
+                      final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                      final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                      return {
+                        'item_id': it.id,
+                        'opening_qty': opening.toString(),
+                        'received_qty': received.toString(),
+                        'used_qty': used.toString(),
+                        'counted_qty': counted.toString(),
+                        'reason': reasonCtrls[it.id]?.text.trim() ?? '',
+                      };
+                    }).toList();
                     try {
-                      final repo = RepositoryScope.of(context);
-                      final linesPayload = items.map((it) {
-                        final existingLine = stocktake.lines
-                            .cast<StocktakeLineItem?>()
-                            .firstWhere(
-                              (l) => l?.itemId == it.id,
-                              orElse: () => null,
-                            );
-                        final opening = double.tryParse(existingLine?.openingQty ?? '') ??
-                            (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
-                        final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
-                        final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
-                        final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
-                        return {
-                          'item_id': it.id,
-                          'opening_qty': opening.toString(),
-                          'received_qty': received.toString(),
-                          'used_qty': used.toString(),
-                          'counted_qty': counted.toString(),
-                          'reason': reasonCtrls[it.id]?.text.trim() ?? '',
-                        };
-                      }).toList();
                       await repo.updateStocktakeLines(
                           stocktake.id, linesPayload);
+                      try {
+                        await _prefs?.remove('stocktake_draft_${stocktake.id}');
+                      } catch (_) {}
+                      OfflineHub.instance.markOnline();
+                      StocktakeOutbox.shared.ack(stocktake.id);
                       if (mounted) {
                         messenger.showSnackBar(
                           const SnackBar(
@@ -2278,12 +2388,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         _refresh();
                       }
                     } catch (e) {
+                      OfflineHub.instance.markOffline();
+                      StocktakeOutbox.shared.enqueue(
+                        'submit_lines',
+                        {'stocktake_id': stocktake.id, 'lines': linesPayload},
+                        stocktake.id,
+                      );
                       if (mounted) {
                         messenger.showSnackBar(
                           SnackBar(
-                              content: Text('Lỗi: ${friendlyError(e)}'),
-                              backgroundColor: Colors.red),
+                              content: Text('Mất kết nối máy chủ (${friendlyError(e)}). Số đếm đã lưu an toàn trên máy!'),
+                              backgroundColor: Colors.amber.shade800,
+                              behavior: SnackBarBehavior.floating),
                         );
+                        navigator.pop();
+                        _refresh();
                       }
                     }
                   },
@@ -2295,32 +2414,38 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
                     final navigator = Navigator.of(ctx);
+                    final repo = RepositoryScope.of(context);
+                    await persistLocalDraft();
+                    final linesPayload = items.map((it) {
+                      final existingLine = stocktake.lines
+                          .cast<StocktakeLineItem?>()
+                          .firstWhere(
+                            (l) => l?.itemId == it.id,
+                            orElse: () => null,
+                          );
+                      final opening = double.tryParse(existingLine?.openingQty ?? '') ??
+                          (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
+                      final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
+                      final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                      final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                      return {
+                        'item_id': it.id,
+                        'opening_qty': opening.toString(),
+                        'received_qty': received.toString(),
+                        'used_qty': used.toString(),
+                        'counted_qty': counted.toString(),
+                        'reason': reasonCtrls[it.id]?.text.trim() ?? '',
+                      };
+                    }).toList();
                     try {
-                      final repo = RepositoryScope.of(context);
-                      final linesPayload = items.map((it) {
-                        final existingLine = stocktake.lines
-                            .cast<StocktakeLineItem?>()
-                            .firstWhere(
-                              (l) => l?.itemId == it.id,
-                              orElse: () => null,
-                            );
-                        final opening = double.tryParse(existingLine?.openingQty ?? '') ??
-                            (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
-                        final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
-                        final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
-                        final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
-                        return {
-                          'item_id': it.id,
-                          'opening_qty': opening.toString(),
-                          'received_qty': received.toString(),
-                          'used_qty': used.toString(),
-                          'counted_qty': counted.toString(),
-                          'reason': reasonCtrls[it.id]?.text.trim() ?? '',
-                        };
-                      }).toList();
                       await repo.updateStocktakeLines(
                           stocktake.id, linesPayload);
                       await repo.submitStocktake(stocktake.id);
+                      try {
+                        await _prefs?.remove('stocktake_draft_${stocktake.id}');
+                      } catch (_) {}
+                      OfflineHub.instance.markOnline();
+                      StocktakeOutbox.shared.ack(stocktake.id);
                       if (mounted) {
                         messenger.showSnackBar(
                           const SnackBar(
@@ -2332,12 +2457,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         _refresh();
                       }
                     } catch (e) {
+                      OfflineHub.instance.markOffline();
+                      StocktakeOutbox.shared.enqueue(
+                        'submit_stocktake',
+                        {'stocktake_id': stocktake.id, 'lines': linesPayload},
+                        stocktake.id,
+                      );
                       if (mounted) {
                         messenger.showSnackBar(
                           SnackBar(
-                              content: Text('Lỗi: ${friendlyError(e)}'),
-                              backgroundColor: Colors.red),
+                              content: Text('Mạng yếu/ngắt kết nối (${friendlyError(e)}). Bản kiểm kê đã lưu vào hàng đợi ngoại tuyến!'),
+                              backgroundColor: Colors.amber.shade800,
+                              behavior: SnackBarBehavior.floating),
                         );
+                        navigator.pop();
+                        _refresh();
                       }
                     }
                   },
@@ -2384,6 +2518,146 @@ class _InventoryScreenState extends State<InventoryScreen> {
         },
       ),
     );
+  }
+
+  Future<List<int>> _generateStocktakePdf(
+    StocktakeItem stocktake,
+    List<InventoryItem> items,
+    String locName,
+    Map<String, TextEditingController> countCtrls,
+    Map<String, TextEditingController> usedCtrls,
+    Map<String, TextEditingController> reasonCtrls,
+  ) async {
+    final doc = pw.Document();
+    pw.Font? font;
+    try {
+      font = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
+    } catch (_) {}
+
+    final shiftTitle = stocktake.shiftCode == 'morning'
+        ? 'Ca Sáng (07:30 - 15:00)'
+        : (stocktake.shiftCode == 'afternoon'
+            ? 'Ca Chiều (15:00 - 23:00)'
+            : (stocktake.shiftCode == 'split' ? 'Ca Lỡ (07:30 - 18:00)' : 'Kiểm Kê Kho'));
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        theme: font != null ? pw.ThemeData.withFont(base: font, bold: font) : null,
+        build: (pw.Context context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('KHO TRÀ SỮA · BIÊN BẢN KIỂM KÊ THEO CA',
+                          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 4),
+                      pw.Text('$shiftTitle | Vị trí: $locName',
+                          style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                          'Mã: ${stocktake.id.length >= 8 ? stocktake.id.substring(0, 8).toUpperCase() : stocktake.id}',
+                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Trạng thái: ${stocktake.status.toUpperCase()}',
+                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.TableHelper.fromTextArray(
+              headers: [
+                'STT',
+                'Nguyên liệu',
+                'ĐVT',
+                'Tồn đầu',
+                'Nhập',
+                'Sử dụng',
+                'Còn lại',
+                'Kiểm thực tế',
+                'Độ lệch',
+                'Ghi chú'
+              ],
+              headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+              data: [
+                for (var i = 0; i < items.length; i++) ...[
+                  () {
+                    final it = items[i];
+                    final existingLine = stocktake.lines.cast<StocktakeLineItem?>().firstWhere(
+                          (l) => l?.itemId == it.id,
+                          orElse: () => null,
+                        );
+                    final opening = double.tryParse(existingLine?.openingQty ?? '') ??
+                        (double.tryParse(existingLine?.bookQty ?? '') ?? 0.0);
+                    final received = double.tryParse(existingLine?.receivedQty ?? '') ?? 0.0;
+                    final used = double.tryParse(usedCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                    final counted = double.tryParse(countCtrls[it.id]?.text.trim() ?? '0') ?? 0.0;
+                    final theoretical = opening + received - used;
+                    final variance = counted - theoretical;
+                    final reason = reasonCtrls[it.id]?.text.trim() ?? '';
+                    return [
+                      '${i + 1}',
+                      it.name,
+                      it.unit,
+                      opening.toStringAsFixed(1),
+                      received.toStringAsFixed(1),
+                      used.toStringAsFixed(1),
+                      theoretical.toStringAsFixed(1),
+                      counted.toStringAsFixed(1),
+                      variance == 0
+                          ? '0'
+                          : (variance > 0
+                              ? '+${variance.toStringAsFixed(1)}'
+                              : variance.toStringAsFixed(1)),
+                      reason,
+                    ];
+                  }(),
+                ],
+              ],
+            ),
+            pw.SizedBox(height: 24),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Column(
+                  children: [
+                    pw.Text('NGƯỜI KIỂM KÊ (TRƯỞNG CA)',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.SizedBox(height: 35),
+                    pw.Text('(Ký và ghi rõ họ tên)',
+                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  ],
+                ),
+                pw.Column(
+                  children: [
+                    pw.Text('QUẢN LÝ CỬA HÀNG / CHỦ QUÁN',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.SizedBox(height: 35),
+                    pw.Text('(Ký duyệt đối soát)',
+                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  ],
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    return doc.save();
   }
 
   TableRow _buildStocktakeRow({

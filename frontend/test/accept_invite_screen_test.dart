@@ -48,6 +48,7 @@ void main() {
     required AuthService auth,
     String? initialToken,
     VoidCallback? onBackToLogin,
+    VoidCallback? onSuccess,
   }) {
     return ChangeNotifierProvider<AuthService>.value(
       value: auth,
@@ -55,6 +56,7 @@ void main() {
         home: AcceptInviteScreen(
           initialToken: initialToken,
           onBackToLogin: onBackToLogin,
+          onSuccess: onSuccess,
         ),
       ),
     );
@@ -80,6 +82,7 @@ void main() {
 
     expect(find.text('Kích Hoạt Tài Khoản'), findsOneWidget);
     expect(find.text('valid-test-token-123'), findsOneWidget);
+    expect(find.byIcon(Icons.vpn_key_rounded), findsOneWidget);
     expect(find.byType(TextFormField), findsNWidgets(3));
 
     final submitBtn = find.text('Kích Hoạt & Đăng Nhập Ngay');
@@ -127,6 +130,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
+    var successCallbackFired = false;
     final storage = _FakeStorage();
     final client = MockClient((req) async {
       if (req.url.path.endsWith('/auth/accept-invite')) {
@@ -160,7 +164,11 @@ void main() {
     );
 
     await tester.pumpWidget(
-      buildTestWidget(auth: auth, initialToken: 'valid-token-xyz'),
+      buildTestWidget(
+        auth: auth,
+        initialToken: 'valid-token-xyz',
+        onSuccess: () => successCallbackFired = true,
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -179,6 +187,7 @@ void main() {
     expect(storage.values['access_token'], 'jwt-access-token-999');
     expect(find.text('Kích hoạt tài khoản thành công! Chào mừng bạn.'),
         findsOneWidget);
+    expect(successCallbackFired, isTrue);
   });
 
   testWidgets(

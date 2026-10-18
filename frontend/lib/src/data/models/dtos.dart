@@ -754,6 +754,11 @@ class EmployeeUserDto {
     this.inviteExpiresAt,
     this.authVersion = 1,
     this.scopes = const [],
+    this.lastInviteLink,
+    this.lastInviteToken,
+    this.lastInviteEmailSent,
+    this.lastEmailDeliveryMessage,
+    this.lastTemporaryPassword,
   });
 
   final String id;
@@ -771,6 +776,11 @@ class EmployeeUserDto {
   final DateTime? inviteExpiresAt;
   final int authVersion;
   final List<ScopeGrantDto> scopes;
+  final String? lastInviteLink;
+  final String? lastInviteToken;
+  final bool? lastInviteEmailSent;
+  final String? lastEmailDeliveryMessage;
+  final String? lastTemporaryPassword;
 
   bool get isActive => status == 'active';
   bool get isLocked => status == 'locked';
@@ -800,6 +810,11 @@ class EmployeeUserDto {
               ?.map((e) => ScopeGrantDto.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      lastInviteLink: json['last_invite_link'] as String? ?? json['invite_link'] as String?,
+      lastInviteToken: json['last_invite_token'] as String? ?? json['invite_token'] as String?,
+      lastInviteEmailSent: json['last_invite_email_sent'] as bool? ?? json['invite_email_sent'] as bool?,
+      lastEmailDeliveryMessage: json['last_email_delivery_message'] as String? ?? json['email_delivery_message'] as String?,
+      lastTemporaryPassword: json['last_temporary_password'] as String? ?? json['temporary_password'] as String?,
     );
   }
 }
