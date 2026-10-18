@@ -50,6 +50,8 @@ def clean_test_emails():
 class TestAdminProvisionSpecificUser:
     def test_admin_invites_new_admin_with_specific_email(self, client, monkeypatch):
         """Current admin provisions new admin with email mainguyenbinhtan2005@gmail.com via invite."""
+        monkeypatch.setattr("app.config.settings.smtp_user", "test@gmail.com")
+        monkeypatch.setattr("app.config.settings.smtp_password", "test_app_pass")
         monkeypatch.setattr("app.services.email_service._send_smtp_sync", lambda **kwargs: (True, "Gửi email thành công"))
         admin_auth = _login(client, "demo_admin")
         username = f"tan_{uuid.uuid4().hex[:6]}"
@@ -166,8 +168,19 @@ class TestAdminProvisionSpecificUser:
         )
         assert ch_res.status_code == 200
 
-    def test_smtp_status_endpoint(self, client):
+    def test_smtp_status_endpoint(self, client, monkeypatch):
         """Admin can check SMTP server connection health."""
+        async def _mock_check():
+            return {
+                "configured": True,
+                "host": "smtp.gmail.com",
+                "port": 587,
+                "user": "test@gmail.com",
+                "status": "connected",
+                "message": "Kết nối và xác thực SMTP thành công",
+            }
+
+        monkeypatch.setattr("app.api.routes.admin_users.check_smtp_health", _mock_check)
         admin_auth = _login(client, "demo_admin")
         res = client.get("/admin/smtp-status", headers=admin_auth)
         assert res.status_code == 200, res.text
