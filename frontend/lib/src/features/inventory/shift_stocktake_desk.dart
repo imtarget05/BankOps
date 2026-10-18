@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n/app_i18n.dart';
 
 /// Dòng đối soát cho quầy kiểm kê. Số lý thuyết luôn được tính từ luồng ca,
 /// không lấy trực tiếp từ ô kiểm thực tế.
@@ -27,18 +28,17 @@ class ShiftStocktakeLine {
 }
 
 /// Khung thao tác nhanh cho ca làm việc tại quầy.
-///
-/// Backend hiện có chỉ trả bản ghi kiểm kê cuối ca, vì vậy widget này nhận
-/// snapshot dữ liệu đã chuẩn hóa từ màn kho và không tự ghi dữ liệu.
 class ShiftStocktakeDesk extends StatefulWidget {
   const ShiftStocktakeDesk({
     super.key,
     required this.lines,
     this.onStartShiftStocktake,
+    this.filterOnlyDiscrepancy = false,
   });
 
   final List<ShiftStocktakeLine> lines;
   final VoidCallback? onStartShiftStocktake;
+  final bool filterOnlyDiscrepancy;
 
   @override
   State<ShiftStocktakeDesk> createState() => _ShiftStocktakeDeskState();
@@ -50,11 +50,27 @@ class _ShiftStocktakeDeskState extends State<ShiftStocktakeDesk> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasVariance = widget.lines.any((line) => line.hasVariance);
+    final isVi = context.isVietnamese;
+    final effectiveLines = widget.filterOnlyDiscrepancy
+        ? widget.lines.where((line) => line.hasVariance).toList()
+        : widget.lines;
+    final hasVariance = effectiveLines.any((line) => line.hasVariance);
+
+    final deskTitle = isVi ? 'Quầy kiểm kê theo ca' : 'Shift Stocktake Desk';
+    final openSessionBtn = isVi ? 'Mở phiên kiểm kê' : 'Open Stocktake Session';
+    final varianceAlert = isVi
+        ? 'Có chênh lệch cần đối soát trước khi chốt ca.'
+        : 'Variance detected, review required before shift close.';
+    final matchedAlert = isVi
+        ? 'Số thực tế khớp sổ theo công thức cuối ca.'
+        : 'Physical count matched book theoretical balance.';
+    final formulaText = isVi
+        ? 'Tồn lý thuyết = Tồn đầu + Nhập − Sử dụng. Độ lệch = Kiểm thực tế − Tồn lý thuyết.'
+        : 'Theoretical = Opening + Inbound − Usage. Variance = Counted − Theoretical.';
 
     return Semantics(
       container: true,
-      label: 'Quầy kiểm kê theo ca',
+      label: deskTitle,
       child: Container(
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
@@ -73,12 +89,12 @@ class _ShiftStocktakeDeskState extends State<ShiftStocktakeDesk> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Quầy kiểm kê theo ca',
+                    Text(deskTitle,
                         style: theme.textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 3),
                     Text(
-                      '${_shift.title} · ${_shift.hours}',
+                      '${_shift.title(context)} · ${_shift.hours}',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -91,7 +107,7 @@ class _ShiftStocktakeDeskState extends State<ShiftStocktakeDesk> {
                   child: FilledButton.icon(
                     onPressed: widget.onStartShiftStocktake,
                     icon: const Icon(Icons.playlist_add_check_outlined),
-                    label: const Text('Mở phiên kiểm kê'),
+                    label: Text(openSessionBtn),
                   ),
                 ),
               ],
@@ -123,9 +139,7 @@ class _ShiftStocktakeDeskState extends State<ShiftStocktakeDesk> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      hasVariance
-                          ? 'Có chênh lệch cần đối soát trước khi chốt ca.'
-                          : 'Số thực tế khớp sổ theo công thức cuối ca.',
+                      hasVariance ? varianceAlert : matchedAlert,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -140,15 +154,27 @@ class _ShiftStocktakeDeskState extends State<ShiftStocktakeDesk> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Tồn lý thuyết = Tồn đầu + Nhập − Sử dụng. '
-              'Độ lệch = Kiểm thực tế − Tồn lý thuyết.',
+              formulaText,
               style: TextStyle(
                 fontSize: 12,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 12),
-            _ReconciliationTable(lines: widget.lines),
+            if (widget.filterOnlyDiscrepancy && effectiveLines.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Text(
+                    isVi
+                        ? 'Không có mặt hàng nào bị lệch trong ca trực này.'
+                        : 'No ingredient variances found in this shift.',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              )
+            else
+              _ReconciliationTable(lines: effectiveLines),
           ],
         ),
       ),
@@ -169,7 +195,7 @@ class _ShiftTabs extends StatelessWidget {
         children: _Shift.values
             .map(
               (shift) => ChoiceChip(
-                label: Text('${shift.title}\n${shift.hours}',
+                label: Text('${shift.title(context)}\n${shift.hours}',
                     textAlign: TextAlign.center),
                 selected: selected == shift,
                 onSelected: (_) => onChanged(shift),
@@ -189,6 +215,7 @@ class _ReconciliationTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isVi = context.isVietnamese;
     const headerStyle = TextStyle(fontWeight: FontWeight.w800);
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
@@ -200,25 +227,25 @@ class _ReconciliationTable extends StatelessWidget {
           child: DataTable(
             headingRowColor: WidgetStatePropertyAll(
                 theme.colorScheme.surfaceContainerHighest),
-            columns: const [
-              DataColumn(label: Text('Nguyên liệu', style: headerStyle)),
-              DataColumn(label: Text('ĐVT', style: headerStyle)),
+            columns: [
+              DataColumn(label: Text(isVi ? 'Nguyên liệu' : 'Ingredient', style: headerStyle)),
+              DataColumn(label: Text(isVi ? 'ĐVT' : 'Unit', style: headerStyle)),
               DataColumn(
-                  label: Text('Tồn đầu', style: headerStyle), numeric: true),
+                  label: Text(isVi ? 'Tồn đầu' : 'Opening', style: headerStyle), numeric: true),
               DataColumn(
-                  label: Text('Nhập', style: headerStyle), numeric: true),
+                  label: Text(isVi ? 'Nhập' : 'Inbound', style: headerStyle), numeric: true),
               DataColumn(
-                  label: Text('Sử dụng', style: headerStyle), numeric: true),
+                  label: Text(isVi ? 'Sử dụng' : 'Usage', style: headerStyle), numeric: true),
               DataColumn(
-                  label: Text('Tồn lý thuyết', style: headerStyle),
+                  label: Text(isVi ? 'Tồn lý thuyết' : 'Theoretical', style: headerStyle),
                   numeric: true),
               DataColumn(
-                  label: Text('Kiểm thực tế', style: headerStyle),
+                  label: Text(isVi ? 'Kiểm thực tế' : 'Physical Count', style: headerStyle),
                   numeric: true),
               DataColumn(
-                  label: Text('Độ lệch', style: headerStyle), numeric: true),
-              DataColumn(label: Text('Trạng thái', style: headerStyle)),
-              DataColumn(label: Text('Lý do', style: headerStyle)),
+                  label: Text(isVi ? 'Độ lệch' : 'Variance', style: headerStyle), numeric: true),
+              DataColumn(label: Text(isVi ? 'Trạng thái' : 'Status', style: headerStyle)),
+              DataColumn(label: Text(isVi ? 'Lý do' : 'Reason', style: headerStyle)),
             ],
             rows: lines.map((line) => _row(context, line)).toList(),
           ),
@@ -228,11 +255,15 @@ class _ReconciliationTable extends StatelessWidget {
   }
 
   DataRow _row(BuildContext context, ShiftStocktakeLine line) {
+    final isVi = context.isVietnamese;
     final color = line.hasVariance
         ? Theme.of(context).colorScheme.error
         : const Color(0xFF15803D);
-    final status = line.hasVariance ? 'Cần đối soát' : 'Khớp';
+    final status = line.hasVariance
+        ? (isVi ? 'Cần đối soát' : 'Review')
+        : (isVi ? 'Khớp' : 'Matched');
     final diff = line.varianceQty;
+    final diffPrefix = isVi ? 'Lệch' : 'Var';
     final diffText = '${diff > 0 ? '+' : ''}${_qty(diff)}';
     return DataRow(cells: [
       DataCell(
@@ -243,7 +274,7 @@ class _ReconciliationTable extends StatelessWidget {
       DataCell(Text(_qty(line.usedQty))),
       DataCell(Text(_qty(line.theoreticalQty))),
       DataCell(Text(_qty(line.countedQty))),
-      DataCell(Text('Lệch $diffText',
+      DataCell(Text('$diffPrefix $diffText',
           style: TextStyle(color: color, fontWeight: FontWeight.w800))),
       DataCell(Text(status,
           style: TextStyle(color: color, fontWeight: FontWeight.w800))),
@@ -257,11 +288,21 @@ class _ReconciliationTable extends StatelessWidget {
 }
 
 enum _Shift {
-  morning('Ca Sáng', '07:30 – 15:00'),
-  afternoon('Ca Chiều', '15:00 – 23:00'),
-  split('Ca Lỡ', '07:30 – 18:00');
+  morning('07:30 – 15:00'),
+  afternoon('15:00 – 23:00'),
+  split('07:30 – 18:00');
 
-  const _Shift(this.title, this.hours);
-  final String title;
+  const _Shift(this.hours);
   final String hours;
+
+  String title(BuildContext context) {
+    switch (this) {
+      case _Shift.morning:
+        return context.isVietnamese ? 'Ca Sáng' : 'Morning Shift';
+      case _Shift.afternoon:
+        return context.isVietnamese ? 'Ca Chiều' : 'Afternoon Shift';
+      case _Shift.split:
+        return context.isVietnamese ? 'Ca Lỡ' : 'Split Shift';
+    }
+  }
 }

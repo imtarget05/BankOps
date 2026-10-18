@@ -2778,18 +2778,25 @@ class _InventoryScreenState extends State<InventoryScreen> {
               .where((s) => s.status == 'submitted' || s.status == 'open')
               .length;
           final approvedCount = data.stocktakes
-              .where((s) => s.status == 'approved' || s.status == 'completed')
+              .where((s) =>
+                  s.status == 'approved' ||
+                  s.status == 'completed' ||
+                  s.status == 'closed')
               .length;
           final discrepancyCount = data.stocktakes
-              .where((s) => s.discrepancyCount > 0 || (s.note?.toLowerCase().contains('lệch') ?? false))
+              .where((s) =>
+                  s.discrepancyCount > 0 ||
+                  (s.note?.toLowerCase().contains('lệch') ?? false))
               .length;
 
           kpiCards = [
             _buildKpiCard(
               context,
-              title: 'TỔNG ĐỢT',
-              value: '${data.stocktakes.length} đợt',
-              subtitle: 'Đã lập trong hệ thống',
+              title: context.isVietnamese ? 'TỔNG ĐỢT' : 'TOTAL SESSIONS',
+              value: '${data.stocktakes.length} ${context.isVietnamese ? 'đợt' : 'sessions'}',
+              subtitle: context.isVietnamese
+                  ? 'Đã lập trong hệ thống'
+                  : 'Recorded in system',
               icon: Icons.checklist_rounded,
               color: const Color(0xFF0891B2),
               isSelected: _stocktakeStatusFilter == 'all',
@@ -4697,20 +4704,96 @@ class _InventoryScreenState extends State<InventoryScreen> {
         return st.status == 'submitted' || st.status == 'open';
       }
       if (_stocktakeStatusFilter == 'approved') {
-        return st.status == 'approved' || st.status == 'completed';
+        return st.status == 'approved' ||
+            st.status == 'completed' ||
+            st.status == 'closed';
       }
       if (_stocktakeStatusFilter == 'discrepancy') {
-        return st.discrepancyCount > 0 || (st.note?.toLowerCase().contains('lệch') ?? false);
+        return st.discrepancyCount > 0 ||
+            (st.note?.toLowerCase().contains('lệch') ?? false);
       }
       return true;
     }).toList();
+
+    final isVi = context.isVietnamese;
+    final String emptyMessage;
+    if (_stocktakeStatusFilter == 'pending') {
+      emptyMessage = isVi
+          ? 'Không có đợt kiểm kê nào đang chờ duyệt.'
+          : 'No stocktake sessions awaiting review.';
+    } else if (_stocktakeStatusFilter == 'approved') {
+      emptyMessage = isVi
+          ? 'Không có đợt kiểm kê nào đã duyệt.'
+          : 'No approved stocktake sessions found.';
+    } else if (_stocktakeStatusFilter == 'discrepancy') {
+      emptyMessage = isVi
+          ? 'Tuyệt vời! Không có đợt kiểm kê nào bị lệch số liệu.'
+          : 'Great! No stocktake sessions with variances.';
+    } else {
+      emptyMessage = isVi
+          ? 'Chưa có đợt kiểm kê nào. Bấm "Mở Đợt Kiểm Kê Mới" để bắt đầu kiểm kê.'
+          : 'No stocktake sessions recorded. Click "New Stocktake" to begin.';
+    }
+
+    String filterBadgeLabel;
+    Color filterBadgeColor;
+    IconData filterBadgeIcon;
+    if (_stocktakeStatusFilter == 'pending') {
+      filterBadgeLabel = isVi ? 'Chờ Quản lý duyệt' : 'Pending Review';
+      filterBadgeColor = const Color(0xFFF59E0B);
+      filterBadgeIcon = Icons.pending_actions_rounded;
+    } else if (_stocktakeStatusFilter == 'approved') {
+      filterBadgeLabel = isVi ? 'Đã duyệt / Hoàn tất' : 'Approved & Closed';
+      filterBadgeColor = const Color(0xFF059669);
+      filterBadgeIcon = Icons.verified_rounded;
+    } else if (_stocktakeStatusFilter == 'discrepancy') {
+      filterBadgeLabel = isVi ? 'Có chênh lệch' : 'Variance / Discrepancy';
+      filterBadgeColor = const Color(0xFFEF4444);
+      filterBadgeIcon = Icons.warning_amber_rounded;
+    } else {
+      filterBadgeLabel = isVi ? 'Tất cả các đợt' : 'All Sessions';
+      filterBadgeColor = const Color(0xFF0891B2);
+      filterBadgeIcon = Icons.checklist_rounded;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         header,
         const SizedBox(height: 12),
-        _buildShiftStocktakeDesk(data),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: filterBadgeColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: filterBadgeColor.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(filterBadgeIcon, size: 14, color: filterBadgeColor),
+                const SizedBox(width: 6),
+                Text(
+                  '${isVi ? 'Đang lọc' : 'Showing'}: $filterBadgeLabel (${filteredStocktakes.length})',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: filterBadgeColor,
+                  ),
+                ),
+                if (_stocktakeStatusFilter != 'all') ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => setState(() => _stocktakeStatusFilter = 'all'),
+                    child: Icon(Icons.close_rounded, size: 14, color: filterBadgeColor),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
@@ -4725,9 +4808,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   padding: const EdgeInsets.all(32),
                   child: Center(
                     child: Text(
-                      _stocktakeStatusFilter == 'all'
-                          ? 'Chưa có đợt kiểm kê nào. Bấm "Mở Đợt Kiểm Kê Mới" để bắt đầu kiểm kê.'
-                          : 'Không có đợt kiểm kê nào phù hợp với bộ lọc đang chọn.',
+                      emptyMessage,
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 )
@@ -4751,13 +4833,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     String statusText;
                     if (st.status == 'open') {
                       badgeColor = const Color(0xFF2563EB);
-                      statusText = 'Đang kiểm đếm (Open)';
+                      statusText = isVi
+                          ? 'Đang kiểm đếm (Open)'
+                          : 'In Progress (Open)';
                     } else if (st.status == 'submitted') {
                       badgeColor = const Color(0xFFD97706);
-                      statusText = 'Chờ Quản lý duyệt (Submitted)';
+                      statusText = isVi
+                          ? 'Chờ Quản lý duyệt (Submitted)'
+                          : 'Awaiting Review (Submitted)';
                     } else {
                       badgeColor = const Color(0xFF059669);
-                      statusText = 'Đã hoàn tất (Closed)';
+                      statusText = isVi
+                          ? 'Đã hoàn tất (Closed)'
+                          : 'Completed (Closed)';
                     }
 
                     final contentColumn = Column(
@@ -4769,7 +4857,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
-                              'Kho: $locName',
+                              '${isVi ? 'Kho' : 'Location'}: $locName',
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14),
@@ -4793,7 +4881,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Ghi chú: ${st.note ?? "Kiểm kê kho"} • Ngày tạo: ${st.createdAt.toLocal().toString().substring(0, 16)}',
+                          '${isVi ? 'Ghi chú' : 'Note'}: ${st.note ?? (isVi ? "Kiểm kê kho" : "Inventory stocktake")} • ${isVi ? 'Ngày tạo' : 'Created'}: ${st.createdAt.toLocal().toString().substring(0, 16)}',
                           style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurfaceVariant),
@@ -4802,7 +4890,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              '⚡ Phiếu điều chỉnh tự động: #${st.adjustmentRequestId}',
+                              '${isVi ? '⚡ Phiếu điều chỉnh tự động' : '⚡ Auto adjustment request'}: #${st.adjustmentRequestId}',
                               style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -4818,8 +4906,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           stockLevels: data.stockLevels),
                       icon: const Icon(Icons.edit_note_rounded, size: 16),
                       label: Text(st.status == 'open'
-                          ? 'Nhập Số Đếm'
-                          : 'Xem Chi Tiết'),
+                          ? (isVi ? 'Nhập Số Đếm' : 'Enter Count')
+                          : (isVi ? 'Xem Chi Tiết' : 'View Details')),
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
@@ -4877,6 +4965,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   },
                 ),
         ),
+        const SizedBox(height: 20),
+        _buildShiftStocktakeDesk(data),
       ],
     );
   }
@@ -4910,6 +5000,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     return ShiftStocktakeDesk(
       lines: lines,
+      filterOnlyDiscrepancy: _stocktakeStatusFilter == 'discrepancy',
       onStartShiftStocktake: () {
         if (activeStocktake != null) {
           _showStocktakeDetailDialog(
@@ -4929,6 +5020,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       BuildContext context, List<ExpiryAlertItem> alerts) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isVi = context.isVietnamese;
 
     final criticalCount = alerts.where((a) => a.daysLeft <= 0).length;
 
@@ -4971,7 +5063,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Cảnh Báo Hạn Sử Dụng Nguyên Liệu (${alerts.length} lô hàng cận/hết date)',
+                      isVi
+                          ? 'Cảnh Báo Hạn Sử Dụng Nguyên Liệu (${alerts.length} lô hàng cận/hết date)'
+                          : 'Ingredient Expiry Alerts (${alerts.length} near/expired batches)',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
@@ -4981,7 +5075,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ),
                     ),
                     Text(
-                      'Kiểm tra và ưu tiên xuất pha chế trước (FEFO) hoặc lập phiếu hủy hỏng nếu đã hết hạn.',
+                      isVi
+                          ? 'Kiểm tra và ưu tiên xuất pha chế trước (FEFO) hoặc lập phiếu hủy hỏng nếu đã hết hạn.'
+                          : 'Verify and prioritize FEFO usage, or create a disposal request if expired.',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -5006,11 +5102,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       : const Color(0xFF2563EB));
               final badgeText = isExpired
                   ? (al.daysLeft == 0
-                      ? 'HẾT HẠN HÔM NAY'
-                      : 'QUÁ HẠN ${-al.daysLeft} NGÀY')
+                      ? (isVi ? 'HẾT HẠN HÔM NAY' : 'EXPIRES TODAY')
+                      : (isVi ? 'QUÁ HẠN ${-al.daysLeft} NGÀY' : 'EXPIRED ${-al.daysLeft} DAYS AGO'))
                   : (isWarning
-                      ? 'CẬN DATE (CÒN ${al.daysLeft} NGÀY)'
-                      : 'THEO DÕI (CÒN ${al.daysLeft} NGÀY)');
+                      ? (isVi ? 'CẬN DATE (CÒN ${al.daysLeft} NGÀY)' : 'NEAR EXPIRY (${al.daysLeft} DAYS LEFT)')
+                      : (isVi ? 'THEO DÕI (CÒN ${al.daysLeft} NGÀY)' : 'WATCHLIST (${al.daysLeft} DAYS LEFT)'));
 
               if (isNarrow) {
                 return Container(
@@ -5057,9 +5153,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                     .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: const Text(
-                                'Ưu tiên dùng',
-                                style: TextStyle(
+                              child: Text(
+                                isVi ? 'Ưu tiên dùng' : 'Use First',
+                                style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFFB45309),
@@ -5076,7 +5172,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Lô: ${al.lotNo ?? "N/A"} • HSD: ${al.expiryDate} • Số lượng: ${al.quantity} ${al.unit}',
+                        '${isVi ? 'Lô' : 'Lot'}: ${al.lotNo ?? "N/A"} • ${isVi ? 'HSD' : 'Exp'}: ${al.expiryDate} • ${isVi ? 'Số lượng' : 'Qty'}: ${al.quantity} ${al.unit}',
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.colorScheme.onSurfaceVariant,
@@ -5101,8 +5197,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8)),
                             ),
-                            child: const Text('Lập Phiếu Hủy',
-                                style: TextStyle(
+                            child: Text(isVi ? 'Lập Phiếu Hủy' : 'Create Disposal',
+                                style: const TextStyle(
                                     fontSize: 12,
                                     color: Color(0xFFDC2626),
                                     fontWeight: FontWeight.bold)),
@@ -5153,7 +5249,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                 fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                           Text(
-                            'Lô: ${al.lotNo ?? "N/A"} • HSD: ${al.expiryDate} • Số lượng: ${al.quantity} ${al.unit}',
+                            '${isVi ? 'Lô' : 'Lot'}: ${al.lotNo ?? "N/A"} • ${isVi ? 'HSD' : 'Exp'}: ${al.expiryDate} • ${isVi ? 'Số lượng' : 'Qty'}: ${al.quantity} ${al.unit}',
                             style: TextStyle(
                               fontSize: 12,
                               color: theme.colorScheme.onSurfaceVariant,
@@ -5178,8 +5274,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8)),
                         ),
-                        child: const Text('Lập Phiếu Hủy',
-                            style: TextStyle(
+                        child: Text(isVi ? 'Lập Phiếu Hủy' : 'Create Disposal',
+                            style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFFDC2626),
                                 fontWeight: FontWeight.bold)),
@@ -5193,9 +5289,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               const Color(0xFFF59E0B).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text(
-                          'Ưu tiên dùng',
-                          style: TextStyle(
+                        child: Text(
+                          isVi ? 'Ưu tiên dùng' : 'Use First',
+                          style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFFB45309),

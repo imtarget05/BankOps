@@ -543,7 +543,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               OutlinedButton.icon(
                                 key: const Key('settings-edit-profile-btn'),
                                 icon: const Icon(Icons.edit_outlined, size: 16),
-                                label: const Text('Chỉnh sửa hồ sơ'),
+                                label: Text(isVi ? 'Chỉnh sửa hồ sơ' : 'Edit Profile'),
                                 style: OutlinedButton.styleFrom(
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -561,7 +561,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   if (updated == true && context.mounted) {
                                     AppToast.success(
                                       context,
-                                      'Cập nhật hồ sơ cá nhân thành công!',
+                                      isVi
+                                          ? 'Cập nhật hồ sơ cá nhân thành công!'
+                                          : 'Profile updated successfully!',
                                     );
                                     setState(() {});
                                   }
@@ -571,7 +573,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               IconButton.filledTonal(
                                 key: const Key('settings-edit-profile-btn'),
                                 icon: const Icon(Icons.edit_outlined, size: 18),
-                                tooltip: 'Chỉnh sửa hồ sơ',
+                                tooltip: isVi ? 'Chỉnh sửa hồ sơ' : 'Edit Profile',
                                 onPressed: () async {
                                   final updated = await EditProfileDialog.show(
                                     context,
@@ -580,7 +582,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   if (updated == true && context.mounted) {
                                     AppToast.success(
                                       context,
-                                      'Cập nhật hồ sơ cá nhân thành công!',
+                                      isVi
+                                          ? 'Cập nhật hồ sơ cá nhân thành công!'
+                                          : 'Profile updated successfully!',
                                     );
                                     setState(() {});
                                   }
@@ -609,15 +613,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       .withValues(alpha: 0.3),
                                 ),
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.check_circle_rounded,
+                                  const Icon(Icons.check_circle_rounded,
                                       size: 12, color: Color(0xFF059669)),
-                                  SizedBox(width: 4),
+                                  const SizedBox(width: 4),
                                   Text(
-                                    'Hoạt động',
-                                    style: TextStyle(
+                                    isVi ? 'Hoạt động' : 'Active',
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFF059669),
@@ -638,7 +642,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       'settings-edit-profile-mobile-btn'),
                                   icon: const Icon(Icons.edit_outlined,
                                       size: 16),
-                                  label: const Text('Chỉnh sửa hồ sơ cá nhân'),
+                                  label: Text(isVi ? 'Chỉnh sửa hồ sơ cá nhân' : 'Edit Profile'),
                                   style: OutlinedButton.styleFrom(
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
@@ -655,7 +659,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     if (updated == true && context.mounted) {
                                       AppToast.success(
                                         context,
-                                        'Cập nhật hồ sơ cá nhân thành công!',
+                                        isVi
+                                            ? 'Cập nhật hồ sơ cá nhân thành công!'
+                                            : 'Profile updated successfully!',
                                       );
                                       setState(() {});
                                     }
@@ -667,7 +673,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 key: const Key('settings-change-avatar-btn'),
                                 icon: const Icon(Icons.camera_alt_outlined,
                                     size: 16),
-                                label: const Text('Đổi avatar'),
+                                label: Text(isVi ? 'Đổi avatar' : 'Change Avatar'),
                                 style: OutlinedButton.styleFrom(
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -766,9 +772,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         key: const Key('settings-goto-employees-tile'),
                         leading: const Icon(Icons.manage_accounts_outlined,
                             color: Color(0xFF2563EB)),
-                        title: const Text('Quản trị Nhân viên & Cấp phát IAM'),
-                        subtitle: const Text(
-                            'Tạo nhân viên, cấp mật khẩu tạm/thư mời, phân quyền và khóa tài khoản'),
+                        title: Text(isVi ? 'Quản trị Nhân viên & Cấp phát IAM' : 'Staff & IAM Management'),
+                        subtitle: Text(isVi
+                            ? 'Tạo nhân viên, cấp mật khẩu tạm/thư mời, phân quyền và khóa tài khoản'
+                            : 'Create staff, issue credentials/invites, assign roles & lock accounts'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () {
                           Navigator.of(context).push(
@@ -788,16 +795,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         key: const Key('btn-manage-cashboxes'),
                         leading: const Icon(Icons.savings_outlined,
                             color: Color(0xFF059669)),
-                        title: const Text('Két tiền mặt & Quầy thu ngân'),
-                        subtitle: const Text(
-                            'Tùy chỉnh két tiền quầy, số dư đầu ca và két sắt dự phòng'),
+                        title: Text(isVi ? 'Két tiền mặt & Quầy thu ngân' : 'Cash Safe & Counters'),
+                        subtitle: Text(isVi
+                            ? 'Tùy chỉnh két tiền quầy, số dư đầu ca và két sắt dự phòng'
+                            : 'Customize counter cashboxes, opening balances & reserve safe'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => Scaffold(
                                 appBar: AppBar(
-                                  title: const Text('Quản Lý Két Tiền Mặt'),
+                                  title: Text(isVi ? 'Quản Lý Két Tiền Mặt' : 'Cash Box Management'),
                                 ),
                                 body: RepositoryScope(
                                   repository: RepositoryScope.of(context),

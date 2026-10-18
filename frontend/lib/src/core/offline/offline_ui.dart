@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'dart:async';
 
+import '../i18n/app_i18n.dart';
 import 'stocktake_outbox.dart';
 
 /// Trạng thái của OfflineHub.
@@ -119,7 +120,9 @@ class OfflineBanner extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Ngoại tuyến - sẽ đồng bộ khi kết nối lại',
+                context.isVietnamese
+                    ? 'Ngoại tuyến - sẽ đồng bộ khi kết nối lại'
+                    : 'Offline - will synchronize when connection restores',
                 style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13),
               ),
             ),
@@ -127,7 +130,7 @@ class OfflineBanner extends StatelessWidget {
               FilledButton.icon(
                 onPressed: () => _retry(context, pending),
                 icon: const Icon(Icons.refresh, size: 16),
-                label: Text('Thử lại ($pending)'),
+                label: Text(context.isVietnamese ? 'Thử lại ($pending)' : 'Retry ($pending)'),
               )
             else
               const SizedBox(width: 24),
@@ -141,7 +144,13 @@ class OfflineBanner extends StatelessWidget {
     // Khơi động flush từ màn hiện tại (Hub giữ trạng thái).
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đang thử gửi lại $pending ca đồng bộ...')),
+          SnackBar(
+            content: Text(
+              context.isVietnamese
+                  ? 'Đang thử gửi lại $pending ca đồng bộ...'
+                  : 'Retrying sync for $pending sessions...',
+            ),
+          ),
         );
     }
   }

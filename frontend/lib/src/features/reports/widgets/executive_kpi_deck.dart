@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/app_i18n.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/formatting.dart';
 import '../../../data/models/dtos.dart';
@@ -71,56 +72,78 @@ class ExecutiveKpiDeck extends StatelessWidget {
               width: cardWidth.clamp(220, 400),
               child: _KpiCard(
                 key: const Key('kpi-cash-liquidity'),
-                title: 'DÒNG TIỀN RÒNG (NET)',
+                title: context.isVietnamese ? 'DÒNG TIỀN RÒNG (NET)' : 'NET CASHFLOW',
                 mainValue: '${netCash >= 0 ? '+' : ''}${_compactMoney(netCash)}',
-                subtitle: 'Thu: ${_compactMoney(totalIn)} · Chi: ${_compactMoney(totalOut)}',
-                badgeText: netCash >= 0 ? 'Thặng dư' : 'Thâm hụt',
+                subtitle: context.isVietnamese
+                    ? 'Thu: ${_compactMoney(totalIn)} · Chi: ${_compactMoney(totalOut)}'
+                    : 'In: ${_compactMoney(totalIn)} · Out: ${_compactMoney(totalOut)}',
+                badgeText: netCash >= 0
+                    ? (context.isVietnamese ? 'Thặng dư' : 'Surplus')
+                    : (context.isVietnamese ? 'Thâm hụt' : 'Deficit'),
                 badgeColor: netCash >= 0 ? statusColors.success : statusColors.danger,
                 icon: Icons.account_balance_wallet_outlined,
                 iconColor: netCash >= 0 ? statusColors.success : statusColors.danger,
-                tooltip: 'Tổng số bút toán: $totalJournals',
+                tooltip: context.isVietnamese
+                    ? 'Tổng số bút toán: $totalJournals'
+                    : 'Total journals: $totalJournals',
               ),
             ),
             SizedBox(
               width: cardWidth.clamp(220, 400),
               child: _KpiCard(
                 key: const Key('kpi-inventory-movement'),
-                title: 'LUÂN CHUYỂN KHO',
+                title: context.isVietnamese ? 'LUÂN CHUYỂN KHO' : 'INVENTORY TURNOVER',
                 mainValue: '${netInventory >= 0 ? '+' : ''}${AppFormat.quantity(netInventory.toStringAsFixed(0))}',
-                subtitle: 'Nhập: ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} · Xuất: ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))}',
-                badgeText: '${totalReceipts + totalIssues} phiếu',
+                subtitle: context.isVietnamese
+                    ? 'Nhập: ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} · Xuất: ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))}'
+                    : 'Inbound: ${AppFormat.quantity(totalInbound.toStringAsFixed(0))} · Outbound: ${AppFormat.quantity(totalOutbound.toStringAsFixed(0))}',
+                badgeText: context.isVietnamese
+                    ? '${totalReceipts + totalIssues} phiếu'
+                    : '${totalReceipts + totalIssues} vouchers',
                 badgeColor: Theme.of(context).colorScheme.primary,
                 icon: Icons.inventory_2_outlined,
                 iconColor: Theme.of(context).colorScheme.primary,
-                tooltip: 'Tổng nhập $totalReceipts phiếu, xuất $totalIssues phiếu',
+                tooltip: context.isVietnamese
+                    ? 'Tổng nhập $totalReceipts phiếu, xuất $totalIssues phiếu'
+                    : 'Total inbound: $totalReceipts, outbound: $totalIssues',
               ),
             ),
             SizedBox(
               width: cardWidth.clamp(220, 400),
               child: _KpiCard(
                 key: const Key('kpi-reconciliation-rate'),
-                title: 'KHỚP LỆNH ĐỐI SOÁT',
+                title: context.isVietnamese ? 'KHỚP LỆNH ĐỐI SOÁT' : 'RECONCILIATION MATCH',
                 mainValue: '$matchRate%',
-                subtitle: '$cleanRuns/$totalRuns phiên chuẩn · ${totalRuns - cleanRuns} ngoại lệ',
-                badgeText: hasExceptions ? 'Cần rà soát' : 'Hoàn hảo',
+                subtitle: context.isVietnamese
+                    ? '$cleanRuns/$totalRuns phiên chuẩn · ${totalRuns - cleanRuns} ngoại lệ'
+                    : '$cleanRuns/$totalRuns matched runs · ${totalRuns - cleanRuns} exceptions',
+                badgeText: hasExceptions
+                    ? (context.isVietnamese ? 'Cần rà soát' : 'Review')
+                    : (context.isVietnamese ? 'Hoàn hảo' : 'Clean'),
                 badgeColor: hasExceptions ? statusColors.warning : statusColors.success,
                 icon: Icons.verified_user_outlined,
                 iconColor: hasExceptions ? statusColors.warning : statusColors.success,
-                tooltip: 'Đảm bảo tính toàn vẹn 4 mắt (Dual-control)',
+                tooltip: context.isVietnamese
+                    ? 'Đảm bảo tính toàn vẹn 4 mắt (Dual-control)'
+                    : 'Ensures dual-control integrity',
               ),
             ),
             SizedBox(
               width: cardWidth.clamp(220, 400),
               child: _KpiCard(
                 key: const Key('kpi-stagnation-risk'),
-                title: 'ĐIỂM NÓNG TỒN ĐỌNG',
-                mainValue: '$critical mặt hàng',
+                title: context.isVietnamese ? 'ĐIỂM NÓNG TỒN ĐỌNG' : 'STAGNANT STOCK',
+                mainValue: '$critical ${context.isVietnamese ? 'mặt hàng' : 'items'}',
                 subtitle: '>=60d: $stagnant · >=30d: $watch',
-                badgeText: critical > 0 ? 'Nguy cơ >=90d' : 'An toàn',
+                badgeText: critical > 0
+                    ? (context.isVietnamese ? 'Nguy cơ >=90d' : 'Risk >=90d')
+                    : (context.isVietnamese ? 'An toàn' : 'Safe'),
                 badgeColor: critical > 0 ? statusColors.danger : statusColors.success,
                 icon: Icons.warning_amber_rounded,
                 iconColor: critical > 0 ? statusColors.danger : statusColors.success,
-                tooltip: 'Hàng không luân chuyển có nguy cơ lỗi thời',
+                tooltip: context.isVietnamese
+                    ? 'Hàng không luân chuyển có nguy cơ lỗi thời'
+                    : 'Non-moving goods with obsolescence risk',
               ),
             ),
           ],

@@ -1402,9 +1402,13 @@ class _OfflineDemoBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isVi = context.isVietnamese;
+    final text = isVi
+        ? 'Chế độ ngoại tuyến · Dữ liệu lưu trữ cục bộ trên thiết bị'
+        : 'Offline Mode · Data stored locally on device';
     return Semantics(
       liveRegion: true,
-      label: 'Chế độ ngoại tuyến · Dữ liệu lưu trữ cục bộ trên thiết bị.',
+      label: '$text.',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1416,7 +1420,7 @@ class _OfflineDemoBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Chế độ ngoại tuyến · Dữ liệu lưu trữ cục bộ trên thiết bị',
+                text,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(

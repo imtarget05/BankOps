@@ -1249,7 +1249,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                         _busy ? null : () => _submitStock(r.id),
                                     icon: const Icon(Icons.send_rounded,
                                         size: 16),
-                                    label: const Text('Gửi duyệt'),
+                                    label: Text(context.isVietnamese
+                                        ? 'Gửi duyệt'
+                                        : 'Submit for Approval'),
                                     style: FilledButton.styleFrom(
                                       backgroundColor:
                                           const Color(0xFF2563EB),
@@ -1268,7 +1270,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                         : () => _submitStock(r.id),
                                     icon: const Icon(Icons.refresh_rounded,
                                         size: 16),
-                                    label: const Text('Gửi duyệt lại'),
+                                    label: Text(context.isVietnamese
+                                        ? 'Gửi duyệt lại'
+                                        : 'Resubmit'),
                                     style: FilledButton.styleFrom(
                                       backgroundColor:
                                           const Color(0xFFD97706),
@@ -1468,7 +1472,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                         _busy ? null : () => _submitCash(r.id),
                                     icon: const Icon(Icons.send_rounded,
                                         size: 16),
-                                    label: const Text('Gửi duyệt'),
+                                    label: Text(context.isVietnamese
+                                        ? 'Gửi duyệt'
+                                        : 'Submit for Approval'),
                                     style: FilledButton.styleFrom(
                                       backgroundColor:
                                           const Color(0xFF059669),
@@ -1487,7 +1493,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                         : () => _submitCash(r.id),
                                     icon: const Icon(Icons.refresh_rounded,
                                         size: 16),
-                                    label: const Text('Gửi duyệt lại'),
+                                    label: Text(context.isVietnamese
+                                        ? 'Gửi duyệt lại'
+                                        : 'Resubmit'),
                                     style: FilledButton.styleFrom(
                                       backgroundColor:
                                           const Color(0xFFD97706),

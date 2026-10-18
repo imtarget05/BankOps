@@ -1629,43 +1629,58 @@ class SummaryCard extends StatelessWidget {
           (sum, b) => sum + (double.tryParse(b.quantity) ?? 0),
         );
 
+        final isVi = context.isVietnamese;
         final cards = [
           _buildExecutiveStatCard(
             context,
             key: const Key('kpi-cash-card'),
             tabIndex: 2,
-            title: 'CA LÀM VIỆC & ĐỐI SOÁT',
-            value: '3 ca trực',
-            subtext: 'Ca Sáng · Ca Chiều · Ca Đêm • Kiểm kê định lượng',
+            title: isVi ? 'CA LÀM VIỆC & ĐỐI SOÁT' : 'SHIFTS & RECONCILIATION',
+            value: isVi ? '3 ca trực' : '3 shifts',
+            subtext: isVi
+                ? 'Ca Sáng · Ca Chiều · Ca Đêm • Kiểm kê định lượng'
+                : 'Morning · Afternoon · Night • Shift Stocktake',
             icon: Icons.schedule_rounded,
             color: const Color(0xFF0891B2),
-            badgeText: 'Đang hoạt động',
-            trendText: 'Kiểm kê đầu ca, chốt tồn cuối ca và đối chiếu hao hụt',
+            badgeText: isVi ? 'Đang hoạt động' : 'Active',
+            trendText: isVi
+                ? 'Kiểm kê đầu ca, chốt tồn cuối ca và đối chiếu hao hụt'
+                : 'Opening count, shift closing & variance audit',
             progressRatio: 1.0,
           ),
           _buildExecutiveStatCard(
             context,
             key: const Key('kpi-stock-card'),
             tabIndex: 1,
-            title: 'NGUYÊN LIỆU TỒN KHO',
+            title: isVi ? 'NGUYÊN LIỆU TỒN KHO' : 'INVENTORY INGREDIENTS',
             value: data.items.isEmpty || data.locations.isEmpty
                 ? '—'
-                : '${AppFormat.intFormat(totalStockQty.round())} đơn vị',
+                : '${AppFormat.intFormat(totalStockQty.round())} ${isVi ? 'đơn vị' : 'units'}',
             subtext: data.lowStockAlerts.isNotEmpty
-                ? '⚠️ ${data.lowStockAlerts.length} mặt hàng dưới định mức'
-                : '${data.items.length} loại vật tư tại ${data.locations.length} kho',
+                ? (isVi
+                    ? '⚠️ ${data.lowStockAlerts.length} mặt hàng dưới định mức'
+                    : '⚠️ ${data.lowStockAlerts.length} items below quota')
+                : (isVi
+                    ? '${data.items.length} loại vật tư tại ${data.locations.length} kho'
+                    : '${data.items.length} materials across ${data.locations.length} warehouses'),
             icon: Icons.inventory_2_rounded,
             color: data.lowStockAlerts.isNotEmpty
                 ? const Color(0xFFDC2626)
                 : stateColor(trust.stockState.tone, const Color(0xFF2563EB)),
             badgeText: data.lowStockAlerts.isNotEmpty
-                ? 'Thiếu hàng'
+                ? (isVi ? 'Thiếu hàng' : 'Low Stock')
                 : trust.stockState.label,
             trendText: data.lowStockAlerts.isNotEmpty
-                ? '${data.lowStockAlerts.length} mặt hàng dưới định mức'
+                ? (isVi
+                    ? '${data.lowStockAlerts.length} mặt hàng dưới định mức'
+                    : '${data.lowStockAlerts.length} items below minimum quota')
                 : trust.stockCoverage == null
-                    ? 'Không hiển thị tiến độ khi chưa có danh mục/kho'
-                    : '${(trust.stockCoverage! * 100).round()}% tổ hợp kho–vật tư có bản ghi',
+                    ? (isVi
+                        ? 'Không hiển thị tiến độ khi chưa có danh mục/kho'
+                        : 'No progress when catalog or warehouse is empty')
+                    : (isVi
+                        ? '${(trust.stockCoverage! * 100).round()}% tổ hợp kho–vật tư có bản ghi'
+                        : '${(trust.stockCoverage! * 100).round()}% warehouse-item coverage recorded'),
             progressRatio: trust.stockCoverage,
           ),
           canApprove
@@ -1673,55 +1688,75 @@ class SummaryCard extends StatelessWidget {
                   context,
                   key: const Key('kpi-inbox-card'),
                   tabIndex: 4,
-                  title: 'HÀNG ĐỢI PHÊ DUYỆT YÊU CẦU',
-                  value: '${data.inbox.length} phiếu',
-                  subtext: 'Cần quản lý xác nhận',
+                  title: isVi
+                      ? 'HÀNG ĐỢI PHÊ DUYỆT YÊU CẦU'
+                      : 'APPROVAL QUEUE',
+                  value: '${data.inbox.length} ${isVi ? 'phiếu' : 'vouchers'}',
+                  subtext: isVi
+                      ? 'Cần quản lý xác nhận'
+                      : 'Awaiting manager approval',
                   icon: Icons.fact_check_rounded,
                   color: data.inbox.isNotEmpty
                       ? const Color(0xFFD97706)
                       : const Color(0xFF059669),
-                  badgeText:
-                      data.inbox.isNotEmpty ? 'Cần xử lý' : 'Đã duyệt hết',
+                  badgeText: data.inbox.isNotEmpty
+                      ? (isVi ? 'Cần xử lý' : 'Action needed')
+                      : (isVi ? 'Đã duyệt hết' : 'All clear'),
                   trendText: data.inbox.isNotEmpty
-                      ? '${data.inbox.length} chờ'
-                      : '0 tồn',
+                      ? '${data.inbox.length} ${isVi ? 'chờ' : 'pending'}'
+                      : (isVi ? '0 tồn' : '0 pending'),
                   progressRatio: data.inbox.isNotEmpty ? 0.45 : 1.0,
                 )
               : _buildExecutiveStatCard(
                   context,
                   key: const Key('kpi-inbox-card'),
                   tabIndex: 3,
-                  title: 'YÊU CẦU ĐANG CHỜ DUYỆT',
-                  value: '$pendingMyCount phiếu',
-                  subtext: 'Đã gửi Kiểm soát viên chờ duyệt',
+                  title: isVi
+                      ? 'YÊU CẦU ĐANG CHỜ DUYỆT'
+                      : 'PENDING REQUESTS',
+                  value: '$pendingMyCount ${isVi ? 'phiếu' : 'vouchers'}',
+                  subtext: isVi
+                      ? 'Đã gửi Kiểm soát viên chờ duyệt'
+                      : 'Submitted for supervisor review',
                   icon: Icons.pending_actions_rounded,
                   color: pendingMyCount > 0
                       ? const Color(0xFFD97706)
                       : const Color(0xFF059669),
-                  badgeText: pendingMyCount > 0 ? 'Đang duyệt' : 'Hoàn tất',
-                  trendText:
-                      pendingMyCount > 0 ? '$pendingMyCount chờ' : '0 tồn',
+                  badgeText: pendingMyCount > 0
+                      ? (isVi ? 'Đang duyệt' : 'In Review')
+                      : (isVi ? 'Hoàn tất' : 'Completed'),
+                  trendText: pendingMyCount > 0
+                      ? '$pendingMyCount ${isVi ? 'chờ' : 'pending'}'
+                      : (isVi ? '0 tồn' : '0 pending'),
                   progressRatio: pendingMyCount > 0 ? 0.45 : 1.0,
                 ),
           _buildExecutiveStatCard(
             context,
             key: const Key('kpi-ledger-card'),
             tabIndex: 7,
-            title: 'ĐỐI SOÁT SỔ CÁI (GL)',
+            title: isVi ? 'ĐỐI SOÁT SỔ CÁI (GL)' : 'GENERAL LEDGER (GL) RECONCILIATION',
             value: trust.ledgerState.tone == DashboardDataTone.good
-                ? 'Đã khớp'
+                ? (isVi ? 'Đã khớp' : 'Matched')
                 : '—',
             subtext: data.reconciliations.isEmpty
-                ? 'Chưa có phiên đối soát để xác nhận số liệu'
+                ? (isVi
+                    ? 'Chưa có phiên đối soát để xác nhận số liệu'
+                    : 'No reconciliation session to verify balances')
                 : trust.ledgerState.tone == DashboardDataTone.warning
-                    ? 'Phát hiện ngoại lệ; cần kiểm tra trước khi xác nhận'
-                    : 'Kết quả lấy từ phiên đối soát gần nhất',
+                    ? (isVi
+                        ? 'Phát hiện ngoại lệ; cần kiểm tra trước khi xác nhận'
+                        : 'Exceptions detected; review required')
+                    : (isVi
+                        ? 'Kết quả lấy từ phiên đối soát gần nhất'
+                        : 'Result from latest reconciliation run'),
             icon: Icons.task_alt_rounded,
             color: stateColor(trust.ledgerState.tone, const Color(0xFF7C3AED)),
             badgeText: trust.ledgerState.label,
             trendText: data.reconciliations.isEmpty
-                ? 'Chưa có căn cứ tính tỷ lệ khớp'
-                : 'Xem chi tiết phiên đối soát',
+                ? (isVi
+                    ? 'Chưa có căn cứ tính tỷ lệ khớp'
+                    : 'No baseline to calculate match rate')
+                : (isVi ? 'Xem chi tiết phiên đối soát' : 'View reconciliation details'),
             progressRatio:
                 trust.ledgerState.tone == DashboardDataTone.good ? 1 : null,
           ),

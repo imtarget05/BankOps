@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/app_i18n.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/util/csv_export.dart';
 import '../../../core/util/report_excel.dart';
@@ -21,10 +22,15 @@ class _StagnationListState extends State<StagnationList> {
 
   @override
   Widget build(BuildContext context) {
+    final isVi = context.isVietnamese;
     if (widget.items.isEmpty) {
-      return const EmptyView(
-        title: 'Không có hàng tồn đọng cần cảnh báo',
-        subtitle: 'Mọi vật tư đều luân chuyển tốt trong ngưỡng 30/60/90 ngày.',
+      return EmptyView(
+        title: isVi
+            ? 'Không có hàng tồn đọng cần cảnh báo'
+            : 'No stagnant inventory alerts',
+        subtitle: isVi
+            ? 'Mọi vật tư đều luân chuyển tốt trong ngưỡng 30/60/90 ngày.'
+            : 'All materials are moving well within 30/60/90 days.',
         icon: Icons.check_circle_outline,
       );
     }
@@ -52,25 +58,25 @@ class _StagnationListState extends State<StagnationList> {
                 runSpacing: 8,
                 children: [
                   FilterChip(
-                    label: Text('Tất cả (${widget.items.length})'),
+                    label: Text(isVi ? 'Tất cả (${widget.items.length})' : 'All (${widget.items.length})'),
                     selected: _severityFilter == 'all',
                     onSelected: (_) => setState(() => _severityFilter = 'all'),
                   ),
                   FilterChip(
                     avatar: const Icon(Icons.error_outline, size: 16, color: Colors.red),
-                    label: Text('Nghiêm trọng ($criticalCount)'),
+                    label: Text(isVi ? 'Nghiêm trọng ($criticalCount)' : 'Critical ($criticalCount)'),
                     selected: _severityFilter == 'critical',
                     onSelected: (_) => setState(() => _severityFilter = 'critical'),
                   ),
                   FilterChip(
                     avatar: const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
-                    label: Text('Tồn đọng ($stagnantCount)'),
+                    label: Text(isVi ? 'Tồn đọng ($stagnantCount)' : 'Stagnant ($stagnantCount)'),
                     selected: _severityFilter == 'stagnant',
                     onSelected: (_) => setState(() => _severityFilter = 'stagnant'),
                   ),
                   FilterChip(
                     avatar: const Icon(Icons.visibility_outlined, size: 16, color: Colors.amber),
-                    label: Text('Theo dõi ($watchCount)'),
+                    label: Text(isVi ? 'Theo dõi ($watchCount)' : 'Watch ($watchCount)'),
                     selected: _severityFilter == 'watch',
                     onSelected: (_) => setState(() => _severityFilter = 'watch'),
                   ),
@@ -84,7 +90,7 @@ class _StagnationListState extends State<StagnationList> {
                   key: const Key('export-stagnation-csv-btn'),
                   onPressed: () => CsvExport.copyToClipboard(
                     context,
-                    label: 'tồn đọng',
+                    label: isVi ? 'tồn đọng' : 'stagnant stock',
                     headers: ReportExcel.stagnationHeaders,
                     rows: [
                       for (final item in widget.items)
@@ -98,7 +104,7 @@ class _StagnationListState extends State<StagnationList> {
                     ],
                   ),
                   icon: const Icon(Icons.content_copy_outlined, size: 18),
-                  label: const Text('Sao chép CSV'),
+                  label: Text(isVi ? 'Sao chép CSV' : 'Copy CSV'),
                 ),
                 OutlinedButton.icon(
                   key: const Key('export-stagnation-xlsx-btn'),
@@ -108,7 +114,7 @@ class _StagnationListState extends State<StagnationList> {
                     bytes: ReportExcel.encodeStagnation(widget.items),
                   ),
                   icon: const Icon(Icons.download_outlined, size: 18),
-                  label: const Text('Tải Excel'),
+                  label: Text(isVi ? 'Tải Excel' : 'Download Excel'),
                 ),
               ],
             ),
@@ -132,7 +138,9 @@ class _StagnationListState extends State<StagnationList> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Đề xuất giao ban: Có $criticalCount mặt hàng không luân chuyển trên 90 ngày. Cần trình Ban Giám đốc phương án thanh lý hoặc điều chuyển kho trước ngày 30.',
+                    isVi
+                        ? 'Đề xuất giao ban: Có $criticalCount mặt hàng không luân chuyển trên 90 ngày. Cần trình Ban Giám đốc phương án thanh lý hoặc điều chuyển kho trước ngày 30.'
+                        : 'Meeting proposal: $criticalCount non-moving items over 90 days. Present liquidation or transfer plan to executive board.',
                     style: TextStyle(color: statusColors.danger, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
