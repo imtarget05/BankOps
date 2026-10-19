@@ -71,7 +71,7 @@ class TestIamAdmin:
                 "username": username,
                 "display_name": "Nhân viên chi nhánh tách biệt",
                 "branch_id": other_branch["id"],
-                "roles": ["staff"],
+                "roles": ["approver"],
             },
         )
         assert created.status_code == 201, created.text
@@ -88,6 +88,17 @@ class TestIamAdmin:
         )
         assert asset.status_code == 201, asset.text
 
+        ho_request = client.post(
+            "/inventory/requests",
+            headers=_idem(admin_auth),
+            json={
+                "kind": "receipt",
+                "dest_id": ho_balance["location_id"],
+                "lines": [{"item_id": ho_balance["item_id"], "quantity": "1"}],
+            },
+        )
+        assert ho_request.status_code == 201, ho_request.text
+
         scoped_auth = _login(client, username, created.json()["temporary_password"])
         balances = client.get("/inventory/balances", headers=scoped_auth)
 
@@ -101,6 +112,15 @@ class TestIamAdmin:
         assets = client.get("/inventory/assets", headers=scoped_auth)
         assert assets.status_code == 200, assets.text
         assert assets.json()["assets"] == []
+
+        requests = client.get("/inventory/requests", headers=scoped_auth)
+        assert requests.status_code == 200, requests.text
+        assert requests.json()["requests"] == []
+
+        request_detail = client.get(
+            f"/inventory/requests/{ho_request.json()['id']}", headers=scoped_auth
+        )
+        assert request_detail.status_code in (403, 404), request_detail.text
 
         write = client.post(
             "/inventory/assets",
