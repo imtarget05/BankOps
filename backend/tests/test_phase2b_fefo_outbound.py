@@ -5,10 +5,11 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-import pytest
 from sqlalchemy import select
 
-from app.models.inventory import Balance, Item, LotBalance, LotMovement, Movement, Stocktake, StocktakeLine
+from app.models.inventory import (
+    LotBalance,
+)
 
 DEMO_PASSWORD = "DemoPass123!"
 MAKER = "demo_maker"
@@ -235,14 +236,15 @@ def test_expired_lots_blocked_for_sale_but_allowed_for_spoilage(client):
 
     # Giả lập thời gian trôi qua: cập nhật LotBalance có expiry_date về quá khứ (hết hạn)
     # Lô này giờ đã quá hạn sử dụng.
-    from app.database import AsyncSessionLocal
     import asyncio
+
+    from app.database import AsyncSessionLocal
 
     async def _expire_lot():
         async with AsyncSessionLocal() as session:
             lots = (await session.execute(select(LotBalance).where(LotBalance.item_id == uuid.UUID(item_id)))).scalars().all()
-            for l in lots:
-                l.expiry_date = date.today() - timedelta(days=2)
+            for lot in lots:
+                lot.expiry_date = date.today() - timedelta(days=2)
             await session.commit()
 
     asyncio.run(_expire_lot())

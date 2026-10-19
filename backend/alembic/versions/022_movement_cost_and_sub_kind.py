@@ -4,6 +4,7 @@ Revision ID: 022_movement_cost_and_sub_kind
 Revises: 021_receipt_invoice_and_lots
 """
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "022_movement_cost_and_sub_kind"

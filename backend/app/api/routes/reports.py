@@ -263,6 +263,7 @@ async def inventory_summary(
     """Báo cáo Nhập-Xuất-Tồn chi tiết theo từng nguyên liệu và phân loại xuất kho."""
     from collections import defaultdict
     from decimal import Decimal
+
     from app.models.inventory import Balance, Item, Movement
 
     df, dt = _parse_date(date_from, "date_from"), _parse_date(date_to, "date_to")

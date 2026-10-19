@@ -8,10 +8,8 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-import pytest
-
 from app.database import DATABASE_URL
-from app.models.inventory import Balance, Item, LotBalance, Movement
+from app.models.inventory import LotBalance
 
 DEMO_PASSWORD = "DemoPass123!"
 MAKER = "demo_maker"
@@ -152,7 +150,9 @@ def test_ton_dau_ky_lot_uses_item_cost_price(client):
     với unit_cost = item.cost_price. Khi xuất, outbound_sale_cost != 0.
     """
     import asyncio
+
     from sqlalchemy import delete
+
     from app.database import AsyncSessionLocal
 
     maker = _login(client, MAKER)

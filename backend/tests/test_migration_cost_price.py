@@ -29,3 +29,17 @@ def test_fresh_migration_chain_supports_lot_backfill_cost_price() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+    seed_result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.database import init_db; import asyncio; asyncio.run(init_db())",
+        ],
+        cwd=BACKEND_ROOT,
+        env={**os.environ, "DATABASE_URL": TEST_DATABASE_URL},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert seed_result.returncode == 0, seed_result.stdout + seed_result.stderr

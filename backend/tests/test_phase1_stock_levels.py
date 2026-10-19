@@ -415,7 +415,7 @@ def test_inbound_receipt_approval_syncs_to_open_stocktake(client):
     st_id = opened.json()["id"]
 
     seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
-    target = next(l for l in seeded if l["item_id"] == item_id)
+    target = next(stocktake_line for stocktake_line in seeded if stocktake_line["item_id"] == item_id)
     initial_received = float(target["received_qty"])
     opening = float(target["opening_qty"])
 
@@ -443,7 +443,7 @@ def test_inbound_receipt_approval_syncs_to_open_stocktake(client):
 
     # Verify open stocktake line received_qty was automatically updated
     after = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
-    updated_line = next(l for l in after if l["item_id"] == item_id)
+    updated_line = next(stocktake_line for stocktake_line in after if stocktake_line["item_id"] == item_id)
     assert float(updated_line["received_qty"]) == initial_received + 15.0
     # theoretical_qty = opening + received - used
     expected_theo = opening + initial_received + 15.0 - float(updated_line["used_qty"])
@@ -465,7 +465,7 @@ def test_inbound_receipt_double_approval_does_not_double_count_in_stocktake(clie
     st_id = opened.json()["id"]
 
     seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
-    target = next(l for l in seeded if l["item_id"] == item_id)
+    target = next(stocktake_line for stocktake_line in seeded if stocktake_line["item_id"] == item_id)
     initial_received = float(target["received_qty"])
 
     # Create inbound receipt
@@ -501,7 +501,7 @@ def test_inbound_receipt_double_approval_does_not_double_count_in_stocktake(clie
 
     # Verify received_qty is strictly initial + 20 (not 40 or 60)
     lines_after = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
-    line = next(l for l in lines_after if l["item_id"] == item_id)
+    line = next(stocktake_line for stocktake_line in lines_after if stocktake_line["item_id"] == item_id)
     assert float(line["received_qty"]) == initial_received + 20.0
 
 

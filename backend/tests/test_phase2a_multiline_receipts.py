@@ -3,10 +3,6 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
-
-from app.models.inventory import Balance, Item, LotBalance, Stocktake
-
 DEMO_PASSWORD = "DemoPass123!"
 MAKER = "demo_maker"
 CHECKER = "demo_checker"
@@ -316,8 +312,8 @@ def test_multiline_receipt_syncs_all_items_to_open_stocktake(client):
     st_id = open_shift.json()["id"]
 
     lines_before = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
-    line1_before = next(l for l in lines_before if l["item_id"] == item1)
-    line2_before = next(l for l in lines_before if l["item_id"] == item2)
+    line1_before = next(stocktake_line for stocktake_line in lines_before if stocktake_line["item_id"] == item1)
+    line2_before = next(stocktake_line for stocktake_line in lines_before if stocktake_line["item_id"] == item2)
     init_recv1 = float(line1_before["received_qty"])
     init_recv2 = float(line2_before["received_qty"])
 
@@ -367,8 +363,8 @@ def test_multiline_receipt_syncs_all_items_to_open_stocktake(client):
     # - item1: received_qty phải tăng đúng +10 (4 + 6)
     # - item2: received_qty phải tăng đúng +8
     lines_after = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
-    line1_after = next(l for l in lines_after if l["item_id"] == item1)
-    line2_after = next(l for l in lines_after if l["item_id"] == item2)
+    line1_after = next(stocktake_line for stocktake_line in lines_after if stocktake_line["item_id"] == item1)
+    line2_after = next(stocktake_line for stocktake_line in lines_after if stocktake_line["item_id"] == item2)
 
     assert float(line1_after["received_qty"]) == init_recv1 + 10.0
     assert float(line2_after["received_qty"]) == init_recv2 + 8.0

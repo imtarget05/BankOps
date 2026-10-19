@@ -1348,7 +1348,7 @@ async def submit_request(
                 ).scalars().all()
                 if lots_rows:
                     non_expired = sum(
-                        (Decimal(str(l.quantity)) for l in lots_rows if l.expiry_date is None or l.expiry_date >= today),
+                        (Decimal(str(lot.quantity)) for lot in lots_rows if lot.expiry_date is None or lot.expiry_date >= today),
                         Decimal("0"),
                     )
                     if non_expired < qty:
@@ -1575,7 +1575,7 @@ async def _deduct_stock_fefo(
         else:
             valid_lots.append(lot)
 
-    available_qty = sum((Decimal(str(l.quantity)) for l in valid_lots), Decimal("0"))
+    available_qty = sum((Decimal(str(lot.quantity)) for lot in valid_lots), Decimal("0"))
     if available_qty < need_qty:
         item_name = item.name or item.sku
         msg = f"Không đủ tồn kho khả dụng cho nguyên liệu '{item_name}': cần {need_qty}, còn {available_qty}."

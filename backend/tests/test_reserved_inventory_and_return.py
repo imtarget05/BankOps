@@ -38,6 +38,25 @@ def reset_balances_fixture():
                     "AND item_id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1'"
                 )
             )
+            await db.execute(
+                text(
+                    "DELETE FROM inv_lot_balances "
+                    "WHERE location_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1' "
+                    "AND item_id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1'"
+                )
+            )
+            await db.execute(
+                text(
+                    "INSERT INTO inv_lot_balances "
+                    "(id, location_id, item_id, lot_no, expiry_date, quantity, unit_cost, created_at, updated_at) "
+                    "VALUES (:id, :location_id, :item_id, 'TEST-RESET', '2099-12-31', 500, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "location_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+                    "item_id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
+                },
+            )
             await db.commit()
 
     asyncio.run(_reset())

@@ -1,13 +1,12 @@
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from decimal import Decimal
 
 from app.api.routes.auth_utils import (
     get_user_capabilities,
