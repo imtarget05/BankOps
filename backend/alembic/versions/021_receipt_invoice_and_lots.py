@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, date, datetime
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "021_receipt_invoice_and_lots"
@@ -33,7 +34,14 @@ def upgrade() -> None:
     if "conversion_rate" not in line_cols:
         op.add_column("inv_request_lines", sa.Column("conversion_rate", sa.Numeric(10, 4), nullable=True))
 
-    # 3. inv_lot_balances table
+    # 3. Cost price is needed by the legacy-balance backfill below.  It was
+    # previously added only at application startup, which made a fresh Alembic
+    # upgrade fail before the API had a chance to run that compatibility code.
+    item_cols = {c["name"] for c in insp.get_columns("inv_items")}
+    if "cost_price" not in item_cols:
+        op.add_column("inv_items", sa.Column("cost_price", sa.Numeric(14, 2), nullable=True))
+
+    # 4. inv_lot_balances table
     tables = set(insp.get_table_names())
     if "inv_lot_balances" not in tables:
         op.create_table(
@@ -67,7 +75,7 @@ def upgrade() -> None:
             "ON inv_lot_balances (location_id, item_id, COALESCE(lot_no, ''), COALESCE(expiry_date, '2099-12-31'))"
         )
 
-    # 4. Seed initial lot balances from existing inv_balances
+    # 5. Seed initial lot balances from existing inv_balances
     # Hàng tồn kho hiện có được chuyển đổi thành lô 'TON-DAU-KY' (HSD 2099-12-31)
     # để bảo đảm tương thích ngược và có thể xuất kho bình thường.
     now = datetime.now(UTC)
@@ -125,3 +133,7 @@ def downgrade() -> None:
         op.drop_column("inv_request_lines", "conversion_rate")
     if "unit" in line_cols:
         op.drop_column("inv_request_lines", "unit")
+
+    item_cols = {c["name"] for c in insp.get_columns("inv_items")}
+    if "cost_price" in item_cols:
+        op.drop_column("inv_items", "cost_price")

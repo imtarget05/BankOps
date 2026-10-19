@@ -7,7 +7,6 @@ from pathlib import Path
 
 import psycopg2
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 TEST_DATABASE_URL = "postgresql+psycopg2://bankops:bankops@localhost:15432/bankops"
 
