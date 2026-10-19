@@ -1176,6 +1176,14 @@ async def create_request(
     if kind == "transfer" and (src is None or dst is None):
         raise AppError(422, "DESTINATION_REQUIRED", "transfer yêu cầu source_id và dest_id")
 
+    # A maker may only create a request that touches locations in their branch
+    # scope.  Checking both sides of a transfer prevents using a permitted
+    # source location as a bridge into an unauthorized branch.
+    if src is not None:
+        await _require_location_scope(db, user, src)
+    if dst is not None:
+        await _require_location_scope(db, user, dst)
+
     # Chống spam mở hàng loạt phiếu nháp làm rác DB: tối đa MAX_OPEN_DRAFTS_PER_USER phiếu draft/maker (nếu được kích hoạt)
     if MAX_OPEN_DRAFTS_PER_USER > 0:
         open_drafts_count = (
