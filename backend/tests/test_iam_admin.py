@@ -82,6 +82,10 @@ class TestIamAdmin:
         assert balances.status_code == 200, balances.text
         assert balances.json()["balances"] == []
 
+        locations = client.get("/inventory/locations", headers=scoped_auth)
+        assert locations.status_code == 200, locations.text
+        assert locations.json()["locations"] == []
+
     def test_admin_create_user_with_temp_password_and_first_login_flow(self, client):
         admin_auth = _login(client, "demo_admin")
         username = f"emp_temp_{uuid.uuid4().hex[:6]}"
