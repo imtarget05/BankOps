@@ -113,6 +113,17 @@ class TestIamAdmin:
         )
         assert write.status_code in (403, 404), write.text
 
+        cross_branch_receipt = client.post(
+            "/inventory/requests",
+            headers=_idem(scoped_auth),
+            json={
+                "kind": "receipt",
+                "dest_id": ho_balance["location_id"],
+                "lines": [{"item_id": ho_balance["item_id"], "quantity": "1"}],
+            },
+        )
+        assert cross_branch_receipt.status_code in (403, 404), cross_branch_receipt.text
+
     def test_admin_create_user_with_temp_password_and_first_login_flow(self, client):
         admin_auth = _login(client, "demo_admin")
         username = f"emp_temp_{uuid.uuid4().hex[:6]}"
