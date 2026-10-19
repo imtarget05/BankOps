@@ -76,6 +76,18 @@ class TestIamAdmin:
         )
         assert created.status_code == 201, created.text
 
+        ho_balance = client.get("/inventory/balances", headers=admin_auth).json()["balances"][0]
+        asset = client.post(
+            "/inventory/assets",
+            headers=_idem(admin_auth),
+            json={
+                "serial": f"BRANCH-SCOPE-{uuid.uuid4().hex[:8]}",
+                "item_id": ho_balance["item_id"],
+                "location_id": ho_balance["location_id"],
+            },
+        )
+        assert asset.status_code == 201, asset.text
+
         scoped_auth = _login(client, username, created.json()["temporary_password"])
         balances = client.get("/inventory/balances", headers=scoped_auth)
 
@@ -85,6 +97,21 @@ class TestIamAdmin:
         locations = client.get("/inventory/locations", headers=scoped_auth)
         assert locations.status_code == 200, locations.text
         assert locations.json()["locations"] == []
+
+        assets = client.get("/inventory/assets", headers=scoped_auth)
+        assert assets.status_code == 200, assets.text
+        assert assets.json()["assets"] == []
+
+        write = client.post(
+            "/inventory/assets",
+            headers=_idem(scoped_auth),
+            json={
+                "serial": f"CROSS-BRANCH-{uuid.uuid4().hex[:8]}",
+                "item_id": ho_balance["item_id"],
+                "location_id": ho_balance["location_id"],
+            },
+        )
+        assert write.status_code in (403, 404), write.text
 
     def test_admin_create_user_with_temp_password_and_first_login_flow(self, client):
         admin_auth = _login(client, "demo_admin")
