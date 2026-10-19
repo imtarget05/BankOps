@@ -549,12 +549,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   visualDensity: VisualDensity.compact,
                 ),
                 onPressed: () {
+                  final repo = RepositoryScope.of(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => Scaffold(
                         appBar: AppBar(
                             title: const Text('Quản Lý Két Sắt & Quỹ Tiền Mặt')),
-                        body: const CashScreen(),
+                        body: RepositoryScope(
+                          repository: repo,
+                          child: const CashScreen(),
+                        ),
                       ),
                     ),
                   );

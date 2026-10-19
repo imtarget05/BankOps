@@ -22,7 +22,7 @@ Future<void> pumpStockDialog(
       repository: repo,
       child: MaterialApp(
         theme: AppTheme.light(),
-        home: Scaffold(
+        home: const Scaffold(
           body: RequestsScreen(initialOpenCreateStock: true),
         ),
       ),

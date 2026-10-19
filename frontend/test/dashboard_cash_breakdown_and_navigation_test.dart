@@ -90,4 +90,66 @@ void main() {
       expect(navigatedViewMode, 'sheet');
     }
   });
+
+  testWidgets(
+    'Nút "Quản lý két" trên dashboard navigate sang CashScreen có nội dung (không trắng)',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final repo = FakeBankOpsRepository(latency: Duration.zero);
+
+      await tester.pumpWidget(
+        RepositoryScope(
+          repository: repo,
+          child: SessionScope(
+            user: const AppUser(
+              id: 'u-admin',
+              username: 'tanmainguyen',
+              email: 'tanmainguyenbinhtan@gmail.com',
+              displayName: 'Admin Quản Trị',
+              roles: ['admin'],
+            ),
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              home: Scaffold(
+                body: DashboardScreen(
+                  onNavigate: (index, {category, stockFilter, viewMode, locationId, autoOpenCash = false, autoOpenStock = false}) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tìm và bấm nút "Quản lý két"
+      final manageBtn = find.text('Quản lý két');
+      expect(manageBtn, findsOneWidget);
+      await tester.tap(manageBtn);
+      await tester.pumpAndSettle();
+
+      // Màn hình mới phải hiện AppBar đúng tiêu đề
+      expect(
+        find.text('Quản Lý Két Sắt & Quỹ Tiền Mặt'),
+        findsOneWidget,
+        reason: 'AppBar phải hiện tiêu đề "Quản Lý Két Sắt & Quỹ Tiền Mặt"',
+      );
+
+      // CashScreen phải render nội dung (không trắng) — tiêu đề section chính phải hiện
+      expect(
+        find.textContaining('Quản Lý Quỹ Tiền Mặt'),
+        findsOneWidget,
+        reason: 'CashScreen phải hiện nội dung, không phải màn hình trắng/xám. '
+            'Nếu fail: RepositoryScope chưa được wrap đúng trong MaterialPageRoute.',
+      );
+
+      // Nút back hoạt động
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Quỹ tiền mặt & Ca trực chi nhánh'), findsOneWidget);
+    },
+  );
 }
