@@ -25,9 +25,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Seed có sẵn 2 phiếu pending: sr-0002 (kho) + cr-0002 (quỹ).
+      // Seed có sẵn 3 phiếu pending: sr-0002 (kho), sr-0004 (chuyển kho) + cr-0002 (quỹ).
       expect(
         find.byKey(const Key('approval-select-sr-0002')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('approval-select-sr-0004')),
         findsOneWidget,
       );
       expect(
@@ -39,13 +43,13 @@ void main() {
       // Chọn tất cả -> nút duyệt hàng loạt hiện với đúng số lượng.
       await tester.tap(find.byKey(const Key('approval-select-all')));
       await tester.pumpAndSettle();
-      expect(find.text('Đã chọn 2/2'), findsOneWidget);
+      expect(find.text('Đã chọn 3/3'), findsOneWidget);
       expect(find.byKey(const Key('approve-selected-btn')), findsOneWidget);
 
       // Duyệt hàng loạt -> dialog xác nhận -> inbox trống.
       await tester.tap(find.byKey(const Key('approve-selected-btn')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Duyệt hàng loạt 2 phiếu'), findsWidgets);
+      expect(find.textContaining('Duyệt hàng loạt 3 phiếu'), findsWidgets);
       await tester.tap(find.byKey(const Key('confirm_dialog_confirm')));
       await tester.pumpAndSettle();
 

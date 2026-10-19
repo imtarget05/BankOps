@@ -82,11 +82,44 @@ async def init_db() -> None:
                 "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS cost_price NUMERIC(15,2)",
                 "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS selling_price NUMERIC(15,2)",
                 "ALTER TABLE inv_items ADD COLUMN IF NOT EXISTS min_stock NUMERIC(12,2)",
+                "ALTER TABLE inv_requests ADD COLUMN IF NOT EXISTS invoice_no VARCHAR(128)",
+                "ALTER TABLE inv_requests ADD COLUMN IF NOT EXISTS sub_kind VARCHAR(32)",
+                "ALTER TABLE inv_request_lines ADD COLUMN IF NOT EXISTS unit VARCHAR(32)",
+                "ALTER TABLE inv_request_lines ADD COLUMN IF NOT EXISTS conversion_rate NUMERIC(10,4)",
+                "ALTER TABLE inv_movements ADD COLUMN IF NOT EXISTS sub_kind VARCHAR(32)",
+                "ALTER TABLE inv_movements ADD COLUMN IF NOT EXISTS unit_cost NUMERIC(14,2)",
+                "ALTER TABLE inv_movements ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(20,2)",
             ]:
                 try:
                     await conn.execute(text(col_stmt))
                 except Exception as ex:
                     logger.warning(f"Migration note: {ex}")
+
+            try:
+                res = await conn.execute(text(
+                    "SELECT b.location_id, b.item_id, b.quantity, COALESCE(i.cost_price, 0) "
+                    "FROM inv_balances b "
+                    "LEFT JOIN inv_items i ON i.id = b.item_id "
+                    "WHERE b.quantity > 0 "
+                    "AND NOT EXISTS (SELECT 1 FROM inv_lot_balances lb WHERE lb.location_id = b.location_id AND lb.item_id = b.item_id)"
+                ))
+                rows = res.fetchall()
+                for r in rows:
+                    import uuid as _uuid_m
+                    from datetime import date as _date_m
+                    await conn.execute(text(
+                        "INSERT INTO inv_lot_balances (id, location_id, item_id, lot_no, expiry_date, quantity, unit_cost, created_at, updated_at) "
+                        "VALUES (:id, :loc, :it, 'TON-DAU-KY', :exp, :qty, :cost, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                    ), {
+                        "id": _uuid_m.uuid4(),
+                        "loc": r[0],
+                        "it": r[1],
+                        "exp": _date_m(2099, 12, 31),
+                        "qty": r[2],
+                        "cost": r[3],
+                    })
+            except Exception as ex:
+                logger.warning(f"Initial lot seeding note: {ex}")
         if settings.app_env != "production":
             from app.seed import seed_demo
 

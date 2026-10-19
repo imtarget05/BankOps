@@ -37,6 +37,8 @@ from app.models.inventory import (
     InventoryRequestLine,
     Item,
     Location,
+    LotBalance,
+    LotMovement,
     Movement,
     StockLevel,
     Stocktake,
@@ -64,6 +66,7 @@ _VIEW_ASSETS = (
     "audit:view",
 )
 _KINDS = ("receipt", "issue", "transfer", "adjustment")
+_SUB_KINDS = ("sale", "spoilage", "internal", "transfer")
 
 class ApprovalInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -159,6 +162,25 @@ def _hanoi_today() -> date:
         return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
     except Exception:
         return datetime.now(UTC).date()
+
+
+def _parse_datetime(raw, field: str = "received_at") -> datetime | None:
+    if raw in (None, ""):
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt
+    except ValueError:
+        try:
+            d = date.fromisoformat(str(raw))
+            return datetime(d.year, d.month, d.day, tzinfo=UTC)
+        except ValueError:
+            raise AppError(422, "INVALID_DATETIME", f"{field} phải theo định dạng ISO hoặc YYYY-MM-DD") from None
+
+
+_parse_date = _parse_datetime
 
 
 def _parse_day(raw, field: str = "business_date") -> date | None:
@@ -269,10 +291,20 @@ def _req_out(req: InventoryRequest, lines: list | None = None) -> dict:
         body["return_reason"] = req.return_reason
     if getattr(req, "supplier", None):
         body["supplier"] = req.supplier
+    if getattr(req, "invoice_no", None):
+        body["invoice_no"] = req.invoice_no
+    if getattr(req, "sub_kind", None):
+        body["sub_kind"] = req.sub_kind
     if getattr(req, "received_at", None):
         body["received_at"] = req.received_at.isoformat()
     if lines is not None:
         body["lines"] = lines
+        tot_amt = Decimal("0")
+        for ln in lines:
+            lt = ln.get("line_total")
+            if lt is not None:
+                tot_amt += Decimal(str(lt))
+        body["total_amount"] = str(tot_amt)
     return body
 
 
@@ -286,10 +318,13 @@ async def _load_lines(db: AsyncSession, request_id) -> list:
     ).scalars().all()
     return [
         {
+            "id": str(r.id),
             "item_id": str(r.item_id),
             "quantity": str(r.quantity),
             "direction": getattr(r, "direction", "increase"),
             "serial": r.serial,
+            "unit": getattr(r, "unit", None),
+            "conversion_rate": str(r.conversion_rate) if getattr(r, "conversion_rate", None) is not None else None,
             "unit_price": str(r.unit_price) if r.unit_price is not None else None,
             "line_total": _line_total(r.quantity, r.unit_price),
             "lot_no": getattr(r, "lot_no", None),
@@ -558,6 +593,23 @@ async def list_items(
     return {
         "items": [_item_out(i, is_admin=is_admin) for i in items]
     }
+
+
+@router.get("/inventory/items/{item_id}")
+async def get_item(
+    item_id: str,
+    current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
+    db: AsyncSession = Depends(get_db),
+):
+    item = await db.get(Item, _uuid(item_id, "item_id"))
+    if not item or not item.active:
+        raise AppError(404, "ITEM_NOT_FOUND", "Không tìm thấy nguyên liệu")
+    roles = await get_user_roles(db, current_user.id)
+    is_admin = any(r in ("admin", "superadmin", "manager") for r in roles)
+    if not is_admin:
+        caps = await get_user_capabilities(db, current_user.id)
+        is_admin = "admin:user_management" in caps or "admin" in caps or getattr(current_user, "is_superuser", False)
+    return _item_out(item, is_admin=is_admin)
 
 
 @router.post("/inventory/items", status_code=201)
@@ -1121,6 +1173,25 @@ async def create_request(
                 f"Bạn đã đạt giới hạn tối đa {MAX_OPEN_DRAFTS_PER_USER} phiếu nháp chưa hoàn tất. Vui lòng nộp duyệt hoặc xóa bớt phiếu cũ.",
             )
 
+    invoice_no = str(payload.get("invoice_no", "")).strip() or None
+    raw_sub_kind = str(payload.get("sub_kind", "")).strip().lower() or None
+    reason = str(payload.get("reason", "")).strip() or None
+    if kind == "issue":
+        sub_kind = raw_sub_kind or "sale"
+        if sub_kind not in _SUB_KINDS:
+            raise AppError(422, "INVALID_SUB_KIND", f"sub_kind phải thuộc {_SUB_KINDS}, nhận {sub_kind!r}")
+        if sub_kind in ("spoilage", "internal") and not reason:
+            raise AppError(422, "MISSING_REASON", f"Xuất kho loại '{sub_kind}' bắt buộc phải có lý do (reason)")
+        if sub_kind == "transfer" and (src is None or dst is None):
+            raise AppError(422, "DESTINATION_REQUIRED", "Xuất chuyển kho yêu cầu source_id và dest_id")
+    elif kind == "transfer":
+        sub_kind = raw_sub_kind or "transfer"
+    else:
+        sub_kind = raw_sub_kind
+
+    received_at_in = payload.get("received_at") or payload.get("received_date")
+    received_at = _parse_date(received_at_in, "received_at") if received_at_in else _now()
+
     req = InventoryRequest(
         id=uuid.uuid4(),
         kind=kind,
@@ -1129,9 +1200,11 @@ async def create_request(
         created_by=user.id,
         source_id=src,
         dest_id=dst,
-        reason=payload.get("reason"),
+        reason=reason,
         supplier=str(payload.get("supplier", "")).strip() or None,
-        received_at=_now(),
+        invoice_no=invoice_no,
+        sub_kind=sub_kind,
+        received_at=received_at,
         version=1,
     )
     db.add(req)
@@ -1166,6 +1239,12 @@ async def create_request(
         serial = str(ln["serial"]).strip() if ln.get("serial") else None
         # Phiếu nhập trà sữa (SRS §3.2): NCC, đơn giá/thành tiền,
         # số lô và HSD. HSD không được trước ngày nhận.
+        unit = str(ln.get("unit", "")).strip() or None
+        conv_val = ln.get("conversion_rate")
+        conversion_rate = Decimal(str(conv_val)) if conv_val is not None else None
+        if conversion_rate is not None and conversion_rate <= _ZERO:
+            raise AppError(422, "INVALID_CONVERSION_RATE", "Hệ số quy đổi conversion_rate phải > 0")
+
         unit_price = _parse_money(ln.get("unit_price")) if kind == "receipt" else None
         lot_no = str(ln.get("lot_no", "")).strip() or None
         expiry = _parse_expiry(ln.get("expiry_date")) if kind == "receipt" else None
@@ -1175,6 +1254,7 @@ async def create_request(
             InventoryRequestLine(
                 id=uuid.uuid4(), request_id=req.id, item_id=item_id,
                 quantity=qty, direction=direction, serial=serial,
+                unit=unit, conversion_rate=conversion_rate,
                 unit_price=unit_price, lot_no=lot_no, expiry_date=expiry,
             )
         )
@@ -1252,6 +1332,34 @@ async def submit_request(
                     "không đủ tồn khả dụng tại kho nguồn để đặt trước toàn bộ phiếu",
                 )
 
+        # Kiểm tra hàng quá hạn đối với loại xuất sale / internal
+        if req.kind == "issue" and getattr(req, "sub_kind", None) in ("sale", "internal"):
+            today = _hanoi_today()
+            for item_id in sorted(need, key=str):
+                qty = need[item_id]
+                lots_rows = (
+                    await db.execute(
+                        select(LotBalance).where(
+                            LotBalance.location_id == req.source_id,
+                            LotBalance.item_id == item_id,
+                            LotBalance.quantity > _ZERO,
+                        )
+                    )
+                ).scalars().all()
+                if lots_rows:
+                    non_expired = sum(
+                        (Decimal(str(l.quantity)) for l in lots_rows if l.expiry_date is None or l.expiry_date >= today),
+                        Decimal("0"),
+                    )
+                    if non_expired < qty:
+                        item_obj = await db.get(Item, item_id)
+                        name = item_obj.name if item_obj else str(item_id)
+                        raise AppError(
+                            422,
+                            "EXPIRED_LOT_CANNOT_BE_USED",
+                            f"Nguyên liệu '{name}' chỉ còn lô đã hết hạn sử dụng. Không thể xuất loại '{req.sub_kind}', vui lòng lập phiếu xuất hủy (spoilage).",
+                        )
+
         for item_id in sorted(need, key=str):
             bal = source_balances[(req.source_id, item_id)]
             bal.reserved_quantity = (
@@ -1275,6 +1383,219 @@ async def submit_request(
         meta={"sub_kind": req.kind, "maker_id": str(user.id)},
     )
     return _req_out(req, await _load_lines(db, req.id))
+
+
+async def _sync_inbound_items_to_open_stocktakes(
+    db: AsyncSession,
+    location_id: uuid.UUID | None,
+    item_totals: dict[uuid.UUID, Decimal],
+) -> None:
+    """Tự động đồng bộ số lượng hàng nhập đa dòng vào ca kiểm kê đang mở (SRS §3.3)."""
+    if location_id is None or not item_totals:
+        return
+    open_stocktakes = (
+        await db.execute(
+            select(Stocktake).where(
+                Stocktake.location_id == location_id,
+                Stocktake.status == "open",
+            )
+        )
+    ).scalars().all()
+    for ost in open_stocktakes:
+        for item_id, quantity in item_totals.items():
+            if quantity <= _ZERO:
+                continue
+            st_line = (
+                await db.execute(
+                    select(StocktakeLine).where(
+                        StocktakeLine.stocktake_id == ost.id,
+                        StocktakeLine.item_id == item_id,
+                    )
+                )
+            ).scalars().first()
+            if st_line:
+                st_line.received_qty = Decimal(str(st_line.received_qty or 0)) + quantity
+                st_line.theoretical_qty = (
+                    Decimal(str(st_line.opening_qty or 0))
+                    + st_line.received_qty
+                    - Decimal(str(st_line.used_qty or 0))
+                )
+                if ost.shift_code:
+                    st_line.book_qty = st_line.theoretical_qty
+                st_line.variance = Decimal(str(st_line.counted_qty or 0)) - st_line.book_qty
+            else:
+                db.add(
+                    StocktakeLine(
+                        id=uuid.uuid4(),
+                        stocktake_id=ost.id,
+                        item_id=item_id,
+                        book_qty=quantity if ost.shift_code else _ZERO,
+                        opening_qty=_ZERO,
+                        received_qty=quantity,
+                        used_qty=_ZERO,
+                        theoretical_qty=quantity,
+                        counted_qty=_ZERO,
+                        variance=-quantity if ost.shift_code else _ZERO,
+                    )
+                )
+        await db.flush()
+
+
+async def _sync_inbound_to_open_stocktakes(
+    db: AsyncSession,
+    location_id: uuid.UUID | None,
+    item_id: uuid.UUID,
+    quantity: Decimal,
+) -> None:
+    """Đồng bộ một nguyên liệu vào ca kiểm kê đang mở."""
+    await _sync_inbound_items_to_open_stocktakes(db, location_id, {item_id: quantity})
+
+
+async def _sync_outbound_items_to_open_stocktakes(
+    db: AsyncSession,
+    location_id: uuid.UUID | None,
+    item_totals: dict[uuid.UUID, Decimal],
+) -> None:
+    """Tự động đồng bộ số lượng hàng xuất vào ca kiểm kê đang mở (SRS §3.3).
+    
+    Cộng dồn vào used_qty, tính lại theoretical_qty và variance.
+    """
+    if location_id is None or not item_totals:
+        return
+    open_stocktakes = (
+        await db.execute(
+            select(Stocktake).where(
+                Stocktake.location_id == location_id,
+                Stocktake.status == "open",
+            )
+        )
+    ).scalars().all()
+    for ost in open_stocktakes:
+        for item_id, quantity in item_totals.items():
+            if quantity <= _ZERO:
+                continue
+            st_line = (
+                await db.execute(
+                    select(StocktakeLine).where(
+                        StocktakeLine.stocktake_id == ost.id,
+                        StocktakeLine.item_id == item_id,
+                    )
+                )
+            ).scalars().first()
+            if st_line:
+                st_line.used_qty = Decimal(str(st_line.used_qty or 0)) + quantity
+                st_line.theoretical_qty = (
+                    Decimal(str(st_line.opening_qty or 0))
+                    + Decimal(str(st_line.received_qty or 0))
+                    - st_line.used_qty
+                )
+                if ost.shift_code:
+                    st_line.book_qty = st_line.theoretical_qty
+                st_line.variance = Decimal(str(st_line.counted_qty or 0)) - st_line.book_qty
+            else:
+                db.add(
+                    StocktakeLine(
+                        id=uuid.uuid4(),
+                        stocktake_id=ost.id,
+                        item_id=item_id,
+                        book_qty=-quantity if ost.shift_code else _ZERO,
+                        opening_qty=_ZERO,
+                        received_qty=_ZERO,
+                        used_qty=quantity,
+                        theoretical_qty=-quantity,
+                        counted_qty=_ZERO,
+                        variance=quantity if ost.shift_code else _ZERO,
+                    )
+                )
+        await db.flush()
+
+
+async def _deduct_stock_fefo(
+    db: AsyncSession,
+    location_id: uuid.UUID,
+    item: Item,
+    need_qty: Decimal,
+    sub_kind: str,
+    today: date,
+) -> list[tuple[LotBalance, Decimal, Decimal]]:
+    """Trừ tồn kho theo thuật toán FEFO (HSD sớm trước, NULL cuối cùng).
+    
+    Khóa dòng LotBalance bằng with_for_update().
+    Chặn xuất lô hết hạn nếu sub_kind != 'spoilage'.
+    Tự động seed lô TON-DAU-KY nếu tồn Balance > 0 nhưng chưa có LotBalance.
+    Trả về danh sách các lượt trừ: (lot_obj, take_qty, unit_cost).
+    """
+    stmt = (
+        select(LotBalance)
+        .where(
+            LotBalance.location_id == location_id,
+            LotBalance.item_id == item.id,
+            LotBalance.quantity > _ZERO,
+        )
+        .order_by(
+            LotBalance.expiry_date.asc().nulls_last(),
+            LotBalance.created_at.asc(),
+        )
+        .with_for_update()
+    )
+    lots = list((await db.execute(stmt)).scalars().all())
+
+    # Fallback cho dữ liệu cũ: nếu chưa có LotBalance nhưng Balance > 0
+    if not lots:
+        bal = (
+            await db.execute(
+                select(Balance)
+                .where(Balance.location_id == location_id, Balance.item_id == item.id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if bal and Decimal(str(bal.quantity)) > _ZERO:
+            fallback_lot = LotBalance(
+                id=uuid.uuid4(),
+                location_id=location_id,
+                item_id=item.id,
+                lot_no="TON-DAU-KY",
+                expiry_date=date(2099, 12, 31),
+                quantity=Decimal(str(bal.quantity)),
+                unit_cost=Decimal(str(item.cost_price or 0)),
+            )
+            db.add(fallback_lot)
+            await db.flush()
+            lots = [fallback_lot]
+
+    valid_lots: list[LotBalance] = []
+    expired_qty = Decimal("0")
+    for lot in lots:
+        is_expired = lot.expiry_date is not None and lot.expiry_date < today
+        if is_expired:
+            if sub_kind == "spoilage":
+                valid_lots.append(lot)
+            else:
+                expired_qty += Decimal(str(lot.quantity))
+        else:
+            valid_lots.append(lot)
+
+    available_qty = sum((Decimal(str(l.quantity)) for l in valid_lots), Decimal("0"))
+    if available_qty < need_qty:
+        item_name = item.name or item.sku
+        msg = f"Không đủ tồn kho khả dụng cho nguyên liệu '{item_name}': cần {need_qty}, còn {available_qty}."
+        if expired_qty > _ZERO and sub_kind != "spoilage":
+            msg += f" (Có {expired_qty} đã hết hạn sử dụng, vui lòng xuất bằng loại 'spoilage' - xuất hủy)."
+        raise AppError(422, "INSUFFICIENT_STOCK", msg)
+
+    deductions: list[tuple[LotBalance, Decimal, Decimal]] = []
+    remaining = need_qty
+    for lot in valid_lots:
+        if remaining <= _ZERO:
+            break
+        lot_qty = Decimal(str(lot.quantity))
+        take = min(lot_qty, remaining)
+        lot.quantity = lot_qty - take
+        lot_cost = Decimal(str(lot.unit_cost if lot.unit_cost is not None else (item.cost_price or 0)))
+        deductions.append((lot, take, lot_cost))
+        remaining -= take
+
+    return deductions
 
 
 @router.post("/inventory/requests/{request_id}/approve")
@@ -1384,23 +1705,116 @@ async def approve_request(
 
 
     now = _now()
+    today = _hanoi_today()
+    item_cache: dict[uuid.UUID, Item] = {}
+
+    async def _get_item_obj(iid: uuid.UUID) -> Item:
+        if iid not in item_cache:
+            it = await db.get(Item, iid)
+            if not it:
+                raise AppError(422, "ITEM_NOT_FOUND", f"Không tìm thấy item {iid}")
+            item_cache[iid] = it
+        return item_cache[iid]
+
+    transfer_dest_items: dict[uuid.UUID, Decimal] = {}
+    outbound_sync_items: dict[uuid.UUID, Decimal] = {}
+
     for ln in lines:
         qty = Decimal(str(ln.quantity))
+        item_obj = await _get_item_obj(ln.item_id)
         if req.kind == "transfer" and req.source_id is not None and req.dest_id is not None:
-            db.add(
-                Movement(
-                    id=uuid.uuid4(), request_id=req.id, line_id=ln.id,
-                    item_id=ln.item_id, location_id=req.source_id,
-                    quantity_signed=-qty, posted_at=now,
-                )
+            sub_k = req.sub_kind or "transfer"
+            deductions = await _deduct_stock_fefo(db, req.source_id, item_obj, qty, sub_k, today)
+            src_mv_id = uuid.uuid4()
+            dst_mv_id = uuid.uuid4()
+            total_cost = sum(((take_qty * unit_cost).quantize(Decimal("0.01")) for _, take_qty, unit_cost in deductions), Decimal("0"))
+            avg_unit_cost = (total_cost / qty).quantize(Decimal("0.01")) if qty > _ZERO else Decimal("0")
+
+            src_mv = Movement(
+                id=src_mv_id, request_id=req.id, line_id=ln.id,
+                item_id=ln.item_id, location_id=req.source_id,
+                quantity_signed=-qty, posted_at=now,
+                sub_kind="transfer", unit_cost=avg_unit_cost, cost_amount=total_cost,
             )
-            db.add(
-                Movement(
-                    id=uuid.uuid4(), request_id=req.id, line_id=ln.id,
-                    item_id=ln.item_id, location_id=req.dest_id,
-                    quantity_signed=qty, posted_at=now,
-                )
+            dst_mv = Movement(
+                id=dst_mv_id, request_id=req.id, line_id=ln.id,
+                item_id=ln.item_id, location_id=req.dest_id,
+                quantity_signed=qty, posted_at=now,
+                sub_kind="transfer", unit_cost=avg_unit_cost, cost_amount=total_cost,
             )
+            db.add(src_mv)
+            db.add(dst_mv)
+            await db.flush()
+
+            for lot, take_qty, unit_cost in deductions:
+                cost_amt = (take_qty * unit_cost).quantize(Decimal("0.01"))
+                # Ghi nhận LotMovement kho nguồn
+                db.add(
+                    LotMovement(
+                        id=uuid.uuid4(),
+                        movement_id=src_mv_id,
+                        request_id=req.id,
+                        line_id=ln.id,
+                        item_id=ln.item_id,
+                        location_id=req.source_id,
+                        lot_no=lot.lot_no,
+                        expiry_date=lot.expiry_date,
+                        quantity_signed=-take_qty,
+                        unit_cost=unit_cost,
+                        cost_amount=cost_amt,
+                        sub_kind="transfer",
+                    )
+                )
+
+                # Cộng LotBalance kho đích với cùng số lô và HSD
+                dst_lot = (
+                    await db.execute(
+                        select(LotBalance).where(
+                            LotBalance.location_id == req.dest_id,
+                            LotBalance.item_id == ln.item_id,
+                            LotBalance.lot_no == lot.lot_no,
+                            LotBalance.expiry_date == lot.expiry_date,
+                        ).with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if dst_lot:
+                    dst_lot.quantity = Decimal(str(dst_lot.quantity)) + take_qty
+                    if unit_cost > Decimal("0"):
+                        dst_lot.unit_cost = unit_cost
+                    dst_lot.updated_at = now
+                else:
+                    db.add(
+                        LotBalance(
+                            id=uuid.uuid4(),
+                            location_id=req.dest_id,
+                            item_id=ln.item_id,
+                            lot_no=lot.lot_no,
+                            expiry_date=lot.expiry_date,
+                            quantity=take_qty,
+                            unit_cost=unit_cost,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+
+                # Ghi nhận LotMovement kho đích
+                db.add(
+                    LotMovement(
+                        id=uuid.uuid4(),
+                        movement_id=dst_mv_id,
+                        request_id=req.id,
+                        line_id=ln.id,
+                        item_id=ln.item_id,
+                        location_id=req.dest_id,
+                        lot_no=lot.lot_no,
+                        expiry_date=lot.expiry_date,
+                        quantity_signed=take_qty,
+                        unit_cost=unit_cost,
+                        cost_amount=cost_amt,
+                        sub_kind="transfer",
+                    )
+                )
+
             src = balances.get((req.source_id, ln.item_id))
             if src:
                 src.quantity = Decimal(str(src.quantity)) - qty
@@ -1420,33 +1834,150 @@ async def approve_request(
                 )
                 db.add(dst)
                 balances[(req.dest_id, ln.item_id)] = dst
+            transfer_dest_items[ln.item_id] = transfer_dest_items.get(ln.item_id, _ZERO) + qty
+
         elif req.kind == "issue" and req.source_id is not None:
-            db.add(
-                Movement(
-                    id=uuid.uuid4(), request_id=req.id, line_id=ln.id,
-                    item_id=ln.item_id, location_id=req.source_id,
-                    quantity_signed=-qty, posted_at=now,
-                )
+            sub_k = req.sub_kind or "sale"
+            deductions = await _deduct_stock_fefo(db, req.source_id, item_obj, qty, sub_k, today)
+            src_mv_id = uuid.uuid4()
+            total_cost = sum(((take_qty * unit_cost).quantize(Decimal("0.01")) for _, take_qty, unit_cost in deductions), Decimal("0"))
+            avg_unit_cost = (total_cost / qty).quantize(Decimal("0.01")) if qty > _ZERO else Decimal("0")
+
+            src_mv = Movement(
+                id=src_mv_id, request_id=req.id, line_id=ln.id,
+                item_id=ln.item_id, location_id=req.source_id,
+                quantity_signed=-qty, posted_at=now,
+                sub_kind=sub_k, unit_cost=avg_unit_cost, cost_amount=total_cost,
             )
+            db.add(src_mv)
+            await db.flush()
+
+            for lot, take_qty, unit_cost in deductions:
+                cost_amt = (take_qty * unit_cost).quantize(Decimal("0.01"))
+                db.add(
+                    LotMovement(
+                        id=uuid.uuid4(),
+                        movement_id=src_mv_id,
+                        request_id=req.id,
+                        line_id=ln.id,
+                        item_id=ln.item_id,
+                        location_id=req.source_id,
+                        lot_no=lot.lot_no,
+                        expiry_date=lot.expiry_date,
+                        quantity_signed=-take_qty,
+                        unit_cost=unit_cost,
+                        cost_amount=cost_amt,
+                        sub_kind=sub_k,
+                    )
+                )
+
             src = balances.get((req.source_id, ln.item_id))
             if src:
                 src.quantity = Decimal(str(src.quantity)) - qty
                 src.reserved_quantity = (
                     Decimal(str(getattr(src, "reserved_quantity", 0) or 0)) - qty
                 )
+
+            # Nếu là chuyển kho (issue sub_kind=transfer), tạo Movement inbound cho kho đích
+            # và cập nhật Balance + LotBalance kho đích.
+            if sub_k == "transfer" and req.dest_id is not None:
+                dst_mv_id = uuid.uuid4()
+                dst_mv = Movement(
+                    id=dst_mv_id, request_id=req.id, line_id=ln.id,
+                    item_id=ln.item_id, location_id=req.dest_id,
+                    quantity_signed=qty, posted_at=now,
+                    sub_kind="transfer", unit_cost=avg_unit_cost, cost_amount=total_cost,
+                )
+                db.add(dst_mv)
+                await db.flush()
+
+                # LotMovement cho kho đích (lô di chuyển theo hàng)
+                for lot, take_qty, unit_cost in deductions:
+                    cost_amt = (take_qty * unit_cost).quantize(Decimal("0.01"))
+                    db.add(
+                        LotMovement(
+                            id=uuid.uuid4(),
+                            movement_id=dst_mv_id,
+                            request_id=req.id,
+                            line_id=ln.id,
+                            item_id=ln.item_id,
+                            location_id=req.dest_id,
+                            lot_no=lot.lot_no,
+                            expiry_date=lot.expiry_date,
+                            quantity_signed=take_qty,
+                            unit_cost=unit_cost,
+                            cost_amount=cost_amt,
+                            sub_kind="transfer",
+                        )
+                    )
+                    # Cập nhật LotBalance kho đích
+                    stmt_dst_lot = (
+                        select(LotBalance)
+                        .where(
+                            LotBalance.location_id == req.dest_id,
+                            LotBalance.item_id == ln.item_id,
+                            LotBalance.lot_no == lot.lot_no,
+                        )
+                        .with_for_update()
+                    )
+                    dst_lot_bal = (await db.execute(stmt_dst_lot)).scalar_one_or_none()
+                    if dst_lot_bal:
+                        dst_lot_bal.quantity = Decimal(str(dst_lot_bal.quantity)) + take_qty
+                    else:
+                        db.add(LotBalance(
+                            id=uuid.uuid4(),
+                            location_id=req.dest_id,
+                            item_id=ln.item_id,
+                            lot_no=lot.lot_no,
+                            expiry_date=lot.expiry_date,
+                            quantity=take_qty,
+                            unit_cost=unit_cost,
+                        ))
+
+                # Cập nhật Balance kho đích
+                dst_bal = balances.get((req.dest_id, ln.item_id))
+                if dst_bal:
+                    dst_bal.quantity = Decimal(str(dst_bal.quantity)) + qty
+                else:
+                    dst_bal = Balance(
+                        location_id=req.dest_id,
+                        item_id=ln.item_id,
+                        quantity=qty,
+                        reserved_quantity=Decimal(0),
+                        version=1,
+                    )
+                    db.add(dst_bal)
+                    balances[(req.dest_id, ln.item_id)] = dst_bal
+
+                transfer_dest_items[ln.item_id] = transfer_dest_items.get(ln.item_id, _ZERO) + qty
+            elif sub_k in ("sale", "spoilage", "internal"):
+                outbound_sync_items[ln.item_id] = outbound_sync_items.get(ln.item_id, _ZERO) + qty
+
+
         else:
             target = req.dest_id or req.source_id
             if target is None:
                 continue
             direction = getattr(ln, "direction", "increase")
-            quantity_signed = -qty if req.kind == "adjustment" and direction == "decrease" else qty
-            db.add(
-                Movement(
-                    id=uuid.uuid4(), request_id=req.id, line_id=ln.id,
-                    item_id=ln.item_id, location_id=target,
-                    quantity_signed=quantity_signed, posted_at=now,
-                )
+            conv_rate = Decimal(str(getattr(ln, "conversion_rate", None) or 1))
+            qty_base = qty * conv_rate
+            quantity_signed = -qty_base if req.kind == "adjustment" and direction == "decrease" else qty_base
+            mv_id = uuid.uuid4()
+            unit_price = Decimal(str(getattr(ln, "unit_price", None) or 0)) if req.kind == "receipt" else None
+            unit_cost_base = (unit_price / conv_rate) if unit_price is not None and unit_price > Decimal("0") else None
+            cost_amt = (qty_base * unit_cost_base).quantize(Decimal("0.01")) if unit_cost_base else None
+
+            mv = Movement(
+                id=mv_id, request_id=req.id, line_id=ln.id,
+                item_id=ln.item_id, location_id=target,
+                quantity_signed=quantity_signed, posted_at=now,
+                sub_kind="receipt" if req.kind == "receipt" else req.kind,
+                unit_cost=unit_cost_base,
+                cost_amount=cost_amt,
             )
+            db.add(mv)
+            await db.flush()
+
             bal = balances.get((target, ln.item_id))
             if bal:
                 bal.quantity = Decimal(str(bal.quantity)) + quantity_signed
@@ -1460,6 +1991,55 @@ async def approve_request(
                 )
                 db.add(bal)
                 balances[(target, ln.item_id)] = bal
+
+            if req.kind == "receipt":
+                lot_no = getattr(ln, "lot_no", None) or "DEFAULT"
+                exp = getattr(ln, "expiry_date", None)
+                existing_lot = (
+                    await db.execute(
+                        select(LotBalance).where(
+                            LotBalance.location_id == target,
+                            LotBalance.item_id == ln.item_id,
+                            LotBalance.lot_no == lot_no,
+                            LotBalance.expiry_date == exp,
+                        ).with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if existing_lot:
+                    existing_lot.quantity = Decimal(str(existing_lot.quantity)) + qty_base
+                    if unit_cost_base is not None:
+                        existing_lot.unit_cost = unit_cost_base
+                    existing_lot.updated_at = now
+                else:
+                    db.add(
+                        LotBalance(
+                            id=uuid.uuid4(),
+                            location_id=target,
+                            item_id=ln.item_id,
+                            lot_no=lot_no,
+                            expiry_date=exp,
+                            quantity=qty_base,
+                            unit_cost=unit_cost_base,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+                db.add(
+                    LotMovement(
+                        id=uuid.uuid4(),
+                        movement_id=mv_id,
+                        request_id=req.id,
+                        line_id=ln.id,
+                        item_id=ln.item_id,
+                        location_id=target,
+                        lot_no=lot_no,
+                        expiry_date=exp,
+                        quantity_signed=qty_base,
+                        unit_cost=unit_cost_base,
+                        cost_amount=cost_amt,
+                        sub_kind="receipt",
+                    )
+                )
 
         if ln.serial:
             asset = serial_assets[ln.serial.strip()]
@@ -1496,6 +2076,43 @@ async def approve_request(
                         notes=f"Xuất kho theo phiếu {req.id}",
                     )
                 )
+
+    if transfer_dest_items and req.dest_id:
+        await _sync_inbound_items_to_open_stocktakes(db, req.dest_id, transfer_dest_items)
+    if outbound_sync_items and req.source_id:
+        await _sync_outbound_items_to_open_stocktakes(db, req.source_id, outbound_sync_items)
+
+    if req.kind == "receipt" and req.dest_id:
+        target = req.dest_id
+        # 1. Đồng bộ các dòng nhập vào ca kiểm kê đang mở (xử lý đúng phiếu nhiều dòng)
+        item_totals: dict[uuid.UUID, Decimal] = {}
+        item_cost_totals: dict[uuid.UUID, Decimal] = {}
+        for ln in lines:
+            conv_rate = Decimal(str(getattr(ln, "conversion_rate", None) or 1))
+            ln_qty_base = Decimal(str(ln.quantity)) * conv_rate
+            item_totals[ln.item_id] = item_totals.get(ln.item_id, Decimal("0")) + ln_qty_base
+            ln_price = Decimal(str(getattr(ln, "unit_price", None) or 0))
+            item_cost_totals[ln.item_id] = item_cost_totals.get(ln.item_id, Decimal("0")) + (Decimal(str(ln.quantity)) * ln_price)
+
+        await _sync_inbound_items_to_open_stocktakes(db, target, item_totals)
+
+        # 2. Tính lại Giá vốn bình quân gia quyền (Weighted Average Unit Cost)
+        for item_id, total_inbound_base in item_totals.items():
+            inbound_cost = item_cost_totals.get(item_id, Decimal("0"))
+            if total_inbound_base <= _ZERO or inbound_cost <= _ZERO:
+                continue
+            item_obj = (
+                await db.execute(select(Item).where(Item.id == item_id).with_for_update())
+            ).scalar_one_or_none()
+            if not item_obj:
+                continue
+            all_bals = (await db.execute(select(Balance).where(Balance.item_id == item_id))).scalars().all()
+            current_total_qty = sum((Decimal(str(b.quantity)) for b in all_bals), Decimal("0"))
+            old_qty = max(Decimal("0"), current_total_qty - total_inbound_base)
+            old_cost = Decimal(str(item_obj.cost_price or 0))
+            if old_qty + total_inbound_base > Decimal("0"):
+                new_cost = ((old_qty * old_cost) + inbound_cost) / (old_qty + total_inbound_base)
+                item_obj.cost_price = Decimal(str(round(new_cost, 2)))
 
     before = {"status": "submitted", "version": req.version}
     req.status = "posted"
@@ -1933,6 +2550,7 @@ async def low_stock_alerts(
 
 
 @router.get("/inventory/expiry-alerts")
+@router.get("/inventory/alerts/expiry")
 async def expiry_alerts(
     days: int = 7,
     current_user=Depends(require_any_capability("inventory:view_balances", "inventory:manage_catalog")),
@@ -2585,3 +3203,42 @@ async def approve_stocktake(
     }
     idempotency.remember(db, key, idempotency.payload_hash(operation), 200, body)
     return body
+
+
+@router.post("/inventory/stocktakes/{stocktake_id}/reject")
+async def reject_stocktake(
+    stocktake_id: str,
+    request: Request,
+    payload: dict | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Từ chối đợt kiểm kê, hoàn lại trạng thái open để nhân viên đếm lại."""
+    sid = _uuid(stocktake_id, "stocktake_id")
+    caps = await get_user_capabilities(db, user.id)
+    if "inventory:approve_request" not in caps:
+        raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt/từ chối kiểm kê.")
+    st = (
+        await db.execute(select(Stocktake).where(Stocktake.id == sid).with_for_update())
+    ).scalar_one_or_none()
+    if not st:
+        raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    if st.status != "submitted":
+        raise AppError(409, "STATE_CONFLICT", f"Không thể từ chối từ trạng thái {st.status}")
+    if str(st.maker_id) == str(user.id):
+        raise AppError(403, "SELF_APPROVAL_FORBIDDEN", "Bạn không được tự từ chối đợt kiểm kê của chính mình.")
+
+    reason = (payload or {}).get("reason") or "Yêu cầu kiểm đếm lại số liệu"
+    st.status = "open"
+    st.note = f"{st.note or ''} [Từ chối: {reason}]".strip()
+    await db.commit()
+    await broadcast_approval_event(
+        action="rejected",
+        request_id=str(st.id),
+        kind="stocktake",
+        status="open",
+        message=f"Đợt kiểm kê {str(st.id)[:8]} bị từ chối: {reason}",
+        meta={"stocktake_id": str(st.id), "reason": reason},
+    )
+    return {"id": str(st.id), "status": "open", "note": st.note}
+

@@ -14,6 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.db.base import Base, TimestampMixin, utc_now
 
@@ -80,6 +81,8 @@ class InventoryRequest(Base, TimestampMixin):
     reason: str = Column(String(512), nullable=True)
     return_reason: str = Column(String(1024), nullable=True)
     supplier: str | None = Column(String(256), nullable=True)
+    invoice_no: str | None = Column(String(128), nullable=True)
+    sub_kind: str | None = Column(String(32), nullable=True)  # sale, spoilage, internal, transfer
     received_at = Column(DateTime(timezone=True), nullable=True)
     version: int = Column(Integer, default=1, nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
@@ -111,6 +114,8 @@ class InventoryRequestLine(Base):
     # shortage adjustments to reduce a balance.
     direction: str = Column(String(16), nullable=False, default="increase")
     serial: str = Column(String(128), nullable=True)
+    unit: str | None = Column(String(32), nullable=True)
+    conversion_rate = Column(Numeric(10, 4), nullable=True)
     unit_price = Column(Numeric(20, 2), nullable=True)
     lot_no: str | None = Column(String(64), nullable=True)
     expiry_date = Column(Date, nullable=True)
@@ -132,9 +137,36 @@ class Movement(Base, TimestampMixin):
     location_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id"), nullable=False)
     quantity_signed = Column(Numeric(20, 3), nullable=False)
     posted_at = Column(DateTime(timezone=True), nullable=True)
+    sub_kind: str | None = Column(String(32), nullable=True)  # sale, spoilage, internal, transfer
+    unit_cost = Column(Numeric(14, 2), nullable=True)
+    cost_amount = Column(Numeric(20, 2), nullable=True)
+
+    lot_movements = relationship("LotMovement", back_populates="movement", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Movement {self.quantity_signed}>"
+        return f"<Movement {self.quantity_signed} sub_kind={self.sub_kind}>"
+
+
+class LotMovement(Base, TimestampMixin):
+    __tablename__ = "inv_lot_movements"
+
+    id: str = Column(UUID(as_uuid=True), primary_key=True)
+    movement_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_movements.id", ondelete="CASCADE"), nullable=False)
+    request_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_requests.id", ondelete="CASCADE"), nullable=False)
+    line_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_request_lines.id", ondelete="CASCADE"), nullable=False)
+    item_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_items.id", ondelete="RESTRICT"), nullable=False)
+    location_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id", ondelete="RESTRICT"), nullable=False)
+    lot_no: str | None = Column(String(64), nullable=True, index=True)
+    expiry_date = Column(Date, nullable=True, index=True)
+    quantity_signed = Column(Numeric(20, 3), nullable=False)
+    unit_cost = Column(Numeric(14, 2), nullable=True)
+    cost_amount = Column(Numeric(20, 2), nullable=True)
+    sub_kind: str | None = Column(String(32), nullable=True)
+
+    movement = relationship("Movement", back_populates="lot_movements")
+
+    def __repr__(self):
+        return f"<LotMovement lot={self.lot_no} qty={self.quantity_signed} cost={self.cost_amount}>"
 
 
 class Balance(Base):
@@ -155,6 +187,24 @@ class Balance(Base):
 
     def __repr__(self):
         return f"<Balance loc={self.location_id} item={self.item_id} qty={self.quantity} reserved={self.reserved_quantity}>"
+
+
+class LotBalance(Base, TimestampMixin):
+    __tablename__ = "inv_lot_balances"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="lot_qty_non_negative"),
+    )
+
+    id: str = Column(UUID(as_uuid=True), primary_key=True)
+    location_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    item_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_items.id", ondelete="RESTRICT"), nullable=False, index=True)
+    lot_no: str | None = Column(String(64), nullable=True, index=True)
+    expiry_date = Column(Date, nullable=True, index=True)
+    quantity = Column(Numeric(20, 3), nullable=False, default=0)
+    unit_cost = Column(Numeric(14, 2), nullable=True)
+
+    def __repr__(self):
+        return f"<LotBalance loc={self.location_id} item={self.item_id} lot={self.lot_no} exp={self.expiry_date} qty={self.quantity}>"
 
 
 class AssetLog(Base):

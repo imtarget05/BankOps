@@ -78,13 +78,44 @@ async def inventory_daily(
         day = (m.posted_at.date() if m.posted_at else date.today()).isoformat()
         b = buckets.setdefault(
             day,
-            {"inbound": Decimal("0"), "outbound": Decimal("0"), "net": Decimal("0")},
+            {
+                "inbound": Decimal("0"),
+                "inbound_cost": Decimal("0"),
+                "outbound": Decimal("0"),
+                "outbound_cost": Decimal("0"),
+                "outbound_sale_qty": Decimal("0"),
+                "outbound_sale_cost": Decimal("0"),
+                "outbound_spoilage_qty": Decimal("0"),
+                "outbound_spoilage_cost": Decimal("0"),
+                "outbound_internal_qty": Decimal("0"),
+                "outbound_internal_cost": Decimal("0"),
+                "outbound_transfer_qty": Decimal("0"),
+                "outbound_transfer_cost": Decimal("0"),
+                "net": Decimal("0"),
+            },
         )
         qty = Decimal(str(m.quantity_signed))
+        cost = Decimal(str(getattr(m, "cost_amount", None) or 0))
         if qty >= 0:
             b["inbound"] += qty
+            b["inbound_cost"] += cost
         else:
-            b["outbound"] += -qty
+            out_qty = -qty
+            b["outbound"] += out_qty
+            b["outbound_cost"] += cost
+            sub = str(getattr(m, "sub_kind", None) or "sale").lower()
+            if sub == "spoilage":
+                b["outbound_spoilage_qty"] += out_qty
+                b["outbound_spoilage_cost"] += cost
+            elif sub == "internal":
+                b["outbound_internal_qty"] += out_qty
+                b["outbound_internal_cost"] += cost
+            elif sub == "transfer":
+                b["outbound_transfer_qty"] += out_qty
+                b["outbound_transfer_cost"] += cost
+            else:
+                b["outbound_sale_qty"] += out_qty
+                b["outbound_sale_cost"] += cost
         b["net"] += qty
     # Đếm phiếu theo ngày tạo để đối chiếu với movement.
     req_stmt = select(InventoryRequest)
@@ -104,14 +135,39 @@ async def inventory_daily(
     out = []
     for day in sorted(set(buckets) | set(counts)):
         b = buckets.get(
-            day, {"inbound": Decimal("0"), "outbound": Decimal("0"), "net": Decimal("0")}
+            day,
+            {
+                "inbound": Decimal("0"),
+                "inbound_cost": Decimal("0"),
+                "outbound": Decimal("0"),
+                "outbound_cost": Decimal("0"),
+                "outbound_sale_qty": Decimal("0"),
+                "outbound_sale_cost": Decimal("0"),
+                "outbound_spoilage_qty": Decimal("0"),
+                "outbound_spoilage_cost": Decimal("0"),
+                "outbound_internal_qty": Decimal("0"),
+                "outbound_internal_cost": Decimal("0"),
+                "outbound_transfer_qty": Decimal("0"),
+                "outbound_transfer_cost": Decimal("0"),
+                "net": Decimal("0"),
+            },
         )
         c = counts.get(day, {"receipt": 0, "issue": 0})
         out.append(
             {
                 "bucket": day,
                 "inbound_qty": str(b["inbound"]),
+                "inbound_cost": str(b["inbound_cost"].quantize(Decimal("0.01"))),
                 "outbound_qty": str(b["outbound"]),
+                "outbound_cost": str(b["outbound_cost"].quantize(Decimal("0.01"))),
+                "outbound_sale_qty": str(b["outbound_sale_qty"]),
+                "outbound_sale_cost": str(b["outbound_sale_cost"].quantize(Decimal("0.01"))),
+                "outbound_spoilage_qty": str(b["outbound_spoilage_qty"]),
+                "outbound_spoilage_cost": str(b["outbound_spoilage_cost"].quantize(Decimal("0.01"))),
+                "outbound_internal_qty": str(b["outbound_internal_qty"]),
+                "outbound_internal_cost": str(b["outbound_internal_cost"].quantize(Decimal("0.01"))),
+                "outbound_transfer_qty": str(b["outbound_transfer_qty"]),
+                "outbound_transfer_cost": str(b["outbound_transfer_cost"].quantize(Decimal("0.01"))),
                 "net_qty": str(b["net"]),
                 "receipt_count": c["receipt"],
                 "issue_count": c["issue"],
@@ -127,7 +183,7 @@ async def inventory_monthly(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
 ):
-    """Gộp buckets ngày thành tháng (YYYY-MM)."""
+    """Gộp buckets ngày thành tháng (YYYY-MM) kèm phân rã loại xuất."""
     daily = await inventory_daily(current_user, db, date_from, date_to)
     months: dict[str, dict] = {}
     from decimal import Decimal
@@ -138,14 +194,34 @@ async def inventory_monthly(
             key,
             {
                 "inbound": Decimal("0"),
+                "inbound_cost": Decimal("0"),
                 "outbound": Decimal("0"),
+                "outbound_cost": Decimal("0"),
+                "outbound_sale_qty": Decimal("0"),
+                "outbound_sale_cost": Decimal("0"),
+                "outbound_spoilage_qty": Decimal("0"),
+                "outbound_spoilage_cost": Decimal("0"),
+                "outbound_internal_qty": Decimal("0"),
+                "outbound_internal_cost": Decimal("0"),
+                "outbound_transfer_qty": Decimal("0"),
+                "outbound_transfer_cost": Decimal("0"),
                 "net": Decimal("0"),
                 "receipt": 0,
                 "issue": 0,
             },
         )
         m["inbound"] += Decimal(b["inbound_qty"])
+        m["inbound_cost"] += Decimal(b["inbound_cost"])
         m["outbound"] += Decimal(b["outbound_qty"])
+        m["outbound_cost"] += Decimal(b["outbound_cost"])
+        m["outbound_sale_qty"] += Decimal(b["outbound_sale_qty"])
+        m["outbound_sale_cost"] += Decimal(b["outbound_sale_cost"])
+        m["outbound_spoilage_qty"] += Decimal(b["outbound_spoilage_qty"])
+        m["outbound_spoilage_cost"] += Decimal(b["outbound_spoilage_cost"])
+        m["outbound_internal_qty"] += Decimal(b["outbound_internal_qty"])
+        m["outbound_internal_cost"] += Decimal(b["outbound_internal_cost"])
+        m["outbound_transfer_qty"] += Decimal(b["outbound_transfer_qty"])
+        m["outbound_transfer_cost"] += Decimal(b["outbound_transfer_cost"])
         m["net"] += Decimal(b["net_qty"])
         m["receipt"] += b["receipt_count"]
         m["issue"] += b["issue_count"]
@@ -154,7 +230,17 @@ async def inventory_monthly(
             {
                 "bucket": k,
                 "inbound_qty": str(v["inbound"]),
+                "inbound_cost": str(v["inbound_cost"].quantize(Decimal("0.01"))),
                 "outbound_qty": str(v["outbound"]),
+                "outbound_cost": str(v["outbound_cost"].quantize(Decimal("0.01"))),
+                "outbound_sale_qty": str(v["outbound_sale_qty"]),
+                "outbound_sale_cost": str(v["outbound_sale_cost"].quantize(Decimal("0.01"))),
+                "outbound_spoilage_qty": str(v["outbound_spoilage_qty"]),
+                "outbound_spoilage_cost": str(v["outbound_spoilage_cost"].quantize(Decimal("0.01"))),
+                "outbound_internal_qty": str(v["outbound_internal_qty"]),
+                "outbound_internal_cost": str(v["outbound_internal_cost"].quantize(Decimal("0.01"))),
+                "outbound_transfer_qty": str(v["outbound_transfer_qty"]),
+                "outbound_transfer_cost": str(v["outbound_transfer_cost"].quantize(Decimal("0.01"))),
                 "net_qty": str(v["net"]),
                 "receipt_count": v["receipt"],
                 "issue_count": v["issue"],
@@ -164,6 +250,125 @@ async def inventory_monthly(
         "unit": "quantity",
         "simulation": True,
     }
+
+
+@router.get("/inventory-summary")
+async def inventory_summary(
+    current_user=Depends(require_any_capability(*_READ_CAPS)),
+    db: AsyncSession = Depends(get_db),
+    location_id: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+):
+    """Báo cáo Nhập-Xuất-Tồn chi tiết theo từng nguyên liệu và phân loại xuất kho."""
+    from collections import defaultdict
+    from decimal import Decimal
+    from app.models.inventory import Balance, Item, Movement
+
+    df, dt = _parse_date(date_from, "date_from"), _parse_date(date_to, "date_to")
+    items = {str(i.id): i for i in (await db.execute(select(Item).where(Item.active.is_(True)))).scalars().all()}
+
+    stmt = select(Movement)
+    if location_id:
+        stmt = stmt.where(Movement.location_id == location_id)
+    if df:
+        stmt = stmt.where(Movement.posted_at >= df)
+    if dt:
+        stmt = stmt.where(Movement.posted_at <= dt)
+    moves = (await db.execute(stmt)).scalars().all()
+
+    stats = defaultdict(lambda: {
+        "inbound_qty": Decimal("0"), "inbound_cost": Decimal("0"),
+        "inbound_receipt_qty": Decimal("0"), "inbound_receipt_cost": Decimal("0"),
+        "inbound_transfer_qty": Decimal("0"), "inbound_transfer_cost": Decimal("0"),
+        "sale_qty": Decimal("0"), "sale_cost": Decimal("0"),
+        "spoilage_qty": Decimal("0"), "spoilage_cost": Decimal("0"),
+        "internal_qty": Decimal("0"), "internal_cost": Decimal("0"),
+        "transfer_qty": Decimal("0"), "transfer_cost": Decimal("0"),
+        "total_out_qty": Decimal("0"), "total_out_cost": Decimal("0"),
+    })
+
+    for m in moves:
+        iid = str(m.item_id)
+        qty = Decimal(str(m.quantity_signed))
+        cost = Decimal(str(getattr(m, "cost_amount", None) or 0))
+        st = stats[iid]
+        sub = str(getattr(m, "sub_kind", None) or "receipt").lower()
+        if qty >= 0:
+            st["inbound_qty"] += qty
+            st["inbound_cost"] += cost
+            # Phân biệt: nhập từ NCC vs nhập từ chuyển kho
+            if sub == "transfer":
+                st["inbound_transfer_qty"] += qty
+                st["inbound_transfer_cost"] += cost
+            else:
+                st["inbound_receipt_qty"] += qty
+                st["inbound_receipt_cost"] += cost
+        else:
+            out_qty = -qty
+            st["total_out_qty"] += out_qty
+            st["total_out_cost"] += cost
+            if sub == "spoilage":
+                st["spoilage_qty"] += out_qty
+                st["spoilage_cost"] += cost
+            elif sub == "internal":
+                st["internal_qty"] += out_qty
+                st["internal_cost"] += cost
+            elif sub == "transfer":
+                st["transfer_qty"] += out_qty
+                st["transfer_cost"] += cost
+            else:
+                st["sale_qty"] += out_qty
+                st["sale_cost"] += cost
+
+    bal_stmt = select(Balance)
+    if location_id:
+        bal_stmt = bal_stmt.where(Balance.location_id == location_id)
+    bals = (await db.execute(bal_stmt)).scalars().all()
+    closing_map = defaultdict(lambda: Decimal("0"))
+    for b in bals:
+        closing_map[str(b.item_id)] += Decimal(str(b.quantity or 0))
+
+    rows = []
+    for iid, item in sorted(items.items(), key=lambda kv: kv[1].sku):
+        st = stats[iid]
+        closing_qty = closing_map[iid]
+        item_cost = Decimal(str(item.cost_price or 0))
+        closing_cost = closing_qty * item_cost
+        opening_qty = closing_qty - st["inbound_qty"] + st["total_out_qty"]
+        opening_cost = opening_qty * item_cost
+        rows.append({
+            "item_id": iid,
+            "sku": item.sku,
+            "item_name": item.name,
+            "unit": item.unit,
+            "category": item.category,
+            "cost_price": str(item_cost),
+            "opening_qty": str(opening_qty),
+            "opening_cost": str(opening_cost.quantize(Decimal("0.01"))),
+            # Tổng nhập (tương thích ngược)
+            "inbound_qty": str(st["inbound_qty"]),
+            "inbound_cost": str(st["inbound_cost"].quantize(Decimal("0.01"))),
+            # Phân loại nhập: mua NCC vs nhận từ chuyển kho
+            "inbound_receipt_qty": str(st["inbound_receipt_qty"]),
+            "inbound_receipt_cost": str(st["inbound_receipt_cost"].quantize(Decimal("0.01"))),
+            "inbound_transfer_qty": str(st["inbound_transfer_qty"]),
+            "inbound_transfer_cost": str(st["inbound_transfer_cost"].quantize(Decimal("0.01"))),
+            "outbound_sale_qty": str(st["sale_qty"]),
+            "outbound_sale_cost": str(st["sale_cost"].quantize(Decimal("0.01"))),
+            "outbound_spoilage_qty": str(st["spoilage_qty"]),
+            "outbound_spoilage_cost": str(st["spoilage_cost"].quantize(Decimal("0.01"))),
+            "outbound_internal_qty": str(st["internal_qty"]),
+            "outbound_internal_cost": str(st["internal_cost"].quantize(Decimal("0.01"))),
+            "outbound_transfer_qty": str(st["transfer_qty"]),
+            "outbound_transfer_cost": str(st["transfer_cost"].quantize(Decimal("0.01"))),
+            "total_outbound_qty": str(st["total_out_qty"]),
+            "total_outbound_cost": str(st["total_out_cost"].quantize(Decimal("0.01"))),
+            "closing_qty": str(closing_qty),
+            "closing_cost": str(closing_cost.quantize(Decimal("0.01"))),
+        })
+
+    return {"items": rows, "count": len(rows), "simulation": True}
 
 
 @router.get("/consumption-top")
