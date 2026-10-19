@@ -58,6 +58,30 @@ class TestIamAdmin:
         assert r.status_code == 200
         assert "roles" in r.json()
 
+    def test_branch_scoped_user_cannot_list_other_branch_inventory(self, client):
+        """A user assigned to an empty branch must not receive HO inventory rows."""
+        admin_auth = _login(client, "demo_admin")
+        branches = client.get("/admin/branches", headers=admin_auth).json()["branches"]
+        other_branch = next(branch for branch in branches if branch["code"] == "CN_BEN_THANH")
+        username = f"branch_staff_{uuid.uuid4().hex[:6]}"
+        created = client.post(
+            "/admin/users",
+            headers=_idem(admin_auth),
+            json={
+                "username": username,
+                "display_name": "Nhân viên chi nhánh tách biệt",
+                "branch_id": other_branch["id"],
+                "roles": ["staff"],
+            },
+        )
+        assert created.status_code == 201, created.text
+
+        scoped_auth = _login(client, username, created.json()["temporary_password"])
+        balances = client.get("/inventory/balances", headers=scoped_auth)
+
+        assert balances.status_code == 200, balances.text
+        assert balances.json()["balances"] == []
+
     def test_admin_create_user_with_temp_password_and_first_login_flow(self, client):
         admin_auth = _login(client, "demo_admin")
         username = f"emp_temp_{uuid.uuid4().hex[:6]}"
