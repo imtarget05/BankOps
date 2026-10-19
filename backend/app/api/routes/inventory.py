@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
@@ -349,12 +349,18 @@ async def _load_request(db: AsyncSession, request_id: str) -> InventoryRequest:
 
 
 async def _load_request_for_read(db, request_id: str, user) -> InventoryRequest:
-    """Object scope docs/08: maker xem phiếu mình; có quyền duyệt xem tất cả."""
+    """Maker reads own requests; approvers may only read their branch scope."""
     req = await _load_request(db, request_id)
     if str(req.maker_id) == str(user.id):
         return req
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
+        raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại hoặc ngoài phạm vi của bạn")
+    accessible_locations = await get_accessible_location_ids(db, user)
+    if accessible_locations is not None and not (
+        (req.source_id is not None and req.source_id in accessible_locations)
+        or (req.dest_id is not None and req.dest_id in accessible_locations)
+    ):
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại hoặc ngoài phạm vi của bạn")
     return req
 
@@ -1088,6 +1094,15 @@ async def list_requests(
     caps = await get_user_capabilities(db, current_user.id)
     if mine or "inventory:approve_request" not in caps:
         stmt = stmt.where(InventoryRequest.maker_id == current_user.id)
+    else:
+        accessible_locations = await get_accessible_location_ids(db, current_user)
+        if accessible_locations is not None:
+            stmt = stmt.where(
+                or_(
+                    InventoryRequest.source_id.in_(accessible_locations),
+                    InventoryRequest.dest_id.in_(accessible_locations),
+                )
+            )
     rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
     page, next_cursor = rows[:limit], None
     if len(rows) > limit:
