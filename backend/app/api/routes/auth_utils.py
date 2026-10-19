@@ -279,6 +279,38 @@ async def check_user_scope(
     return False
 
 
+async def get_accessible_location_ids(
+    db: AsyncSession, user: User
+) -> set[uuid.UUID] | None:
+    """Return allowed inventory locations, or ``None`` for administrators.
+
+    Inventory read/write routes must filter at query time, rather than relying
+    on the caller to supply a location that happens to be in their scope.
+    """
+    roles = await get_user_roles(db, user.id)
+    if any(role in ("admin", "system_admin") for role in roles):
+        return None
+
+    from app.models.inventory import Location
+
+    location_ids: set[uuid.UUID] = set()
+    if user.branch_id:
+        branch_locations = await db.execute(
+            select(Location.id).where(Location.branch_id == user.branch_id)
+        )
+        location_ids.update(branch_locations.scalars().all())
+
+    for grant in await get_user_scope_grants(db, user.id):
+        if grant.location_id:
+            location_ids.add(grant.location_id)
+        if grant.branch_id:
+            branch_locations = await db.execute(
+                select(Location.id).where(Location.branch_id == grant.branch_id)
+            )
+            location_ids.update(branch_locations.scalars().all())
+    return location_ids
+
+
 async def get_user_from_token_string(token: str, db: AsyncSession) -> User:
     return await get_current_user(token, db)
 

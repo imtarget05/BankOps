@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
 from app.api.routes.auth_utils import (
+    get_accessible_location_ids,
     get_current_user,
     get_user_capabilities,
     get_user_roles,
@@ -948,6 +949,9 @@ async def list_balances(
 
     limit = max(1, min(limit, 100))
     stmt = select(Balance).order_by(Balance.location_id, Balance.item_id)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Balance.location_id.in_(allowed_location_ids))
     if location_id:
         stmt = stmt.where(Balance.location_id == _uuid(location_id, "location_id"))
     if item_id:
