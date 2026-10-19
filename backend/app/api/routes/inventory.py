@@ -864,7 +864,11 @@ async def list_locations(
     current_user=Depends(require_any_capability(*_VIEW_CATALOG)),
     db: AsyncSession = Depends(get_db),
 ):
-    locations = (await db.execute(select(Location))).scalars().all()
+    stmt = select(Location)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Location.id.in_(allowed_location_ids))
+    locations = (await db.execute(stmt)).scalars().all()
     return {
         "locations": [
             {"id": str(loc.id), "code": loc.code, "name": loc.name, "active": loc.active}
