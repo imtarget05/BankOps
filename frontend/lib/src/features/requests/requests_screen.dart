@@ -14,6 +14,7 @@ import '../../data/repositories/bankops_repository.dart';
 import '../ai/ai_voucher_audit.dart';
 import 'request_timeline.dart';
 import 'widgets/denomination_breakdown_dialog.dart';
+import 'widgets/stock_request_dialog.dart';
 
 /// Màn yêu cầu — tạo mới và gửi duyệt phiếu kho (stock) + phiếu quỹ (cash).
 class RequestsScreen extends StatefulWidget {
@@ -279,17 +280,6 @@ class _RequestsScreenState extends State<RequestsScreen> {
     }
   }
 
-  static const List<String> _stockReasonSuggestions = [
-    'Bổ sung vật tư định kỳ',
-    'Thay mới',
-    'Bảo trì',
-    'Tái lạp',
-    'Hao mòn',
-    'Thiệt hại',
-    'Chuyển kho',
-    'Trùng khớp',
-  ];
-
   static const List<String> _cashReasonSuggestions = [
     'Ghi nhận nguyên liệu đầu ca',
     'Chi chi phí vận hành',
@@ -335,379 +325,224 @@ class _RequestsScreenState extends State<RequestsScreen> {
     bool isSpoilage = false,
   }) async {
     if (data.locations.isEmpty || data.items.isEmpty) return;
-    final repo = RepositoryScope.of(context);
-    RequestKind kind = defaultKind;
-    String locationId = data.locations.first.id;
-    final nonSerialItems = data.items.where((i) => !i.trackedSerial).toList();
-    String itemId =
-        (nonSerialItems.isNotEmpty ? nonSerialItems.first : data.items.first)
-            .id;
-    final qtyCtrl = TextEditingController(text: isSpoilage ? '1' : '25');
-    final reasonCtrl = TextEditingController(
-      text: isSpoilage
-          ? '[Báo cáo hư hỏng] Nguyên liệu bị hư hỏng/đổ vỡ trong ca'
-          : (kind == RequestKind.receipt
-              ? 'Nhập hàng từ nhà cung cấp'
-              : 'Bổ sung vật tư định kỳ'),
-    );
-    final supplierCtrl = TextEditingController(
-        text: 'Công ty Cung ứng Nguyên liệu Trà Sữa Phúc Long');
-    final priceCtrl = TextEditingController(text: '65000');
-    final lotCtrl = TextEditingController(
-      text:
-          'LOT-${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}-01',
-    );
-    DateTime expiryDate = DateTime.now().add(const Duration(days: 60));
 
-    final confirmed = await showDialog<bool>(
+    final created = await showDialog<StockRequest>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final currentItem = data.items.cast<InventoryItem?>().firstWhere(
-                (it) => it?.id == itemId,
-                orElse: () => null,
-              );
-          final qtyVal = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
-          final priceVal = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
-          final totalVal = qtyVal * priceVal;
+      builder: (ctx) => StockRequestDialog(
+        locations: data.locations,
+        items: data.items,
+        initialKind: defaultKind,
+        isSpoilage: isSpoilage,
+      ),
+    );
 
-          return AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Icon(
-                  isSpoilage
-                      ? Icons.report_problem_outlined
-                      : (kind == RequestKind.receipt
-                          ? Icons.add_business_outlined
-                          : Icons.outbox_outlined),
-                  color: isSpoilage
-                      ? const Color(0xFFD97706)
-                      : (kind == RequestKind.receipt
-                          ? const Color(0xFF2563EB)
-                          : const Color(0xFF059669)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(isSpoilage
-                      ? 'Báo Cáo Hư Hỏng Nguyên Liệu'
-                      : 'Tạo Phiếu Kho Mới'),
-                ),
-              ],
+    if (created == null || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF059669),
+        behavior: SnackBarBehavior.floating,
+        content: Text(isSpoilage
+            ? 'Đã ghi nhận báo cáo hư hỏng #${created.id} chờ quản lý xác nhận!'
+            : 'Đã tạo thành công phiếu kho ${created.id} (${created.items.length} nguyên liệu)'),
+      ),
+    );
+    _reload();
+  }
+
+  void _showStockLinesSheet(StockRequest r, List<InventoryItem> items) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-            content: SizedBox(
-              width: 500,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!isSpoilage) ...[
-                      DropdownButtonFormField<RequestKind>(
-                        key: const Key('stock-kind-dropdown'),
-                        isExpanded: true,
-                        initialValue: kind,
-                        decoration: const InputDecoration(
-                          labelText: 'Loại phiếu',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: RequestKind.receipt,
-                            child: Text('Nhập kho (receipt) — Nhà cung cấp / Kho trung tâm'),
-                          ),
-                          DropdownMenuItem(
-                            value: RequestKind.payment,
-                            child: Text('Xuất kho (issue) — Sử dụng / Tiêu hao'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) {
-                            setDialogState(() {
-                              kind = v;
-                              if (kind == RequestKind.receipt) {
-                                reasonCtrl.text = 'Nhập hàng từ nhà cung cấp';
-                              } else {
-                                reasonCtrl.text = 'Xuất nguyên liệu sử dụng tại quầy';
-                              }
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (kind == RequestKind.receipt) ...[
-                      TextField(
-                        key: const Key('stock-supplier-input'),
-                        controller: supplierCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Nhà cung cấp / Nguồn giao hàng *',
-                          hintText: 'VD: NCC Trà Phúc Long, Sữa Barista Milk...',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.business_outlined, size: 20),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    DropdownButtonFormField<String>(
-                      key: const Key('stock-location-dropdown'),
-                      isExpanded: true,
-                      initialValue: locationId,
-                      decoration: InputDecoration(
-                        labelText: kind == RequestKind.receipt
-                            ? 'Kho nhập đến (Quầy / Kho trung tâm) *'
-                            : 'Kho xuất từ (Quầy / Kho trung tâm) *',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.warehouse_outlined, size: 20),
-                      ),
-                      items: [
-                        for (final loc in data.locations)
-                          DropdownMenuItem(
-                            value: loc.id,
-                            child: Text('${loc.code} — ${loc.name}'),
-                          ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setDialogState(() => locationId = v);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      key: const Key('stock-item-dropdown'),
-                      isExpanded: true,
-                      initialValue: itemId,
-                      decoration: const InputDecoration(
-                        labelText: 'Nguyên vật liệu *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.local_cafe_outlined, size: 20),
-                      ),
-                      items: [
-                        for (final item in data.items)
-                          DropdownMenuItem(
-                            value: item.id,
-                            child: Text(
-                                '${item.name} (${item.sku} · ${item.unit})'),
-                          ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setDialogState(() => itemId = v);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            key: const Key('stock-qty-input'),
-                            controller: qtyCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Số lượng (${currentItem?.unit ?? "đơn vị"}) *',
-                              border: const OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            onChanged: (_) => setDialogState(() {}),
+                        Text(
+                          'Chi tiết Phiếu kho #${r.id}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        if (kind == RequestKind.receipt) ...[
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 3,
-                            child: TextField(
-                              key: const Key('stock-price-input'),
-                              controller: priceCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Đơn giá nhập (VND) *',
-                                border: OutlineInputBorder(),
-                                suffixText: 'đ',
-                              ),
-                              keyboardType: TextInputType.number,
-                              onChanged: (_) => setDialogState(() {}),
-                            ),
+                        Text(
+                          'Loại: ${r.subKindLabel} • ${r.items.length} dòng nguyên liệu'
+                          '${r.invoiceNo != null ? " • HĐ: ${r.invoiceNo}" : ""}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                        ],
+                        ),
                       ],
                     ),
-                    if (kind == RequestKind.receipt) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: const Color(0xFF2563EB)
-                                  .withValues(alpha: 0.2)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: r.items.length,
+                separatorBuilder: (_, __) => const Divider(height: 12),
+                itemBuilder: (ctx, idx) {
+                  final line = r.items[idx];
+                  final itm = items.cast<InventoryItem?>().firstWhere(
+                        (i) => i?.id == line.itemId,
+                        orElse: () => null,
+                      );
+                  final name = line.itemName ?? itm?.name ?? line.itemId;
+                  final sku = itm?.sku ?? '';
+                  final unit = line.unit ?? itm?.unit ?? 'đơn vị';
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor:
+                            theme.colorScheme.primary.withValues(alpha: 0.12),
+                        child: Text(
+                          '${idx + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Thành tiền tạm tính:',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600)),
                             Text(
-                              AppFormat.money(totalVal.toStringAsFixed(0),
+                              name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 14),
+                            ),
+                            if (sku.isNotEmpty)
+                              Text(
+                                'SKU: $sku • ĐVT: $unit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            if (line.lotNo != null || line.expiryDate != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '${line.lotNo != null ? "Lô: ${line.lotNo}" : ""}'
+                                  '${line.lotNo != null && line.expiryDate != null ? " • " : ""}'
+                                  '${line.expiryDate != null ? "HSD: ${line.expiryDate}" : ""}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFFD97706),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${line.quantity} $unit',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14),
+                          ),
+                          if (line.unitPrice != null && line.unitPrice!.isNotEmpty)
+                            Text(
+                              '${AppFormat.money(line.unitPrice!)} đ / $unit',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          if (line.totalAmount > 0)
+                            Text(
+                              AppFormat.money(line.totalAmount.toStringAsFixed(0),
                                   currency: 'VND'),
                               style: const TextStyle(
-                                fontSize: 15,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w800,
                                 color: Color(0xFF2563EB),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: const Key('stock-lot-input'),
-                              controller: lotCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Số lô sản xuất (Lot No) *',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () async {
-                                final now = DateTime.now();
-                                final picked = await showDatePicker(
-                                  context: ctx,
-                                  initialDate: expiryDate.isBefore(now)
-                                      ? now.add(const Duration(days: 30))
-                                      : expiryDate,
-                                  firstDate: now,
-                                  lastDate: now.add(const Duration(days: 730)),
-                                );
-                                if (picked != null) {
-                                  setDialogState(() => expiryDate = picked);
-                                }
-                              },
-                              child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Hạn sử dụng (Expiry) *',
-                                  border: OutlineInputBorder(),
-                                  suffixIcon: Icon(Icons.calendar_month, size: 18),
-                                ),
-                                child: Text(
-                                  '${expiryDate.day.toString().padLeft(2, '0')}/${expiryDate.month.toString().padLeft(2, '0')}/${expiryDate.year}',
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    Autocomplete<String>(
-                      key: const Key('stock-reason-autocomplete'),
-                      initialValue: TextEditingValue(text: reasonCtrl.text),
-                      optionsBuilder: (TextEditingValue text) {
-                        final query = text.text.trim();
-                        if (query.isEmpty) return _stockReasonSuggestions;
-                        return _stockReasonSuggestions.where((s) =>
-                            s.toLowerCase().contains(query.toLowerCase()));
-                      },
-                      onSelected: (value) => reasonCtrl.text = value,
-                      fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
-                        return TextField(
-                          key: const Key('stock-reason-input'),
-                          controller: ctrl,
-                          focusNode: focus,
-                          onChanged: (val) {
-                            reasonCtrl.text = val;
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'Diễn giải / Lý do lập phiếu *',
-                            hintText: 'Gõ hoặc chọn gợi ý...',
-                            border: OutlineInputBorder(),
-                          ),
-                        );
-                      },
+                  );
+                },
+              ),
+            ),
+            if (r.totalCost > 0)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  border: Border(
+                    top: BorderSide(
+                        color: theme.colorScheme.outlineVariant
+                            .withValues(alpha: 0.5)),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Tổng giá trị phiếu:',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    Text(
+                      AppFormat.money(r.totalCost.toStringAsFixed(0),
+                          currency: 'VND'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF2563EB),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Huỷ'),
-              ),
-              FilledButton(
-                key: const Key('stock-dialog-save-btn'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: isSpoilage
-                      ? const Color(0xFFD97706)
-                      : const Color(0xFF2563EB),
-                ),
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: Text(isSpoilage ? 'Gửi báo cáo hư hỏng' : 'Lưu phiếu nháp'),
-              ),
-            ],
-          );
-        },
+          ],
+        ),
       ),
     );
-
-    if (confirmed != true || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      final qty = double.tryParse(qtyCtrl.text.trim()) ?? 1.0;
-      final price = double.tryParse(priceCtrl.text.trim());
-      final total = price != null ? (qty * price).toStringAsFixed(0) : null;
-      final expiryIso =
-          '${expiryDate.year}-${expiryDate.month.toString().padLeft(2, '0')}-${expiryDate.day.toString().padLeft(2, '0')}';
-
-      final created = await repo.createStockRequest(
-        kind: kind,
-        sourceLocationId: kind == RequestKind.payment ? locationId : null,
-        destLocationId: kind == RequestKind.receipt ? locationId : null,
-        supplier: kind == RequestKind.receipt ? supplierCtrl.text.trim() : null,
-        lines: [
-          StockRequestLine(
-            itemId: itemId,
-            quantity: qtyCtrl.text.trim().isEmpty ? '1' : qtyCtrl.text.trim(),
-            unitPrice: kind == RequestKind.receipt ? priceCtrl.text.trim() : null,
-            lineTotal: kind == RequestKind.receipt ? total : null,
-            lotNo: kind == RequestKind.receipt ? lotCtrl.text.trim() : null,
-            expiryDate: kind == RequestKind.receipt ? expiryIso : null,
-          ),
-        ],
-        reason: reasonCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-          content: Text(isSpoilage
-              ? 'Đã ghi nhận báo cáo hư hỏng #${created.id} chờ quản lý xác nhận!'
-              : 'Đã tạo thành công phiếu kho ${created.id}'),
-        ),
-      );
-      _reload();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFFB42318),
-          behavior: SnackBarBehavior.floating,
-          content: Text('Lỗi tạo phiếu kho: ${friendlyError(e)}'),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _openCreateCashDialog(_RequestsData data) async {
@@ -1168,8 +1003,17 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
+                                _subKindChip(r.subKindLabel, r.subKind, r.kind),
+                                const SizedBox(width: 6),
                                 _statusChip(r.status),
                                 const Spacer(),
+                                IconButton(
+                                  key: Key('btn-view-lines-${r.id}'),
+                                  icon: const Icon(Icons.receipt_long_outlined,
+                                      size: 20),
+                                  tooltip: 'Xem dòng nguyên liệu (${r.items.length})',
+                                  onPressed: () => _showStockLinesSheet(r, data.items),
+                                ),
                                 IconButton(
                                   key: Key('print-stock-${r.id}'),
                                   icon: const Icon(Icons.print_outlined,
@@ -1188,10 +1032,46 @@ class _RequestsScreenState extends State<RequestsScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Loại: ${r.kind.label} • Người lập: ${r.createdByName} • Lý do: ${r.reason.isEmpty ? "Xuất nhập kho định kỳ" : r.reason}',
+                              'Loại: ${r.kind.label} • Người lập: ${r.createdByName}'
+                              '${r.supplierName != null && r.supplierName!.isNotEmpty ? " • NCC: ${r.supplierName}" : ""}'
+                              '${r.invoiceNo != null && r.invoiceNo!.isNotEmpty ? " • Số HĐ: ${r.invoiceNo}" : ""}'
+                              ' • Lý do: ${r.reason.isEmpty ? "Xuất nhập kho định kỳ" : r.reason}',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            InkWell(
+                              key: Key('btn-view-lines-text-${r.id}'),
+                              onTap: () => _showStockLinesSheet(r, data.items),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 14,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Flexible(
+                                      child: Text(
+                                        '${r.items.length} dòng nguyên liệu'
+                                        '${r.totalCost > 0 ? " • Tổng tiền: ${AppFormat.money(r.totalCost.toStringAsFixed(0), currency: "VND")}" : ""}',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.primary,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             if (r.status == RequestStatus.returned &&
@@ -1544,6 +1424,52 @@ class _RequestsScreenState extends State<RequestsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _subKindChip(String label, String? subKind, RequestKind kind) {
+    Color bg;
+    Color fg;
+    switch (subKind) {
+      case 'spoilage':
+        bg = const Color(0xFFFEE2E2);
+        fg = const Color(0xFF991B1B);
+        break;
+      case 'internal':
+        bg = const Color(0xFFFEF3C7);
+        fg = const Color(0xFF92400E);
+        break;
+      case 'transfer':
+        bg = const Color(0xFFEDE9FE);
+        fg = const Color(0xFF6D28D9);
+        break;
+      case 'sale':
+        bg = const Color(0xFFDCFCE7);
+        fg = const Color(0xFF166534);
+        break;
+      default:
+        if (kind == RequestKind.receipt) {
+          bg = const Color(0xFFDBEAFE);
+          fg = const Color(0xFF1D4ED8);
+        } else {
+          bg = const Color(0xFFF1F5F9);
+          fg = const Color(0xFF334155);
+        }
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 

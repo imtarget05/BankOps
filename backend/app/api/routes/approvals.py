@@ -7,6 +7,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from decimal import Decimal
+
 from app.api.routes.auth_utils import (
     get_user_capabilities,
     get_user_from_token_string,
@@ -15,7 +17,13 @@ from app.api.routes.auth_utils import (
 from app.database import get_db
 from app.models.cash_sim import CashRequest
 from app.models.iam import User
-from app.models.inventory import InventoryRequest, InventoryRequestLine
+from app.models.inventory import (
+    InventoryRequest,
+    InventoryRequestLine,
+    Location,
+    Stocktake,
+    StocktakeLine,
+)
 from app.services.approval_events import approval_event_bus
 
 router = APIRouter()
@@ -98,6 +106,56 @@ async def get_approval_inbox(
                 "detail": r.reason or f"Phiếu quỹ {r.kind}",
             }
         )
+
+    # Ca kiểm kê theo ca đang chờ duyệt (SRS §3.3)
+    stocktake_rows = (
+        await db.execute(
+            select(Stocktake)
+            .where(Stocktake.status == "submitted")
+            .order_by(Stocktake.created_at.asc())
+        )
+    ).scalars().all()
+
+    for st in stocktake_rows:
+        if str(st.maker_id) == str(current_user.id):
+            continue
+        maker_id = str(st.maker_id)
+        loc = (
+            await db.execute(select(Location).where(Location.id == st.location_id))
+        ).scalars().first()
+        loc_name = loc.name if loc else "Quầy quầy/kho"
+        st_lines = (
+            await db.execute(
+                select(StocktakeLine).where(StocktakeLine.stocktake_id == st.id)
+            )
+        ).scalars().all()
+        var_count = sum(1 for ln in st_lines if Decimal(str(ln.variance)) != Decimal("0"))
+        shift_names = {
+            "morning": "Ca Sáng",
+            "afternoon": "Ca Chiều",
+            "split": "Ca Lỡ ngày",
+        }
+        shift_title = shift_names.get(st.shift_code or "", "Kiểm kê ca")
+        approvals.append(
+            {
+                "id": str(st.id),
+                "kind": "stocktake",
+                "sub_kind": st.shift_code or "stocktake",
+                "status": st.status,
+                "maker_id": maker_id,
+                "maker": users.get(maker_id, maker_id),
+                "impact": f"{shift_title} ({loc_name}) · {var_count} món lệch",
+                "approval_detail": {
+                    "kind": "stocktake",
+                    "shift_code": st.shift_code,
+                    "location_id": str(st.location_id),
+                    "variance_count": var_count,
+                    "location_name": loc_name,
+                },
+                "detail": st.note or f"Kiểm kê {shift_title} ngày {st.business_date or ''}",
+            }
+        )
+
     return {"approvals": approvals}
 
 

@@ -88,9 +88,18 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       item.kind.toLowerCase() == 'cash' ||
       item.kind.toLowerCase().contains('quỹ');
 
+  bool _isStocktake(ApprovalItem item) =>
+      item.kind.toLowerCase() == 'stocktake' ||
+      item.kind.toLowerCase().contains('kiểm kê');
+
   bool _isHighRisk(ApprovalItem item) {
     final assessment = _assessments[item.id];
     if (assessment != null) return assessment.isHighRisk;
+    if (_isStocktake(item)) {
+      final lower = item.impact.toLowerCase();
+      if (lower.contains('lệch') && !lower.contains('0 lệch')) return true;
+      return false;
+    }
     var rawImpact = item.impact;
     final decimalMatch =
         RegExp(r'[\.,]\d{1,2}(?:\s|[a-zA-Z]|$)').firstMatch(rawImpact);
@@ -131,17 +140,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   Future<void> _approve(ApprovalItem item) async {
     final repo = RepositoryScope.of(context);
     final assessment = _assessments[item.id];
+    final isStocktake = _isStocktake(item);
     final highRisk = _isHighRisk(item);
 
     String? supervisorPin;
-    if (highRisk) {
+    if (highRisk && !isStocktake) {
       supervisorPin = await _showDualControlPinDialog(item, assessment);
       if (supervisorPin == null || !mounted) return;
     }
 
     setState(() => _busy = true);
     try {
-      if (_isCash(item)) {
+      if (isStocktake) {
+        await repo.approveStocktake(item.id);
+      } else if (_isCash(item)) {
         await repo.approveCashRequest(item.id, supervisorPin: supervisorPin);
       } else {
         await repo.approveStockRequest(item.id, supervisorPin: supervisorPin);
@@ -207,7 +219,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       final reason = reasonCtrl.text.trim().isEmpty
           ? 'Từ chối khi kiểm duyệt'
           : reasonCtrl.text.trim();
-      if (_isCash(item)) {
+      if (_isStocktake(item)) {
+        await repo.rejectStocktake(item.id, reason: reason);
+      } else if (_isCash(item)) {
         await repo.rejectCashRequest(item.id, reason);
       } else {
         await repo.rejectStockRequest(item.id, reason);
@@ -282,7 +296,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       final reason = reasonCtrl.text.trim().isEmpty
           ? 'Yêu cầu kiểm tra và chỉnh sửa lại nội dung'
           : reasonCtrl.text.trim();
-      if (_isCash(item)) {
+      if (_isStocktake(item)) {
+        await repo.rejectStocktake(item.id, reason: reason);
+      } else if (_isCash(item)) {
         await repo.returnCashRequest(item.id, reason: reason);
       } else {
         await repo.returnStockRequest(item.id, reason: reason);
@@ -354,10 +370,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     final targets = items.where((i) => _selected.contains(i.id)).toList();
     if (targets.isEmpty) return;
 
-    final hasHighRisk = targets.any(_isHighRisk);
+    final hasHighRisk = targets.any((t) => _isHighRisk(t) && !_isStocktake(t));
     String? supervisorPin;
     if (hasHighRisk) {
-      final highRiskItem = targets.firstWhere(_isHighRisk);
+      final highRiskItem =
+          targets.firstWhere((t) => _isHighRisk(t) && !_isStocktake(t));
       supervisorPin = await _showDualControlPinDialog(
         highRiskItem,
         _assessments[highRiskItem.id],
@@ -382,7 +399,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     final failed = <String>[];
     for (final item in targets) {
       try {
-        if (_isCash(item)) {
+        if (_isStocktake(item)) {
+          await repo.approveStocktake(item.id);
+        } else if (_isCash(item)) {
           await repo.approveCashRequest(item.id, supervisorPin: supervisorPin);
         } else {
           await repo.approveStockRequest(item.id, supervisorPin: supervisorPin);
@@ -867,9 +886,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   Builder(
                     builder: (context) {
                       final isCash = _isCash(item);
-                      final accentColor = isCash
-                          ? const Color(0xFF059669)
-                          : const Color(0xFF2563EB);
+                      final isStocktake = _isStocktake(item);
+                      final accentColor = isStocktake
+                          ? const Color(0xFFD97706)
+                          : (isCash
+                              ? const Color(0xFF059669)
+                              : const Color(0xFF2563EB));
 
                       return Container(
                         key: Key('approval-card-${item.id}'),
@@ -917,17 +939,22 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            isCash
-                                                ? Icons.savings_outlined
-                                                : Icons.inventory_2_outlined,
+                                            isStocktake
+                                                ? Icons.fact_check_outlined
+                                                : (isCash
+                                                    ? Icons.savings_outlined
+                                                    : Icons
+                                                        .inventory_2_outlined),
                                             size: 14,
                                             color: accentColor,
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
-                                            isCash
-                                                ? 'ĐIỀU CHỈNH KHO'
-                                                : 'KHO NGUYÊN LIỆU',
+                                            isStocktake
+                                                ? 'KIỂM KÊ CUỐI CA'
+                                                : (isCash
+                                                    ? 'ĐIỀU CHỈNH KHO'
+                                                    : 'KHO NGUYÊN LIỆU'),
                                             style: TextStyle(
                                               color: accentColor,
                                               fontSize: 10.5,

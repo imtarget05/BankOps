@@ -154,6 +154,7 @@ abstract class BankOpsRepository {
       String id, List<Map<String, dynamic>> lines);
   Future<StocktakeItem> submitStocktake(String id);
   Future<StocktakeItem> approveStocktake(String id);
+  Future<StocktakeItem> rejectStocktake(String id, {String? reason});
 
   // GET /inventory/requests, POST /inventory/requests
   Future<List<StockRequest>> getStockRequests();
@@ -162,6 +163,9 @@ abstract class BankOpsRepository {
     String? sourceLocationId,
     String? destLocationId,
     String? supplier,
+    String? supplierName,
+    String? invoiceNo,
+    String? subKind,
     required List<StockRequestLine> lines,
     String? reason,
   });

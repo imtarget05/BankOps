@@ -860,6 +860,31 @@ class FakeBankOpsRepository implements BankOpsRepository {
     if (hasVariance) {
       adjReqId = 'sr-adj-${DateTime.now().millisecondsSinceEpoch}';
     }
+
+    // Tự động cân bằng tồn kho thực tế vào sổ cái
+    _ensureBalancesInitialized();
+    for (final l in st.lines) {
+      final counted = double.tryParse(l.countedQty) ?? 0.0;
+      final countedStr = counted == counted.roundToDouble()
+          ? counted.toInt().toString()
+          : counted.toStringAsFixed(1);
+      final bIdx = _balances.indexWhere(
+          (b) => b.locationId == st.locationId && b.itemId == l.itemId);
+      if (bIdx >= 0) {
+        _balances[bIdx] = StockBalance(
+          locationId: st.locationId,
+          itemId: l.itemId,
+          quantity: countedStr,
+        );
+      } else {
+        _balances.add(StockBalance(
+          locationId: st.locationId,
+          itemId: l.itemId,
+          quantity: countedStr,
+        ));
+      }
+    }
+
     final updated = StocktakeItem(
       id: st.id,
       locationId: st.locationId,
@@ -875,6 +900,29 @@ class FakeBankOpsRepository implements BankOpsRepository {
       businessDate: st.businessDate,
     );
     _stocktakes[idx] = updated;
+    _approvalStreamCtrl.add('processed:$id');
+    return _delay(updated);
+  }
+
+  @override
+  Future<StocktakeItem> rejectStocktake(String id, {String? reason}) async {
+    final idx = _stocktakes.indexWhere((s) => s.id == id);
+    if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy đợt kiểm kê');
+    final st = _stocktakes[idx];
+    final noteWithReason = '${st.note ?? ""} [Từ chối: ${reason ?? "Yêu cầu kiểm đếm lại"}]'.trim();
+    final updated = StocktakeItem(
+      id: st.id,
+      locationId: st.locationId,
+      status: 'open',
+      note: noteWithReason,
+      makerId: st.makerId,
+      createdAt: st.createdAt,
+      lines: st.lines,
+      shiftCode: st.shiftCode,
+      businessDate: st.businessDate,
+    );
+    _stocktakes[idx] = updated;
+    _approvalStreamCtrl.add('processed:$id');
     return _delay(updated);
   }
 
@@ -890,6 +938,9 @@ class FakeBankOpsRepository implements BankOpsRepository {
     String? sourceLocationId,
     String? destLocationId,
     String? supplier,
+    String? supplierName,
+    String? invoiceNo,
+    String? subKind,
     required List<StockRequestLine> lines,
     String? reason,
   }) async {
@@ -912,6 +963,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
       reason: reason ?? '',
       createdAt: DateTime.now().toUtc(),
       destinationLocationId: destLocationId,
+      supplier: supplier ?? supplierName,
+      supplierName: supplierName ?? supplier,
+      invoiceNo: invoiceNo,
+      subKind: subKind,
     );
     _stockRequests.insert(0, created);
     return _delay(created);
@@ -959,6 +1014,128 @@ class FakeBankOpsRepository implements BankOpsRepository {
       throw ApiException('INVALID_STATE', 'Phiếu đã chốt trạng thái');
     }
     _stockRequests[idx] = _copyStock(r, to, reason: reason);
+    if (to == RequestStatus.posted) {
+      _ensureBalancesInitialized();
+      final targetLoc = r.kind == RequestKind.receipt
+          ? (r.destinationLocationId ?? r.locationId)
+          : r.locationId;
+      for (final line in r.items) {
+        final qty = double.tryParse(line.quantity) ?? 0.0;
+        final bIdx = _balances.indexWhere(
+            (b) => b.locationId == targetLoc && b.itemId == line.itemId);
+        if (bIdx >= 0) {
+          final cur = double.tryParse(_balances[bIdx].quantity) ?? 0.0;
+          final updated = r.kind == RequestKind.receipt ? cur + qty : cur - qty;
+          final val = updated < 0 ? 0.0 : updated;
+          final valStr = val == val.roundToDouble()
+              ? val.toInt().toString()
+              : val.toStringAsFixed(1);
+          _balances[bIdx] = StockBalance(
+            locationId: targetLoc,
+            itemId: line.itemId,
+            quantity: valStr,
+          );
+        } else if (r.kind == RequestKind.receipt) {
+          final qtyStr = qty == qty.roundToDouble()
+              ? qty.toInt().toString()
+              : qty.toStringAsFixed(1);
+          _balances.add(StockBalance(
+            locationId: targetLoc,
+            itemId: line.itemId,
+            quantity: qtyStr,
+          ));
+        }
+
+        // Nếu là chuyển kho, cộng tồn vào kho đích
+        if (r.subKind == 'transfer' && r.destinationLocationId != null) {
+          final dstLoc = r.destinationLocationId!;
+          final dstIdx = _balances.indexWhere(
+              (b) => b.locationId == dstLoc && b.itemId == line.itemId);
+          if (dstIdx >= 0) {
+            final curDst = double.tryParse(_balances[dstIdx].quantity) ?? 0.0;
+            final updatedDst = curDst + qty;
+            final valStr = updatedDst == updatedDst.roundToDouble()
+                ? updatedDst.toInt().toString()
+                : updatedDst.toStringAsFixed(1);
+            _balances[dstIdx] = StockBalance(
+              locationId: dstLoc,
+              itemId: line.itemId,
+              quantity: valStr,
+            );
+          } else {
+            final qtyStr = qty == qty.roundToDouble()
+                ? qty.toInt().toString()
+                : qty.toStringAsFixed(1);
+            _balances.add(StockBalance(
+              locationId: dstLoc,
+              itemId: line.itemId,
+              quantity: qtyStr,
+            ));
+          }
+        }
+
+        // Cập nhật ca kiểm kê đang mở (nếu có)
+        for (var i = 0; i < _stocktakes.length; i++) {
+          final st = _stocktakes[i];
+          if (st.status != 'open') continue;
+          final isReceiptTarget = (r.kind == RequestKind.receipt && st.locationId == targetLoc) ||
+              (r.subKind == 'transfer' && st.locationId == r.destinationLocationId);
+          final isOutboundTarget = (r.kind == RequestKind.payment || r.kind == RequestKind.transfer)
+              ? st.locationId == targetLoc
+              : false;
+
+          if (isReceiptTarget || isOutboundTarget) {
+            final linesCopy = List<StocktakeLineItem>.from(st.lines);
+            final lineIdx = linesCopy.indexWhere((stl) => stl.itemId == line.itemId);
+            if (lineIdx >= 0) {
+              final stl = linesCopy[lineIdx];
+              final op = double.tryParse(stl.openingQty) ?? 0.0;
+              var rec = double.tryParse(stl.receivedQty) ?? 0.0;
+              var used = double.tryParse(stl.usedQty) ?? 0.0;
+              final counted = double.tryParse(stl.countedQty) ?? 0.0;
+
+              if (isReceiptTarget) {
+                rec += qty;
+              }
+              if (isOutboundTarget) {
+                used += qty;
+              }
+
+              final theo = op + rec - used;
+              final recStr = rec == rec.roundToDouble() ? rec.toInt().toString() : rec.toStringAsFixed(1);
+              final usedStr = used == used.roundToDouble() ? used.toInt().toString() : used.toStringAsFixed(1);
+              final theoStr = theo == theo.roundToDouble() ? theo.toInt().toString() : theo.toStringAsFixed(1);
+              final varVal = counted - theo;
+              final varStr = varVal == varVal.roundToDouble() ? varVal.toInt().toString() : varVal.toStringAsFixed(1);
+              linesCopy[lineIdx] = StocktakeLineItem(
+                id: stl.id,
+                itemId: stl.itemId,
+                bookQty: theoStr,
+                countedQty: stl.countedQty,
+                variance: varStr,
+                openingQty: stl.openingQty,
+                receivedQty: recStr,
+                usedQty: usedStr,
+                theoreticalQty: theoStr,
+                reason: stl.reason,
+              );
+              _stocktakes[i] = StocktakeItem(
+                id: st.id,
+                locationId: st.locationId,
+                status: st.status,
+                note: st.note,
+                makerId: st.makerId,
+                createdAt: st.createdAt,
+                completedAt: st.completedAt,
+                lines: linesCopy,
+                shiftCode: st.shiftCode,
+                businessDate: st.businessDate,
+              );
+            }
+          }
+        }
+      }
+    }
     if (to == RequestStatus.pending) {
       _approvalStreamCtrl.add('new_request:$id:kho');
     } else {
@@ -992,6 +1169,11 @@ class FakeBankOpsRepository implements BankOpsRepository {
             ? (reason ?? r.returnReason)
             : r.returnReason,
         destinationLocationId: r.destinationLocationId,
+        supplier: r.supplier,
+        supplierName: r.supplierName,
+        invoiceNo: r.invoiceNo,
+        subKind: r.subKind,
+        receivedAt: r.receivedAt,
       );
 
   // ---- cash sim ----
@@ -1209,6 +1391,28 @@ class FakeBankOpsRepository implements BankOpsRepository {
           impact:
               '${r.kind == RequestKind.payment ? '-' : '+'}${r.amount} ${r.currency}',
           detail: r.reason.isEmpty ? r.id : r.reason,
+        ),
+      for (final s
+          in _stocktakes.where((x) => x.status == 'submitted'))
+        ApprovalItem(
+          id: s.id,
+          kind: 'stocktake',
+          maker: s.makerId == 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+              ? 'Nguyễn Thị Mai (Pha Chế)'
+              : s.makerId,
+          impact:
+              'Kiểm kê ca · ${s.lines.where((l) => (double.tryParse(l.variance) ?? 0).abs() > 0.001).length} món lệch',
+          detail: s.note?.isNotEmpty == true
+              ? s.note!
+              : 'Kiểm kê ca ngày ${s.businessDate ?? ""}',
+          approvalDetail: {
+            'kind': 'stocktake',
+            'shift_code': s.shiftCode ?? '',
+            'location_id': s.locationId,
+            'variance_count': s.lines
+                .where((l) => (double.tryParse(l.variance) ?? 0).abs() > 0.001)
+                .length,
+          },
         ),
     ];
     return _delay(items);

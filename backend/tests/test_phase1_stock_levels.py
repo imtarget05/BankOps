@@ -362,3 +362,225 @@ def test_adjustment_direction_migration_fits_alembic_version_column():
     revision = namespace["revision"]
     assert isinstance(revision, str)
     assert len(revision) <= 32
+
+
+def test_stocktake_submitted_appears_in_approval_inbox_and_can_be_rejected(client):
+    maker = _login(client, MAKER)
+    checker = _login(client, CHECKER)
+    item_id, _, loc_id, _ = _seed_loc_item(client, maker)
+
+    unique_date = (date(2040, 1, 1) + timedelta(days=uuid.uuid4().int % 50000)).isoformat()
+    opened = client.post(
+        "/inventory/stocktakes",
+        headers=_idem(maker),
+        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
+    )
+    assert opened.status_code == 201, opened.text
+    st_id = opened.json()["id"]
+
+    # Submit stocktake
+    sub = client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(maker))
+    assert sub.status_code == 200, sub.text
+
+    # Verify stocktake appears in approval inbox
+    inbox = client.get("/approvals/inbox", headers=checker)
+    assert inbox.status_code == 200, inbox.text
+    st_items = [i for i in inbox.json()["approvals"] if i["id"] == st_id]
+    assert len(st_items) == 1
+    assert st_items[0]["kind"] == "stocktake"
+
+    # Reject stocktake
+    rej = client.post(
+        f"/inventory/stocktakes/{st_id}/reject",
+        headers=_idem(checker),
+        json={"reason": "Cần đếm lại bột sữa"},
+    )
+    assert rej.status_code == 200, rej.text
+    assert rej.json()["status"] == "open"
+    assert "Cần đếm lại bột sữa" in (rej.json().get("note") or "")
+
+
+def test_inbound_receipt_approval_syncs_to_open_stocktake(client):
+    maker = _login(client, MAKER)
+    checker = _login(client, CHECKER)
+    item_id, _, loc_id, _ = _seed_loc_item(client, maker)
+
+    unique_date = (date(2036, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
+    opened = client.post(
+        "/inventory/stocktakes",
+        headers=_idem(maker),
+        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
+    )
+    assert opened.status_code == 201, opened.text
+    st_id = opened.json()["id"]
+
+    seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
+    target = next(l for l in seeded if l["item_id"] == item_id)
+    initial_received = float(target["received_qty"])
+    opening = float(target["opening_qty"])
+
+    # Create and approve an inbound receipt of 15 units
+    req = client.post(
+        "/inventory/requests",
+        headers=_idem(maker),
+        json={
+            "kind": "receipt",
+            "source_id": None,
+            "dest_id": loc_id,
+            "lines": [{"item_id": item_id, "quantity": "15"}],
+            "reason": "Nhập kho trà test",
+        },
+    )
+    assert req.status_code == 201, req.text
+    req_id = req.json()["id"]
+
+    # Submit request
+    client.post(f"/inventory/requests/{req_id}/submit", headers=_idem(maker))
+
+    # Approve request
+    appr = client.post(f"/inventory/requests/{req_id}/approve", headers=_idem(checker))
+    assert appr.status_code == 200, appr.text
+
+    # Verify open stocktake line received_qty was automatically updated
+    after = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
+    updated_line = next(l for l in after if l["item_id"] == item_id)
+    assert float(updated_line["received_qty"]) == initial_received + 15.0
+    # theoretical_qty = opening + received - used
+    expected_theo = opening + initial_received + 15.0 - float(updated_line["used_qty"])
+    assert abs(float(updated_line["theoretical_qty"]) - expected_theo) < 1e-4
+
+
+def test_inbound_receipt_double_approval_does_not_double_count_in_stocktake(client):
+    maker = _login(client, MAKER)
+    checker = _login(client, CHECKER)
+    item_id, _, loc_id, _ = _seed_loc_item(client, maker)
+
+    unique_date = (date(2037, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
+    opened = client.post(
+        "/inventory/stocktakes",
+        headers=_idem(maker),
+        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
+    )
+    assert opened.status_code == 201, opened.text
+    st_id = opened.json()["id"]
+
+    seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
+    target = next(l for l in seeded if l["item_id"] == item_id)
+    initial_received = float(target["received_qty"])
+
+    # Create inbound receipt
+    req = client.post(
+        "/inventory/requests",
+        headers=_idem(maker),
+        json={
+            "kind": "receipt",
+            "source_id": None,
+            "dest_id": loc_id,
+            "lines": [{"item_id": item_id, "quantity": "20"}],
+            "reason": "Test duplicate approval",
+        },
+    )
+    assert req.status_code == 201, req.text
+    req_id = req.json()["id"]
+    client.post(f"/inventory/requests/{req_id}/submit", headers=_idem(maker))
+
+    # Approve 1st time
+    first_idem = str(uuid.uuid4())
+    headers_first = {**checker, "Idempotency-Key": first_idem}
+    appr1 = client.post(f"/inventory/requests/{req_id}/approve", headers=headers_first)
+    assert appr1.status_code == 200, appr1.text
+
+    # Approve 2nd time with SAME idempotency key (replay cache)
+    appr_replay = client.post(f"/inventory/requests/{req_id}/approve", headers=headers_first)
+    assert appr_replay.status_code == 200
+
+    # Approve 2nd time with NEW idempotency key (conflict)
+    appr_conflict = client.post(f"/inventory/requests/{req_id}/approve", headers=_idem(checker))
+    assert appr_conflict.status_code == 409
+    assert appr_conflict.json()["error"]["code"] == "STATE_CONFLICT"
+
+    # Verify received_qty is strictly initial + 20 (not 40 or 60)
+    lines_after = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
+    line = next(l for l in lines_after if l["item_id"] == item_id)
+    assert float(line["received_qty"]) == initial_received + 20.0
+
+
+def test_stocktake_reject_only_valid_when_submitted(client):
+    maker = _login(client, MAKER)
+    checker = _login(client, CHECKER)
+    item_id, _, loc_id, _ = _seed_loc_item(client, maker)
+
+    unique_date = (date(2038, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
+    opened = client.post(
+        "/inventory/stocktakes",
+        headers=_idem(maker),
+        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
+    )
+    assert opened.status_code == 201, opened.text
+    st_id = opened.json()["id"]
+
+    # Reject while 'open' must fail with 409 STATE_CONFLICT
+    rej_open = client.post(
+        f"/inventory/stocktakes/{st_id}/reject",
+        headers=_idem(checker),
+        json={"reason": "Chưa nộp mà đã reject"},
+    )
+    assert rej_open.status_code == 409, rej_open.text
+    assert rej_open.json()["error"]["code"] == "STATE_CONFLICT"
+
+    # Submit stocktake
+    sub = client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(maker))
+    assert sub.status_code == 200, sub.text
+
+    # Approve stocktake to 'closed'
+    appr = client.post(f"/inventory/stocktakes/{st_id}/approve", headers=_idem(checker))
+    assert appr.status_code == 200, appr.text
+
+    # Reject while 'closed' must fail with 409 STATE_CONFLICT
+    rej_closed = client.post(
+        f"/inventory/stocktakes/{st_id}/reject",
+        headers=_idem(checker),
+        json={"reason": "Đã chốt xong không thể reject"},
+    )
+    assert rej_closed.status_code == 409, rej_closed.text
+    assert rej_closed.json()["error"]["code"] == "STATE_CONFLICT"
+
+
+def test_stocktake_reject_forbidden_for_shift_staff(client):
+    maker = _login(client, MAKER)
+    item_id, _, loc_id, _ = _seed_loc_item(client, maker)
+
+    unique_date = (date(2039, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
+    opened = client.post(
+        "/inventory/stocktakes",
+        headers=_idem(maker),
+        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
+    )
+    assert opened.status_code == 201, opened.text
+    st_id = opened.json()["id"]
+
+    # Submit stocktake
+    sub = client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(maker))
+    assert sub.status_code == 200, sub.text
+
+    # 1. Other staff (NOT maker, NO approval role) calls reject -> must be 403 FORBIDDEN
+    other_staff = _login(client, "staff_afternoon")
+    rej_other = client.post(
+        f"/inventory/stocktakes/{st_id}/reject",
+        headers=_idem(other_staff),
+        json={"reason": "Nhân viên khác gọi reject"},
+    )
+    assert rej_other.status_code == 403, rej_other.text
+    assert rej_other.json()["error"]["code"] == "FORBIDDEN"
+
+    # 2. Shift staff (maker) calls reject -> must be 403
+    rej_staff = client.post(
+        f"/inventory/stocktakes/{st_id}/reject",
+        headers=_idem(maker),
+        json={"reason": "Nhân viên tự reject"},
+    )
+    assert rej_staff.status_code == 403, rej_staff.text
+    error_code = rej_staff.json()["error"]["code"]
+    assert error_code in ("FORBIDDEN", "SELF_APPROVAL_FORBIDDEN")
+
+

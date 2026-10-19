@@ -353,16 +353,30 @@ class StockRequestLine {
     this.lineTotal,
     this.lotNo,
     this.expiryDate,
+    this.unit,
+    this.conversionRate,
+    this.itemName,
   });
 
   final String itemId;
   final String quantity;
-  // Receipt-only metadata: giá tạm tính / lô / hạn dùng để hiện trên phiếu
-  // nhập kho (SRS trà sữa). Backend không ép buộc các trường này.
   final String? unitPrice;
   final String? lineTotal;
   final String? lotNo;
   final String? expiryDate;
+  final String? unit;
+  final String? conversionRate;
+  final String? itemName;
+
+  double get totalAmount {
+    if (lineTotal != null && lineTotal!.isNotEmpty) {
+      final parsed = double.tryParse(lineTotal!);
+      if (parsed != null) return parsed;
+    }
+    final q = double.tryParse(quantity) ?? 0.0;
+    final p = double.tryParse(unitPrice ?? '') ?? 0.0;
+    return q * p;
+  }
 }
 
 /// Stock request.
@@ -384,6 +398,9 @@ class StockRequest {
     this.returnReason,
     this.destinationLocationId,
     this.supplier,
+    this.supplierName,
+    this.invoiceNo,
+    this.subKind,
     this.receivedAt,
   });
 
@@ -403,7 +420,30 @@ class StockRequest {
   final String? returnReason;
   final String? destinationLocationId;
   final String? supplier;
+  final String? supplierName;
+  final String? invoiceNo;
+  final String? subKind;
   final DateTime? receivedAt;
+
+  String? get effectiveSupplier => supplierName ?? supplier;
+
+  double get totalCost => items.fold(0.0, (sum, line) => sum + line.totalAmount);
+
+  bool get isMultiline => items.length > 1;
+
+  String get subKindLabel {
+    switch (subKind) {
+      case 'spoilage':
+        return 'Hủy / Hao hụt';
+      case 'internal':
+        return 'Dùng nội bộ';
+      case 'transfer':
+        return 'Chuyển kho';
+      case 'sale':
+      default:
+        return kind == RequestKind.receipt ? 'Nhập hàng' : 'Bán hàng';
+    }
+  }
 }
 
 /// Cash box.

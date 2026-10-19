@@ -53,7 +53,7 @@ def assess_request_heuristic(data: dict) -> dict:
             risk_level = 'low'
             risk_score = 20
             recommendations.append('Phiếu quỹ trong định mức.')
-    elif 'adjustment' in kind:
+    elif 'adjustment' in kind or 'stocktake' in kind:
         if value >= 10:
             risk_level = 'high'
             risk_score = 82

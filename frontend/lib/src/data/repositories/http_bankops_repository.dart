@@ -922,6 +922,15 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   @override
+  Future<StocktakeItem> rejectStocktake(String id, {String? reason}) async {
+    final res = await _post(
+      '/inventory/stocktakes/$id/reject',
+      {'reason': reason ?? 'Yêu cầu kiểm đếm lại'},
+    );
+    return _parseStocktake(res);
+  }
+
+  @override
   Future<List<StockRequest>> getStockRequests() async {
     final body = await _get('/inventory/requests');
     return _asList(body, 'requests')
@@ -936,6 +945,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? sourceLocationId,
     String? destLocationId,
     String? supplier,
+    String? supplierName,
+    String? invoiceNo,
+    String? subKind,
     required List<StockRequestLine> lines,
     String? reason,
   }) async {
@@ -943,6 +955,10 @@ class HttpBankOpsRepository implements BankOpsRepository {
     final payload = <String, dynamic>{
       'kind': serverKind,
       'reason': reason ?? '',
+      if (subKind != null && subKind.trim().isNotEmpty)
+        'sub_kind': subKind.trim(),
+      if (invoiceNo != null && invoiceNo.trim().isNotEmpty)
+        'invoice_no': invoiceNo.trim(),
       'lines': [
         for (final line in lines)
           {
@@ -955,18 +971,26 @@ class HttpBankOpsRepository implements BankOpsRepository {
               'lot_no': line.lotNo!.trim(),
             if (line.expiryDate != null && line.expiryDate!.trim().isNotEmpty)
               'expiry_date': line.expiryDate!.trim(),
+            if (line.unit != null && line.unit!.trim().isNotEmpty)
+              'unit': line.unit!.trim(),
+            if (line.conversionRate != null && line.conversionRate!.trim().isNotEmpty)
+              'conversion_rate': line.conversionRate!.trim(),
           }
       ],
     };
-    final trimmedSupplier = supplier?.trim();
-    if (serverKind == 'receipt' && trimmedSupplier != null &&
-        trimmedSupplier.isNotEmpty) {
-      payload['supplier'] = trimmedSupplier;
+    final effectiveSupplier = (supplierName ?? supplier)?.trim();
+    if (serverKind == 'receipt' && effectiveSupplier != null &&
+        effectiveSupplier.isNotEmpty) {
+      payload['supplier'] = effectiveSupplier;
+      payload['supplier_name'] = effectiveSupplier;
     }
     if (serverKind == 'receipt') {
       payload['dest_id'] = destLocationId ?? sourceLocationId;
     } else if (serverKind == 'issue') {
       payload['source_id'] = sourceLocationId ?? destLocationId;
+      if (subKind == 'transfer' && destLocationId != null) {
+        payload['dest_id'] = destLocationId;
+      }
     } else if (serverKind == 'transfer') {
       payload['source_id'] = sourceLocationId;
       payload['dest_id'] = destLocationId ?? sourceLocationId;
@@ -997,6 +1021,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
               lineTotal: l['line_total']?.toString(),
               lotNo: l['lot_no']?.toString(),
               expiryDate: l['expiry_date']?.toString(),
+              unit: l['unit']?.toString(),
+              conversionRate: l['conversion_rate']?.toString(),
+              itemName: l['item_name']?.toString() ?? l['name']?.toString(),
             ))
         .toList();
     final maker = _str(m, 'maker_id');
@@ -1021,6 +1048,9 @@ class HttpBankOpsRepository implements BankOpsRepository {
       returnReason: m['return_reason']?.toString(),
       destinationLocationId: destId,
       supplier: m['supplier']?.toString(),
+      supplierName: m['supplier_name']?.toString() ?? m['supplier']?.toString(),
+      invoiceNo: m['invoice_no']?.toString(),
+      subKind: m['sub_kind']?.toString(),
       receivedAt: m['received_at'] != null ? _date(m, 'received_at') : null,
     );
   }
