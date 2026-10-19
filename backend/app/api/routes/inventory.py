@@ -372,6 +372,15 @@ async def _resolve_item_id(db: AsyncSession, line: dict):
     raise AppError(422, "ITEM_NOT_FOUND", f"Không xác định được item từ {line!r}")
 
 
+async def _require_location_scope(
+    db: AsyncSession, user: User, location_id: uuid.UUID
+) -> None:
+    """Fail closed without confirming whether an out-of-scope location exists."""
+    allowed_location_ids = await get_accessible_location_ids(db, user)
+    if allowed_location_ids is not None and location_id not in allowed_location_ids:
+        raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho trong phạm vi được cấp.")
+
+
 def _validate_transition(req: InventoryRequest, kind: str, src, dst) -> None:
     """issue/transfer bắt buộc source; receipt/adjustment bắt buộc target."""
     if req.kind in ("issue", "transfer") and src is None:
@@ -995,6 +1004,9 @@ async def list_assets(
 
     limit = max(1, min(limit, 100))
     stmt = select(Asset).order_by(Asset.serial)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Asset.location_id.in_(allowed_location_ids))
     if serial:
         stmt = stmt.where(Asset.serial == serial)
     if location_id:
@@ -2310,6 +2322,7 @@ async def create_asset(
     )
     if location_id is None:
         raise AppError(422, "LOCATION_REQUIRED", "location_id là bắt buộc")
+    await _require_location_scope(db, user, location_id)
     dup = (
         await db.execute(select(Asset).where(Asset.serial == serial))
     ).scalar_one_or_none()
