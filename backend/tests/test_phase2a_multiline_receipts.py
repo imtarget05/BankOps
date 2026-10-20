@@ -3,6 +3,8 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
+from conftest import fetch_all_balances, open_shift
+
 DEMO_PASSWORD = "DemoPass123!"
 MAKER = "demo_maker"
 CHECKER = "demo_checker"
@@ -284,7 +286,7 @@ def test_unit_conversion_on_receipt_approval(client):
     assert appr.status_code == 200
 
     # Kiểm tra tồn kho tại kho đích tăng 40 gói
-    bals = client.get("/inventory/balances", headers=maker).json()["balances"]
+    bals = fetch_all_balances(client, maker)
     item_bal = next(b for b in bals if b["item_id"] == item_id and b["location_id"] == dest_loc)
     assert Decimal(str(item_bal["quantity"])) == Decimal("40.000")
 
@@ -302,14 +304,7 @@ def test_multiline_receipt_syncs_all_items_to_open_stocktake(client):
     item1 = items[0]["id"]
     item2 = items[1]["id"]
 
-    unique_date = (date(2045, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
-    open_shift = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": dest_loc, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert open_shift.status_code == 201, open_shift.text
-    st_id = open_shift.json()["id"]
+    _opened, st_id = open_shift(client, _idem(maker), dest_loc)
 
     lines_before = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
     line1_before = next(stocktake_line for stocktake_line in lines_before if stocktake_line["item_id"] == item1)

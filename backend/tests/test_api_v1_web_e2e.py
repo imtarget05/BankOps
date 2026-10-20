@@ -7,6 +7,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from conftest import fetch_all_balances
 
 DEMO_PASSWORD = "DemoPass123!"
 
@@ -35,9 +36,9 @@ def test_api_v1_maker_checker_web_flow(client):
     loc_id = locs[0]["id"]
     cashbox_id = boxes[0]["id"]
 
-    inv_bal_before = client.get(
-        "/api/v1/inventory/balances", headers=maker_headers
-    ).json()["balances"]
+    inv_bal_before = fetch_all_balances(
+        client, maker_headers, "/api/v1/inventory/balances"
+    )
     qty_before = sum(
         float(b["quantity"])
         for b in inv_bal_before
@@ -145,9 +146,9 @@ def test_api_v1_maker_checker_web_flow(client):
     assert app_cr.json()["status"] == "posted"
 
     # 6. Verify balances, journals, and reports updated
-    inv_bal_after = client.get(
-        "/api/v1/inventory/balances", headers=checker_headers
-    ).json()["balances"]
+    inv_bal_after = fetch_all_balances(
+        client, checker_headers, "/api/v1/inventory/balances"
+    )
     qty_after = sum(
         float(b["quantity"])
         for b in inv_bal_after
@@ -166,7 +167,9 @@ def test_api_v1_maker_checker_web_flow(client):
     assert amt_after == pytest.approx(amt_before + 300000.0)
 
     journals = client.get(
-        "/api/v1/cash-sim/journals", headers=checker_headers
+        "/api/v1/cash-sim/journals",
+        headers=checker_headers,
+        params={"request_id": cr_id},
     ).json()["journals"]
     assert any(j["request_id"] == cr_id and float(j["amount"]) == 300000.0 for j in journals)
 

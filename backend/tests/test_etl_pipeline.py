@@ -16,6 +16,8 @@ Verifies:
 import io
 import uuid
 
+from conftest import fetch_all_balances
+
 DEMO_PASSWORD = "DemoPass123!"
 
 
@@ -150,7 +152,7 @@ class TestEtlPipeline:
         loc_id = locs[0]["id"]
 
         # Check initial balance
-        bal_res = client.get("/inventory/balances", headers=admin).json()["balances"]
+        bal_res = fetch_all_balances(client, admin)
         init_bal_obj = next((b for b in bal_res if b["item_id"] == item["id"] and b["location_id"] == loc_id), None)
         initial_qty = float(init_bal_obj["quantity"]) if init_bal_obj else 0.0
 
@@ -204,7 +206,7 @@ class TestEtlPipeline:
         assert req_info["status"] == "approved"
 
         # Verify new balance updated correctly
-        updated_bals = client.get("/inventory/balances", headers=admin).json()["balances"]
+        updated_bals = fetch_all_balances(client, admin)
         new_bal_obj = next((b for b in updated_bals if b["item_id"] == item["id"] and b["location_id"] == loc_id), None)
         assert new_bal_obj is not None
         assert float(new_bal_obj["quantity"]) == target_qty
