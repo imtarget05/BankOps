@@ -1,4 +1,5 @@
 name: S9 — Cloud CI Kubernetes Verification
+run-name: "S9 Cloud CI Run #[{github.run_number}]"
 
 on:
   workflow_dispatch:
