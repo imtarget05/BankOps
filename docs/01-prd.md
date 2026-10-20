@@ -2,7 +2,9 @@
 
 > **Domain hiện tại (pilot 10/2026):** Ứng dụng quản lý Nhập–Xuất–Tồn cho quán trà sữa
 > theo [SRS_QUAN_LY_KHO_TRA_SUA.md](SRS_QUAN_LY_KHO_TRA_SUA.md). Module Quỹ/Tích hợp/Đối soát
-> (di sản core-banking) được **ẩn khỏi UI** nhưng giữ nguyên backend để rollback.
+> (thuật ngữ/luồng legacy từ giai đoạn BankOps) được **ẩn khỏi UI** nhưng giữ
+> nguyên backend để rollback. Chúng chỉ là financial-operations simulation,
+> không phải core-banking hay tích hợp ngân hàng.
 
 ## Mục tiêu
 
