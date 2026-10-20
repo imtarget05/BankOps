@@ -13,6 +13,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.venv311/
+.coverage
+.coverage.*
 uv.lock
 
 # Flutter
