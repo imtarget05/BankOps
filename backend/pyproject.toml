@@ -12,7 +12,14 @@ fastapi = "^0.115.0"
 uvicorn = { extras = ["standard"], version = "^0.30.0" }
 pydantic = "^2.9.0"
 alembic = "^1.13.0"
-sqlalchemy = "^2.0.35"
+# SQLAlchemy is capped below 2.1 on purpose. mlflow 2.x imports
+# `sqlalchemy.pool.FallbackAsyncAdaptedQueuePool` (mlflow/store/db/utils.py),
+# and that name was REMOVED in SQLAlchemy 2.1. With 2.1.x installed, every
+# test that touches mlflow dies at import time with
+# "ImportError: cannot import name 'FallbackAsyncAdaptedQueuePool' from
+# 'sqlalchemy.pool'". The caret range alone resolved to 2.1.4, so the cap has
+# to be explicit. 2.0.43 is the newest 2.0.x and still exports the symbol.
+sqlalchemy = ">=2.0.35,<2.1"
 psycopg2-binary = "^2.9.9"
 asyncpg = "^0.29.0"
 pydantic-settings = "^2.5.0"
