@@ -3,9 +3,9 @@
 # =============================================================================
 # Deployment, Service cho FastAPI inference model serving.
 # - Sử dụng Docker image đã build S9.1
-# - Health check endpoints
+# - Health check endpoints optimized for kind/GCB environments
 # - Resource requests/limits合理
-# - Probes configured for quick readiness
+# - Probe configs: startup → readiness → liveness theo trình tự
 # =============================================================================
 apiVersion: v1
 kind: Namespace
@@ -73,16 +73,17 @@ spec:
             requests:
               cpu: "250m"
               memory: "256Mi"
-          # Liveness probe - kiểm tra app còn chạy
+          # Liveness probe - kiểm tra app còn chạy (ít can thiệp vào rollout)
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds: 30
-            timeoutSeconds: 5
+            timeoutSeconds: 3
             failureThreshold: 3
           # Readiness probe - kiểm tra sẵn sàng phục vụ traffic
+          # Thiết kế: delay moderate, tolerance cao để tránh đánh đánh nhầm pod mới
           readinessProbe:
             httpGet:
               path: /health
@@ -90,15 +91,17 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 8
           # Startup probe - chờ app khởi động xong (tránh premature readiness)
+          # Cấu hình nhẹ: cho phép app khởi động trong 30s
           startupProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 12
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 15
           # Security context
           securityContext:
             runAsNonRoot: true
