@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.auth_utils import (
     authenticate_user,
+    client_ip,
     create_access_token,
     create_refresh_token,
     generate_password_reset_otp,
@@ -44,10 +45,20 @@ router = APIRouter()
 
 
 def _client_ip(request: Request) -> str:
-    """IP nguon ket noi (khong tin `X-Forwarded-For` de tranh gia mao)."""
-    client = getattr(request, "client", None)
-    host = getattr(client, "host", None) if client is not None else None
-    return (host or "unknown").strip().lower()
+    """IP client cho rate-limit login.
+
+    Dùng chung `auth_utils.client_ip` -> chính sách fail-closed đã được
+    kiểm chứng bằng test:
+      - KHÔNG cấu hình `TRUSTED_PROXY_IPS` / `TRUSTED_PROXY_COUNT` thì **không
+        tin** `X-Forwarded-For` -> lấy IP peer (client tự gửi header để giả
+        mạo IP không đổi được kết quả).
+      - Có cấu hình proxy đáng tin thì mới đọc `X-Forwarded-For` theo
+        chuỗi/CIDR; chuỗi không đủ hop -> fail-closed, giữ IP peer.
+
+    `auth_utils.client_ip` là nguồn DUY NHẤT của chính sách này — không
+    được nhân bản logic đọc `X-Forwarded-For` ở nhiều nơi.
+    """
+    return client_ip(request)
 
 
 async def _audit_rate_limited(db: AsyncSession, username: str, client_ip: str) -> None:
@@ -103,10 +114,10 @@ async def login(
     # Rate limit login (docs/08: chặn brute force). S11: khoá theo
     # `username + IP` để attacker không khoá được tài khoản của người khác
     # (DoS) bằng cách đoán sai mật khẩu 5 lần.
-    client_ip = _client_ip(request)
-    if login_rate_limited(username, client_ip):
-        await _audit_rate_limited(db, username, client_ip)
-        retry_after = login_retry_after_seconds(username, client_ip)
+    client_ip_value = _client_ip(request)
+    if login_rate_limited(username, client_ip_value):
+        await _audit_rate_limited(db, username, client_ip_value)
+        retry_after = login_retry_after_seconds(username, client_ip_value)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed login attempts, try again later.",
@@ -115,14 +126,14 @@ async def login(
 
     user = await authenticate_user(db, username, password)
     if not user:
-        record_login_failure(username, client_ip)
+        record_login_failure(username, client_ip_value)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    reset_login_failures(username, client_ip)
+    reset_login_failures(username, client_ip_value)
     roles = await get_user_roles(db, user.id)
     capabilities = await get_user_capabilities(db, user.id)
 
