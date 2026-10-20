@@ -135,11 +135,7 @@ spec:
       # Volumes - model artifact được volume từ persistent claim hoặc pre-seeded
       volumes:
         - name: model-artifact
-          persistentVolumeClaim:
-            claimName: model-artifacts-pvc
-        # Fallback: emptyDir nếu PVC không được provision
-        # - name: model-artifact
-        #   emptyDir: {}
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -157,6 +153,12 @@ spec:
       protocol: TCP
       port: 80
       targetPort: 8000
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mlflow-reader
+  namespace: ml-serving
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
