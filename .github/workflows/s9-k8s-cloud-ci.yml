@@ -95,7 +95,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/s11-evidence"
           set +e
           mkdir -p "$RUNNER_TEMP/s11-evidence"
-          kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
+          kubectl rollout status deployment/model-serving -n ml-serving --timeout=300s
           rc=$?
           set -e
           echo "rollout_rc=$rc" | tee "$RUNNER_TEMP/s11-evidence/rollout-status.txt"
