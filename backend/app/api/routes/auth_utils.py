@@ -1,6 +1,7 @@
 """Auth utilities and token management."""
 
 import hashlib
+import ipaddress
 import logging
 import os
 import time
@@ -85,6 +86,130 @@ def purge_expired_revocations() -> None:
     now = time.time()
     for key in [k for k, exp in _revoked_token_hashes.items() if exp < now]:
         del _revoked_token_hashes[key]
+
+
+# --------------------------------------------------------------------------
+# Client IP resolution (reverse proxy) — an toàn, fail-closed
+# --------------------------------------------------------------------------
+# Sau nginx / Cloudflare / Traefik, mọi request đều đến từ IP của proxy ->
+# nếu lấy `request.client.host` thì MỌI user bị gộp cùng một IP và khoá
+# rate-limit theo IP trở nên vô hiệu (hoặc oan).
+#
+# Nhưng đọc `X-Forwarded-For` một cách mù quáng lại cho phép client giả mạo
+# IP để né rate-limit. Vì vậy:
+#   - MẶC ĐỊNH: KHÔNG tin header nào -> dùng IP peer thật (fail-closed).
+#   - Chỉ khi deploy cấu hình proxy đáng tin mới đọc `X-Forwarded-For`:
+#       * `TRUSTED_PROXY_IPS`  : danh sách IP/CIDR của proxy (peer phải nằm
+#                                trong danh sách mới được tin).
+#       * `TRUSTED_PROXY_COUNT`: số proxy đáng tin trong chuỗi (tính cả proxy
+#                                trực tiếp kết nối vào app) -> IP client là
+#                                entry thứ `len(hops) - count` của XFF.
+#   - Ngoài ra uvicorn có `--forwarded-allow-ips` (cấu hình ở `entrypoint.sh`
+#     qua env `FORWARDED_ALLOW_IPS`): khi bật, uvicorn tự sửa `scope["client"]`
+#     -> `request.client.host` đã là IP client thật, không cần header nào.
+_TRUSTED_PROXY_IPS_ENV = "TRUSTED_PROXY_IPS"
+_TRUSTED_PROXY_COUNT_ENV = "TRUSTED_PROXY_COUNT"
+
+
+def _peer_ip(request: Request | None) -> str:
+    """IP thật của kết nối TCP (không qua header nào)."""
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client is not None else None
+    return (host or "unknown").strip().lower()
+
+
+def _trusted_proxy_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """Parse `TRUSTED_PROXY_IPS` (danh sách IP/CIDR, phân tách bằng dấu phẩy)."""
+    raw = (os.environ.get(_TRUSTED_PROXY_IPS_ENV) or "").strip()
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for chunk in raw.split(","):
+        item = chunk.strip()
+        if not item:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            logger.warning(
+                "Bỏ qua %s không hợp lệ trong %s", item, _TRUSTED_PROXY_IPS_ENV
+            )
+    return networks
+
+
+def _trusted_proxy_count() -> int:
+    """Số proxy đáng tin trong chuỗi (>= 0)."""
+    raw = (os.environ.get(_TRUSTED_PROXY_COUNT_ENV) or "").strip()
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("%s không phải số nguyên: %r", _TRUSTED_PROXY_COUNT_ENV, raw)
+        return 0
+
+
+def _ip_in_networks(ip: str, networks: list) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for network in networks:
+        try:
+            if addr in network:
+                return True
+        except TypeError:  # khác họ IPv4/IPv6 -> không trùng
+            continue
+    return False
+
+
+def _forwarded_hops(request: Request | None) -> list[str]:
+    """Các hop trong `X-Forwarded-For` (client đứng đầu, proxy gần nhất cuối)."""
+    raw = (request.headers.get("x-forwarded-for") or "") if request is not None else ""
+    return [hop.strip().lower() for hop in raw.split(",") if hop.strip()]
+
+
+def client_ip(request: Request | None) -> str:
+    """IP client thật, an toàn (fail-closed).
+
+    - Không cấu hình proxy đáng tin -> trả IP peer, **bỏ qua** `X-Forwarded-For`
+      (client tự gửi header để giả mạo IP sẽ không đổi được kết quả).
+    - `TRUSTED_PROXY_IPS` -> chỉ tin XFF khi IP peer nằm trong danh sách; IP
+      lấy là hop gần nhất KHÔNG thuộc danh sách proxy.
+    - `TRUSTED_PROXY_COUNT` -> chỉ tin XFF khi peer là proxy đáng tin; IP lấy
+      là hop thứ `len(hops) - count` (số proxy tính cả peer).
+
+    Ghi chú tích hợp: `auth.py::_client_ip` (nơi tính IP cho rate-limit login)
+    nên gọi hàm này. Hiện tại `auth.py` nằm ngoài phạm vi sửa của bước này,
+    nên IP client thật được lấy ở TẦNG SERVER: `entrypoint.sh` truyền
+    `--forwarded-allow-ips` cho uvicorn -> uvicorn tự sửa `scope["client"]`
+    thành IP client thật, nên `request.client.host` đã đúng mà không cần tin
+    header nào ở tầng app.
+    """
+    peer = _peer_ip(request)
+    networks = _trusted_proxy_networks()
+    count = _trusted_proxy_count()
+    if not networks and count <= 0:
+        # Không cấu hình -> KHÔNG tin header nào.
+        return peer
+
+    hops = _forwarded_hops(request)
+    if not hops:
+        return peer
+
+    if count > 0:
+        # Số proxy đáng tin = count (tính cả peer). Chuỗi XFF phải đủ hop thì
+        # mới xác định được IP client; không đủ -> giữ IP peer (fail-closed).
+        if len(hops) < count:
+            return peer
+        return hops[len(hops) - count]
+
+    # Danh sách IP proxy: peer phải là proxy đáng tin, và ta lấy hop gần nhất
+    # KHÔNG phải proxy (tức là IP client thật).
+    if not _ip_in_networks(peer, networks):
+        return peer
+    for hop in reversed(hops):
+        if not _ip_in_networks(hop, networks):
+            return hop
+    return hops[-1]
 
 
 # --- Login rate limiting (docs/08: 5 lần / 15 phút, khóa tạm khi brute force) ---

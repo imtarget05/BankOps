@@ -11,9 +11,18 @@ from app.config import Settings
 
 
 class TestSettingsDefaults:
-    def test_default_app_env_is_demo(self):
+    def test_default_app_env_is_production(self, monkeypatch):
+        """Mặc định FAIL-CLOSED: không set `APP_ENV` -> `production` (không phải demo).
+
+        STEP 5: mặc định `demo` khiến app chạy với secret JWT ephemeral (token
+        hết hạn sau mỗi lần restart) và `assert_runtime_secrets()` không
+        kích hoạt. Muốn chạy demo thì phải set tường minh `APP_ENV=demo`.
+        """
+        # Bộ test chạy với `APP_ENV=demo` (xem `backend/conftest.py`) -> gỡ để
+        # kiểm tra đúng GIÁ TRỊ MẶC ĐỊNH của `Settings`.
+        monkeypatch.delenv("APP_ENV", raising=False)
         s = Settings()
-        assert s.app_env == "demo"
+        assert s.app_env == "production"
 
     def test_default_server_host_port(self):
         s = Settings()

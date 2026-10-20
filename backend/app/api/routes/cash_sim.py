@@ -19,7 +19,9 @@ from app.api.routes.auth_utils import (
 )
 from app.config import settings
 from app.database import get_db
-from app.models import schema_parity as _schema_parity  # noqa: F401 - map cash_boxes.branch_id
+from app.models import (
+    schema_parity as _schema_parity,  # noqa: F401 - map cash_boxes.branch_id
+)
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.cash_sim import (
     CashBalance,
@@ -57,6 +59,17 @@ _CASHBOX_CAPS = ("cash:manage_box",)
 _ADJUSTMENT_CAPS = ("cash:post_adjustment",)
 # Kind của phiếu quỹ là bút toán điều chỉnh tài chính (không phải thu/chi thường).
 _ADJUSTMENT_KINDS = ("adjustment",)
+# Bút toán điều chỉnh theo chiều TĂNG quỹ (dòng tiền VÀO). Tách riêng khỏi
+# `receipt` vì `receipt` là nghiệp vụ thu tiền thường của cashier (nạp quỹ),
+# còn `adjustment_in` là **bút toán điều chỉnh số dư** -> bắt buộc có
+# `cash:post_adjustment` ngay từ lúc tạo phiếu.
+_ADJUSTMENT_IN_KINDS = ("adjustment_in",)
+# Các kind làm SỐ DƯ QUỸ **TĂNG** khi được post. Mọi chiều tăng đều là bút toán
+# tài chính -> người thực hiện phải có `cash:post_adjustment` (D2).
+_MONEY_IN_KINDS = ("receipt",) + _ADJUSTMENT_IN_KINDS
+# Mọi kind là bút toán điều chỉnh tài chính (cả 2 chiều) -> cần
+# `cash:post_adjustment` để TẠO phiếu.
+_FINANCIAL_ADJUSTMENT_KINDS = _ADJUSTMENT_KINDS + _ADJUSTMENT_IN_KINDS
 
 # Field client gửi lên để "ghi tay" số dư quỹ. Số dư chỉ được đổi qua
 # journal (phiếu thu/chi/đảo), không ghi trực tiếp từ input client.
@@ -127,6 +140,16 @@ async def _user_capabilities(db: AsyncSession, user_id: str) -> set[str]:
         )
     ).scalars().all()
     return set(rows) if rows else set()
+
+
+def _is_money_in_kind(kind: Any) -> bool:
+    """True nếu `kind` làm SỐ DƯ QUỸ TĂNG khi được post.
+
+    `receipt` (thu tiền) và `adjustment_in` (bút toán điều chỉnh tăng quỹ) là
+    hai chiều TIỀN VÀO két -> đều là bút toán tài chính, phải có
+    `cash:post_adjustment` (xem `_ADJUSTMENT_CAPS`).
+    """
+    return str(kind).strip().lower() in _MONEY_IN_KINDS
 
 
 def _check_if_match(request: Request, expected_version: int) -> None:
@@ -612,7 +635,11 @@ async def create_cash_request(
         raise AppError(403, "FORBIDDEN", "Bạn không có quyền tạo phiếu quỹ.")
 
     kind = str(payload.get("kind", "payment")).strip().lower()
-    if kind in _ADJUSTMENT_KINDS and not any(c in caps for c in _ADJUSTMENT_CAPS):
+    # Bút toán điều chỉnh tài chính (cả chiều RA `adjustment` lẫn chiều VÀO
+    # `adjustment_in`) -> bắt buộc có `cash:post_adjustment` để TẠO phiếu.
+    if kind in _FINANCIAL_ADJUSTMENT_KINDS and not any(
+        c in caps for c in _ADJUSTMENT_CAPS
+    ):
         raise AppError(
             403,
             "FORBIDDEN",
@@ -734,6 +761,7 @@ async def approve_cash_request(
     caps = await _user_capabilities(db, user.id)
     if "cash:approve_request" not in caps:
         raise AppError(403, "FORBIDDEN", "Bạn không có quyền duyệt phiếu quỹ.")
+    # Bút toán điều chỉnh tài chính (chiều RA) -> cần `cash:post_adjustment`.
     if str(req.kind) in _ADJUSTMENT_KINDS and not any(
         c in caps for c in _ADJUSTMENT_CAPS
     ):
@@ -741,6 +769,18 @@ async def approve_cash_request(
             403,
             "FORBIDDEN",
             "Bạn không có quyền duyệt bút toán điều chỉnh tài chính "
+            f"({', '.join(_ADJUSTMENT_CAPS)}).",
+        )
+    # Chiều TĂNG quỹ (`receipt` / `adjustment_in`) cũng là bút toán tài chính:
+    # người DUYỆT là người làm số dư tăng -> phải có `cash:post_adjustment`.
+    # Không có quyền này thì user chỉ có `cash:create_request` /
+    # `cash:approve_request` vẫn có thể làm số dư quỹ TĂNG -> lỗ hổng phân
+    # quyền chiều tăng (D2).
+    if _is_money_in_kind(req.kind) and not any(c in caps for c in _ADJUSTMENT_CAPS):
+        raise AppError(
+            403,
+            "FORBIDDEN",
+            "Duyệt phiếu làm TĂNG số dư quỹ cần quyền ghi bút toán tài chính "
             f"({', '.join(_ADJUSTMENT_CAPS)}).",
         )
     if req.status != "submitted":
@@ -755,8 +795,11 @@ async def approve_cash_request(
         raise AppError(404, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
     amount = Decimal(str(req.amount))
     is_receipt = req.kind == "receipt"
+    # Chiều TĂNG quỹ = tiền VÀO két (`receipt`, `adjustment_in`); chiều còn
+    # lại = tiền RA két (`payment`, `adjustment`).
+    money_in = is_receipt or _is_money_in_kind(req.kind)
     # Chi (payment/adjustment) mới cần quỹ đủ; thu (receipt) là tiền VÀO quỹ.
-    if not is_receipt and Decimal(str(box.amount)) < amount:
+    if not money_in and Decimal(str(box.amount)) < amount:
         raise AppError(
             409, "INSUFFICIENT_SIM_CASH", "quỹ trong box không đủ để hoàn tất",
             {"current_amount": str(box.amount), "requested": str(amount)},
@@ -792,7 +835,7 @@ async def approve_cash_request(
     db.add(journal)
     await db.flush()
 
-    if is_receipt:
+    if money_in:
         # Thu: debit SIM_CASH (quỹ tăng), credit SIM_OFFSET (nguồn đối ứng).
         debit = _cash_entry(journal.id, f"{_SIM_CASH_PREFIX}{req.cashbox_id}", amount, _ZERO)
         credit = _cash_entry(journal.id, _SIM_OFFSET, _ZERO, amount)
@@ -804,7 +847,11 @@ async def approve_cash_request(
     db.add(debit)
     db.add(credit)
 
-    box.amount = Decimal(str(box.amount)) + amount if is_receipt else Decimal(str(box.amount)) - amount
+    box.amount = (
+        Decimal(str(box.amount)) + amount
+        if money_in
+        else Decimal(str(box.amount)) - amount
+    )
     box.version += 1
     req.status = "posted"
     req.version += 1
@@ -951,6 +998,16 @@ async def reverse_cash_request(
             "Bạn không có quyền đảo bút toán điều chỉnh tài chính "
             f"({', '.join(_ADJUSTMENT_CAPS)}).",
         )
+    # Đảo phiếu làm TĂNG quỹ (gốc là phiếu chi `payment`/`adjustment`) ->
+    # người đảo là người làm số dư tăng -> cần `cash:post_adjustment`.
+    original_money_in = _is_money_in_kind(req.kind)
+    if not original_money_in and not any(c in caps for c in _ADJUSTMENT_CAPS):
+        raise AppError(
+            403,
+            "FORBIDDEN",
+            "Đảo phiếu làm TĂNG số dư quỹ cần quyền ghi bút toán tài chính "
+            f"({', '.join(_ADJUSTMENT_CAPS)}).",
+        )
     if req.status != "posted":
         raise AppError(409, "STATE_CONFLICT", f"Không thể đảo giao dịch khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
@@ -965,8 +1022,9 @@ async def reverse_cash_request(
     if box is None:
         raise AppError(404, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
     amount = Decimal(str(req.amount))
-    is_receipt = req.kind == "receipt"
-    if is_receipt and Decimal(str(box.amount)) < amount:
+    # Đảo phiếu gốc làm TĂNG quỹ (`receipt`, `adjustment_in`) -> đảo lại làm
+    # GIẢM quỹ (cần đủ tiền trong két). Ngược lại, đảo phiếu chi làm TĂNG quỹ.
+    if original_money_in and Decimal(str(box.amount)) < amount:
         raise AppError(409, "INSUFFICIENT_SIM_CASH", "Quỹ không đủ để đảo bút toán thu.")
 
     now = _now()
@@ -996,7 +1054,7 @@ async def reverse_cash_request(
     db.add(rev_j)
     await db.flush()
 
-    if is_receipt:
+    if original_money_in:
         # Đảo phiếu thu: debit SIM_OFFSET, credit SIM_CASH (quỹ giảm lại).
         debit = _cash_entry(rev_j.id, _SIM_OFFSET, amount, _ZERO)
         credit = _cash_entry(rev_j.id, f"{_SIM_CASH_PREFIX}{req.cashbox_id}", _ZERO, amount)

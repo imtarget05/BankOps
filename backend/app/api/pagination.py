@@ -123,7 +123,7 @@ def _keyset_clause(columns: Sequence[Any], values: Sequence[Any], descending: Se
 def _json_scalar(value: Any) -> Any:
     if value is None:
         return None
-    if isinstance(value, (str, int, float, bool)):
+    if isinstance(value, str | int | float | bool):
         return value
     if hasattr(value, "isoformat"):
         return value.isoformat()

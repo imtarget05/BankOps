@@ -1,6 +1,7 @@
 """Application configuration."""
 import os
 import secrets
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -43,7 +44,12 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 
 class Settings(BaseSettings):
-    app_env: str = Field(default="demo")
+    # Mặc định FAIL-CLOSED: không set `APP_ENV` => coi như môi trường thật
+    # (`production`), KHÔNG phải demo. Trước đây mặc định là `demo` -> app
+    # khởi động với `session_secret`/`signing_key` ephemeral (token hết hạn sau
+    # mỗi lần restart) và `assert_runtime_secrets()` không bao giờ kích hoạt.
+    # Muốn chạy demo thì phải nói rõ: `APP_ENV=demo` (+ `DEMO_MODE=true`).
+    app_env: str = Field(default="production")
     app_name: str = Field(default="kho-tra-sua-api")
 
     # Demo mode là **opt-in tường minh**: mặc định TẮT (an toàn).
@@ -283,5 +289,23 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-# Fail fast: môi trường non-demo thiếu BANKOPS_SIGNING_KEY -> không khởi động.
-settings.assert_runtime_secrets()
+
+
+def _is_api_server_process() -> bool:
+    """True nếu process hiện tại là API server (uvicorn/gunicorn/hypercorn).
+
+    Công cụ CLI (`alembic`, script bảo trì) không ký token nên không cần secret
+    JWT -> không được chặn vì thiếu `BANKOPS_SIGNING_KEY`. Server thì phải
+    fail-fast: không có secret thì KHÔNG được khởi động (xem
+    `assert_runtime_secrets`).
+    """
+    argv0 = Path(sys.argv[0]).name if sys.argv else ""
+    if argv0.startswith(("uvicorn", "gunicorn", "hypercorn")):
+        return True
+    # `uvicorn app.main:app` -> target ASGI nằm ở argv[1..]
+    return any("app.main:app" in arg for arg in sys.argv[1:])
+
+
+# Fail fast: server non-demo thiếu BANKOPS_SIGNING_KEY -> không khởi động.
+if _is_api_server_process():
+    settings.assert_runtime_secrets()

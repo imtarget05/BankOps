@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 import pytest
+
 from conftest import BACKEND_DIR, REPO_DIR
 
 ROUTES_DIR = BACKEND_DIR / "app" / "api" / "routes"
