@@ -1,5 +1,6 @@
 """Quản Lý Kho Trà Sữa API Application."""
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -11,7 +12,9 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.errors import register_error_handlers
 from app.api.middleware.correlation import CorrelationIdMiddleware
+from app.api.observability import configure_metrics
 from app.api.openapi import custom_openapi
+from app.api.request_context import correlation_id_var, request_id_var
 from app.api.routes import (
     activity,
     admin_users,
@@ -29,19 +32,33 @@ from app.api.routes import (
     reconciliations,
     reports,
 )
+from app.api.structured_logging import configure_json_logging
+from app.api.telemetry import (
+    create_tracer_provider,
+    instrument_fastapi,
+    instrument_sqlalchemy,
+)
 from app.config import settings
 from app.database import init_db
 
 PUBLIC_WEB_ORIGIN = "https://quan-ly-kho-tra-sua.tanmainguyenbinh.workers.dev"
 
 logger = logging.getLogger("bankops.api")
+tracer_provider = create_tracer_provider()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize database on startup (lifespan thay on_event deprecated)."""
+    configure_json_logging()
     await init_db()
-    yield
+    from app.database import engine
+
+    instrument_sqlalchemy(engine, tracer_provider=tracer_provider)
+    try:
+        yield
+    finally:
+        tracer_provider.shutdown()
 
 
 app = FastAPI(
@@ -53,6 +70,7 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+configure_metrics(app)
 
 @app.get("/", include_in_schema=False)
 async def root_status():
@@ -95,6 +113,7 @@ app.add_middleware(
     expose_headers=["X-Request-ID", "X-Correlation-ID"],
 )
 app.add_middleware(CorrelationIdMiddleware)
+instrument_fastapi(app, tracer_provider=tracer_provider)
 
 # --- Error envelope docs/06:44 -----------------------------------------------
 _ERROR_CODES = {
@@ -120,17 +139,48 @@ def _request_id(request: Request) -> str:
 async def request_id_mw(request: Request, call_next):
     """docs/06:3 — propagate/generate X-Request-ID, envelope HTTP errors."""
     rid = request.headers.get("x-request-id") or uuid.uuid4().hex
+    correlation_id = request.headers.get("x-correlation-id") or rid
     request.state.request_id = rid
+    request_token = request_id_var.set(rid)
+    correlation_token = correlation_id_var.set(correlation_id)
+    request.scope["headers"] = [
+        (key, value)
+        for key, value in request.scope.get("headers", [])
+        if key.lower() not in (b"x-request-id", b"x-correlation-id")
+    ] + [
+        (b"x-request-id", rid.encode("utf-8")),
+        (b"x-correlation-id", correlation_id.encode("utf-8")),
+    ]
+    started = time.perf_counter()
+    status_code = 500
     try:
         resp = await call_next(request)
+        status_code = resp.status_code
     except HTTPException as e:
         code, message = _http_error_code_and_message(e)
-        return JSONResponse(
+        resp = JSONResponse(
             status_code=e.status_code,
             content={"error": {"code": code, "message": message, "request_id": rid, "details": {}}},
             headers={"X-Request-ID": rid},
         )
+        status_code = e.status_code
+    finally:
+        route = request.scope.get("route")
+        route_template = getattr(route, "path", "unmatched")
+        logging.getLogger("bankops.http").info(
+            "http_request",
+            extra={
+                "http_method": request.method,
+                "http_route": route_template,
+                "http_status_class": f"{status_code // 100}xx",
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            },
+        )
+        request_id_var.reset(request_token)
+        correlation_id_var.reset(correlation_token)
+
     resp.headers["X-Request-ID"] = rid
+    resp.headers["X-Correlation-ID"] = correlation_id
     return resp
 
 

@@ -14,6 +14,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from opentelemetry import metrics, trace
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +31,19 @@ LEASE_SECONDS = int(os.environ.get("WORKER_LEASE_SECONDS", "60"))
 MAX_RETRY = int(os.environ.get("WORKER_MAX_RETRY", "5"))
 WORKER_ID = os.environ.get("WORKER_ID", socket.gethostname())
 OUTBOX_BATCH_SIZE = 50
+_worker_meter = metrics.get_meter("bankops.worker")
+_worker_poll_results = _worker_meter.create_counter(
+    "bankops_worker_polls_total",
+    description="Worker poll loop outcomes.",
+)
+_worker_job_results = _worker_meter.create_counter(
+    "bankops_worker_jobs_total",
+    description="Leased background job outcomes.",
+)
+_worker_outbox_dispatched = _worker_meter.create_counter(
+    "bankops_worker_outbox_dispatched_total",
+    description="Outbox events materialized by the worker.",
+)
 
 
 def _utcnow() -> datetime:
@@ -387,25 +402,49 @@ async def poll_once(session: AsyncSession) -> dict[str, str | int | None]:
     """Claim and run one job, then publish a bounded outbox batch."""
     job = await claim_job(session)
     if job is not None:
-        await run_job_with_retry(session, job)
+        succeeded = await run_job_with_retry(session, job)
+        _worker_job_results.add(1, {"outcome": "succeeded" if succeeded else "retryable_failure"})
+        _worker_poll_results.add(1, {"outcome": "job_claimed"})
+    else:
+        _worker_poll_results.add(1, {"outcome": "idle"})
     dispatched = await dispatch_outbox(session)
+    if dispatched:
+        _worker_outbox_dispatched.add(dispatched)
     return {"job_id": str(job.id) if job is not None else None, "dispatched": dispatched}
 
 
 async def process_jobs() -> None:
     """Run the polling loop in a dedicated process sharing the FastAPI package."""
-    from app.database import AsyncSessionLocal
+    from app.api.structured_logging import configure_json_logging
+    from app.api.telemetry import (
+        create_meter_provider,
+        create_tracer_provider,
+        instrument_sqlalchemy,
+    )
+    from app.database import AsyncSessionLocal, engine
 
+    configure_json_logging()
+    tracer_provider = create_tracer_provider(service_name="bankops-worker")
+    trace.set_tracer_provider(tracer_provider)
+    instrument_sqlalchemy(engine, tracer_provider=tracer_provider)
+    LoggingInstrumentor().instrument(tracer_provider=tracer_provider, set_logging_format=False)
+    meter_provider = create_meter_provider(service_name="bankops-worker")
+    metrics.set_meter_provider(meter_provider)
     logger.info("Worker %s started", WORKER_ID)
-    while True:
-        try:
-            async with AsyncSessionLocal() as session:
-                outcome = await poll_once(session)
-                if outcome["job_id"] or outcome["dispatched"]:
-                    logger.info("Worker heartbeat job=%s outbox=%s", outcome["job_id"], outcome["dispatched"])
-        except Exception as error:
-            logger.warning("Worker poll failed; retrying later: %s", error)
-        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+    try:
+        while True:
+            try:
+                async with AsyncSessionLocal() as session:
+                    outcome = await poll_once(session)
+                    if outcome["job_id"] or outcome["dispatched"]:
+                        logger.info("Worker heartbeat job=%s outbox=%s", outcome["job_id"], outcome["dispatched"])
+            except Exception as error:
+                _worker_poll_results.add(1, {"outcome": "error"})
+                logger.warning("Worker poll failed; retrying later: %s", error)
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+    finally:
+        meter_provider.shutdown()
+        tracer_provider.shutdown()
 
 
 def main() -> None:

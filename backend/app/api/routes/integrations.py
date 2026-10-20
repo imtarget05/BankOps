@@ -19,6 +19,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
+from app.api.observability import record_external_dependency
+from app.api.pagination import (
+    KeysetSpec,
+    apply_keyset,
+    build_cursor_payload,
+    clamp_limit,
+    coerce_timestamp,
+    decode_cursor,
+    encode_cursor,
+)
 from app.api.routes.auth_utils import require_any_capability
 from app.config import settings
 from app.database import get_db
@@ -795,6 +805,7 @@ async def fetch_sheet(
         raise AppError(422, "INVALID_SHEET_ID", "sheet_id không hợp lệ")
     api_key = getattr(settings, "google_sheets_api_key", "") or ""
     if not api_key:
+        record_external_dependency("google_sheets", "configuration_error")
         raise AppError(
             503,
             "SHEETS_UNAVAILABLE",
@@ -808,15 +819,19 @@ async def fetch_sheet(
                 url, params={"key": api_key, "majorDimension": "ROWS"}
             )
     except httpx.HTTPError as e:
+        record_external_dependency("google_sheets", "unavailable")
         raise AppError(
             503, "SHEETS_UNAVAILABLE", f"Google Sheets không phản hồi: {e}"
         ) from None
     if resp.status_code >= 400:
+        outcome = "rate_limited" if resp.status_code == 429 else "http_error"
+        record_external_dependency("google_sheets", outcome)
         raise AppError(
             503,
             "SHEETS_UNAVAILABLE",
             f"Sheets API {resp.status_code}: {resp.text[:200]}",
         )
+    record_external_dependency("google_sheets", "success")
     values = resp.json().get("values", [])
     if not values:
         return {
@@ -975,13 +990,22 @@ async def list_runs(
     limit: int = 50,
     cursor: str | None = None,
 ):
-    limit = max(1, min(limit, 100))
+    limit = clamp_limit(limit)
+    spec = KeysetSpec(
+        columns=(IntegrationRun.created_at, IntegrationRun.id),
+        descending=(True, False),
+        keys=("created_at", "id"),
+        attrs=("created_at", "id"),
+        coerce=(coerce_timestamp, lambda raw: uuid.UUID(str(raw))),
+    )
+    stmt = select(IntegrationRun).order_by(
+        IntegrationRun.created_at.desc(), IntegrationRun.id
+    )
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
     runs = (
         (
             await db.execute(
-                select(IntegrationRun)
-                .order_by(IntegrationRun.created_at.desc())
-                .limit(limit + 1)
+                stmt.limit(limit + 1)
             )
         )
         .scalars()
@@ -989,9 +1013,7 @@ async def list_runs(
     )
     page, next_cursor = runs[:limit], None
     if len(runs) > limit:
-        import base64
-
-        next_cursor = base64.urlsafe_b64encode(str(page[-1].id).encode()).decode()
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
     return {
         "runs": [
             {

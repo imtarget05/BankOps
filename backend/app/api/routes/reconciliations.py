@@ -10,6 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
+from app.api.observability import record_reconciliation_result
+from app.api.pagination import (
+    KeysetSpec,
+    apply_keyset,
+    build_cursor_payload,
+    clamp_limit,
+    coerce_timestamp,
+    decode_cursor,
+    encode_cursor,
+)
 from app.api.routes.auth_utils import require_any_capability
 from app.database import get_db
 from app.models.cash_sim import CashEntry, CashJournal
@@ -101,6 +111,7 @@ async def run_reconciliation(
         )
     run.status = "exception" if exceptions else "matched"
     await db.commit()
+    record_reconciliation_result(scope, run.status)
     await db.refresh(run)
     body = {
         "id": str(run.id),
@@ -124,19 +135,26 @@ async def list_reconciliations(
     cursor: str | None = None,
 ):
     """Danh sách runs + exceptions (màn Báo cáo đọc ở đây)."""
-    limit = max(1, min(limit, 100))
+    limit = clamp_limit(limit)
+    spec = KeysetSpec(
+        columns=(ReconciliationRun.created_at, ReconciliationRun.id),
+        descending=(True, False),
+        keys=("created_at", "id"),
+        attrs=("created_at", "id"),
+        coerce=(coerce_timestamp, lambda raw: uuid.UUID(str(raw))),
+    )
+    stmt = select(ReconciliationRun).order_by(
+        ReconciliationRun.created_at.desc(), ReconciliationRun.id
+    )
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
     runs = (
         await db.execute(
-            select(ReconciliationRun)
-            .order_by(ReconciliationRun.created_at.desc())
-            .limit(limit + 1)
+            stmt.limit(limit + 1)
         )
     ).scalars().all()
     page, next_cursor = runs[:limit], None
     if len(runs) > limit:
-        import base64
-
-        next_cursor = base64.urlsafe_b64encode(str(page[-1].id).encode()).decode()
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
     out = []
     for r in page:
         excs = (

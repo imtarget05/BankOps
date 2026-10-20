@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
+from app.api.observability import record_approval_decision
 from app.api.routes.auth import get_current_user
 from app.config import settings
 from app.database import get_db
@@ -578,6 +579,7 @@ async def approve_cash_request(
         await db.rollback()
         raise AppError(409, "VERSION_CONFLICT", "Phiếu đã bị thay đổi giữa các concurrent approve (A2)") from None
 
+    record_approval_decision("cash", "approved", req.submitted_at)
     await db.refresh(req)
     await broadcast_approval_event(
         action="approved",
@@ -620,6 +622,7 @@ async def reject_cash_request(
     req.version += 1
     req.approver_id = user.id
     await db.commit()
+    record_approval_decision("cash", "rejected", req.submitted_at)
     await db.refresh(req)
     await broadcast_approval_event(
         action="rejected",

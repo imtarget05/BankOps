@@ -1,6 +1,7 @@
 """Shift stock-count workflow from the tea-shop SRS."""
 import uuid
-from datetime import date, timedelta
+
+from conftest import open_shift
 
 DEMO_PASSWORD = "DemoPass123!"
 
@@ -27,20 +28,10 @@ def test_staff_shift_count_calculates_theoretical_balance_and_variance(client):
 
     # Unique far-future business date: guard blocks a second OPEN shift per
     # (location, date, shift), so today/near dates collide across runs.
-    unique_date = (date(2027, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
-    opened = client.post(
-        "/inventory/stocktakes",
-        headers=_idempotent(headers),
-        json={
-            "location_id": locations[0]["id"],
-            "shift_code": "morning",
-            "business_date": unique_date,
-        },
+    opened, st_id = open_shift(
+        client, _idempotent(headers), locations[0]["id"]
     )
-    assert opened.status_code == 201, opened.text
     assert opened.json()["shift_code"] == "morning"
-
-    st_id = opened.json()["id"]
     # SRS §3.3: staff only enters used/count; opening is seeded by the system.
     seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=headers).json()["lines"]
     opening = float(

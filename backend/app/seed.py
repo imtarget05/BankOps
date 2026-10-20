@@ -16,11 +16,16 @@ from app.api.routes.auth_utils import get_password_hash
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.cash_sim import CashBalance, CashBox
-from app.models.iam import Capability, Role, RoleCapability, User, UserRole
+from app.models.iam import Branch, Capability, Role, RoleCapability, User, UserRole
 from app.models.inventory import Asset, Balance, Item, Location, StockLevel
 
 # Demo password - used for all seeded demo users.
 DEMO_PASSWORD = "DemoPass123!"
+
+# Seeded demo data belongs to the head office (Hội Sở) branch. Locations and
+# users are branch-scoped, so a NULL branch_id would make them invisible to
+# every non-admin role that resolves its scope from `iam_users.branch_id`.
+DEFAULT_BRANCH_CODE = "HO"
 
 REPO_DIR = Path(__file__).resolve().parents[2]  # backend/app -> backend -> repo
 SAMPLE_DATA_DIR = Path(os.environ.get("SAMPLE_DATA_DIR", str(REPO_DIR / "sample-data")))
@@ -36,6 +41,19 @@ def _load_sample_data(filename: str) -> dict | list:
 def uuid_gen() -> str:
     """Generate UUID as string."""
     return str(uuid.uuid4())
+
+
+async def _resolve_default_branch(db) -> str | None:
+    """Return the default branch id used to scope seeded users and locations.
+
+    Branch data is created by migration 013, so the lookup is best-effort: a
+    database that has not been migrated yet simply leaves the scope unset
+    instead of failing the whole seed.
+    """
+    branch_id = await db.execute(
+        select(Branch.id).where(Branch.code == DEFAULT_BRANCH_CODE)
+    )
+    return branch_id.scalar_one_or_none()
 
 
 async def seed_demo():
@@ -176,6 +194,7 @@ async def seed_demo():
             if uname not in existing_usernames and uname not in seen_usernames:
                 seen_usernames.add(uname)
                 missing_specs.append(u)
+        default_branch_id = await _resolve_default_branch(db)
         if missing_specs:
             password_hash = get_password_hash(DEMO_PASSWORD)
             default_pin_hash = get_password_hash("123456")
@@ -190,6 +209,7 @@ async def seed_demo():
                     status="active",
                     display_name_demo=u["display_name_demo"],
                     email=u.get("email"),
+                    branch_id=default_branch_id,
                 )
                 users.append(user)
                 for role_key in u.get("roles", []):
@@ -222,6 +242,21 @@ async def seed_demo():
             db.add_all(extra_user_roles)
             await db.commit()
 
+        # Backfill the branch for seeded users created before branch scoping
+        # existed. Without this, a non-admin seeded user resolves an empty
+        # location scope and cannot see any inventory location.
+        if default_branch_id is not None:
+            seeded_user_ids = [uuid.UUID(u["id"]) for u in all_users_spec]
+            unbranched = await db.execute(
+                select(User).where(
+                    User.id.in_(seeded_user_ids),
+                    User.branch_id.is_(None),
+                )
+            )
+            for user in unbranched.scalars().all():
+                user.branch_id = default_branch_id
+            await db.commit()
+
         # --- Inventory: Locations ---
         inv_data = _load_sample_data("inventory.json")
         # --- Inventory: Locations (upsert theo id hoặc code — idempotent) ---
@@ -237,11 +272,16 @@ async def seed_demo():
                     code=loc["code"],
                     name=loc["name"],
                     active=True,
+                    branch_id=default_branch_id,
                 ))
             else:
                 existing.code = loc["code"]
                 existing.name = loc["name"]
                 existing.active = True
+                # Backfill the branch for locations seeded before branch scoping
+                # existed, otherwise they stay invisible to branch-scoped roles.
+                if existing.branch_id is None:
+                    existing.branch_id = default_branch_id
         if new_locations:
             db.add_all(new_locations)
         await db.commit()

@@ -18,6 +18,16 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
+from app.api.observability import record_approval_decision
+from app.api.pagination import (
+    KeysetSpec,
+    apply_keyset,
+    build_cursor_payload,
+    clamp_limit,
+    coerce_timestamp,
+    decode_cursor,
+    encode_cursor,
+)
 from app.api.routes.auth_utils import (
     get_accessible_location_ids,
     get_current_user,
@@ -964,9 +974,20 @@ async def list_balances(
     cursor: str | None = None,
 ):
     """Tồn kho theo (location, item). Paginate bằng limit + opaque cursor."""
-    import base64
+    import uuid as _uuid_mod
 
-    limit = max(1, min(limit, 100))
+    limit = clamp_limit(limit, default=100)
+
+    def _coerce_uuid(raw: object) -> uuid.UUID:
+        return _uuid_mod.UUID(str(raw))
+
+    spec = KeysetSpec(
+        columns=(Balance.location_id, Balance.item_id),
+        descending=(False, False),
+        keys=("location_id", "item_id"),
+        attrs=("location_id", "item_id"),
+        coerce=(_coerce_uuid, _coerce_uuid),
+    )
     stmt = select(Balance).order_by(Balance.location_id, Balance.item_id)
     allowed_location_ids = await get_accessible_location_ids(db, current_user)
     if allowed_location_ids is not None:
@@ -975,11 +996,11 @@ async def list_balances(
         stmt = stmt.where(Balance.location_id == _uuid(location_id, "location_id"))
     if item_id:
         stmt = stmt.where(Balance.item_id == _uuid(item_id, "item_id"))
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
     rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
     page, next_cursor = rows[:limit], None
     if len(rows) > limit:
-        raw = f"{page[-1].location_id}:{page[-1].item_id}".encode()
-        next_cursor = base64.urlsafe_b64encode(raw).decode()
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
     return {
         "balances": [
             {
@@ -1006,10 +1027,16 @@ async def list_assets(
     limit: int = 100,
     cursor: str | None = None,
 ):
-    import base64
+    limit = clamp_limit(limit, default=100)
 
-    limit = max(1, min(limit, 100))
-    stmt = select(Asset).order_by(Asset.serial)
+    spec = KeysetSpec(
+        columns=(Asset.serial, Asset.id),
+        descending=(False, False),
+        keys=("serial", "id"),
+        attrs=("serial", "id"),
+        coerce=(str, lambda raw: _uuid(raw, "cursor.id")),
+    )
+    stmt = select(Asset).order_by(Asset.serial, Asset.id)
     allowed_location_ids = await get_accessible_location_ids(db, current_user)
     if allowed_location_ids is not None:
         stmt = stmt.where(Asset.location_id.in_(allowed_location_ids))
@@ -1017,10 +1044,11 @@ async def list_assets(
         stmt = stmt.where(Asset.serial == serial)
     if location_id:
         stmt = stmt.where(Asset.location_id == _uuid(location_id, "location_id"))
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
     rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
     page, next_cursor = rows[:limit], None
     if len(rows) > limit:
-        next_cursor = base64.urlsafe_b64encode(str(page[-1].id).encode()).decode()
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
     return {
         "assets": [
             {
@@ -1046,16 +1074,23 @@ async def list_movements(
     limit: int = 100,
     cursor: str | None = None,
 ):
-    import base64
+    limit = clamp_limit(limit, default=100)
 
-    limit = max(1, min(limit, 100))
+    spec = KeysetSpec(
+        columns=(Movement.posted_at, Movement.id),
+        descending=(True, False),
+        keys=("posted_at", "id"),
+        attrs=("posted_at", "id"),
+        coerce=(coerce_timestamp, lambda raw: _uuid(raw, "cursor.id")),
+    )
     stmt = select(Movement).order_by(Movement.posted_at.desc(), Movement.id)
     if request_id:
         stmt = stmt.where(Movement.request_id == _uuid(request_id, "request_id"))
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
     rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
     page, next_cursor = rows[:limit], None
     if len(rows) > limit:
-        next_cursor = base64.urlsafe_b64encode(str(page[-1].id).encode()).decode()
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
     return {
         "movements": [
             {
@@ -1083,9 +1118,15 @@ async def list_requests(
     limit: int = 100,
     cursor: str | None = None,
 ):
-    import base64
+    limit = clamp_limit(limit, default=100)
 
-    limit = max(1, min(limit, 100))
+    spec = KeysetSpec(
+        columns=(InventoryRequest.created_at, InventoryRequest.id),
+        descending=(True, False),
+        keys=("created_at", "id"),
+        attrs=("created_at", "id"),
+        coerce=(coerce_timestamp, lambda raw: _uuid(raw, "cursor.id")),
+    )
     stmt = select(InventoryRequest).order_by(
         InventoryRequest.created_at.desc(), InventoryRequest.id
     )
@@ -1103,10 +1144,11 @@ async def list_requests(
                     InventoryRequest.dest_id.in_(accessible_locations),
                 )
             )
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
     rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
     page, next_cursor = rows[:limit], None
     if len(rows) > limit:
-        next_cursor = base64.urlsafe_b64encode(str(page[-1].id).encode()).decode()
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
 
     req_ids = [r.id for r in page]
     lines_by_req: dict[uuid.UUID, list[dict]] = {r.id: [] for r in page}
@@ -2170,6 +2212,7 @@ async def approve_request(
     await _audit(db, user.id, "inventory.request.approved", req, before)
     await _outbox(db, "inventory.request.approved", req, {})
     await db.commit()
+    record_approval_decision("inventory", "approved", req.submitted_at)
     await db.refresh(req)
     await broadcast_approval_event(
         action="approved",
@@ -2238,6 +2281,7 @@ async def reject_request(
     await _audit(db, user.id, "inventory.request.rejected", req, before)
     await _outbox(db, "inventory.request.rejected", req, {})
     await db.commit()
+    record_approval_decision("inventory", "rejected", req.submitted_at)
     await db.refresh(req)
     await broadcast_approval_event(
         action="rejected",
@@ -3221,6 +3265,7 @@ async def approve_stocktake(
     await _outbox_stocktake(db, "inventory.stocktake.approved", st)
 
     await db.commit()
+    record_approval_decision("stocktake", "approved", st.created_at)
     await db.refresh(st)
 
     await broadcast_approval_event(
@@ -3276,6 +3321,7 @@ async def reject_stocktake(
     st.status = "open"
     st.note = f"{st.note or ''} [Từ chối: {reason}]".strip()
     await db.commit()
+    record_approval_decision("stocktake", "rejected", st.created_at)
     await broadcast_approval_event(
         action="rejected",
         request_id=str(st.id),

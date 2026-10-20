@@ -3,8 +3,9 @@
 Revision ID: 024_add_branch_id_to_cashbox
 Revises: 022_movement_cost_and_sub_kind
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "024_add_branch_id_to_cashbox"
 down_revision = "022_movement_cost_and_sub_kind"

@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
 
+from conftest import open_shift
 from sqlalchemy import select
 
 DEMO_PASSWORD = "DemoPass123!"
@@ -369,14 +370,7 @@ def test_stocktake_submitted_appears_in_approval_inbox_and_can_be_rejected(clien
     checker = _login(client, CHECKER)
     item_id, _, loc_id, _ = _seed_loc_item(client, maker)
 
-    unique_date = (date(2040, 1, 1) + timedelta(days=uuid.uuid4().int % 50000)).isoformat()
-    opened = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert opened.status_code == 201, opened.text
-    st_id = opened.json()["id"]
+    _opened, st_id = open_shift(client, _idem(maker), loc_id)
 
     # Submit stocktake
     sub = client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(maker))
@@ -405,14 +399,7 @@ def test_inbound_receipt_approval_syncs_to_open_stocktake(client):
     checker = _login(client, CHECKER)
     item_id, _, loc_id, _ = _seed_loc_item(client, maker)
 
-    unique_date = (date(2036, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
-    opened = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert opened.status_code == 201, opened.text
-    st_id = opened.json()["id"]
+    _opened, st_id = open_shift(client, _idem(maker), loc_id)
 
     seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
     target = next(stocktake_line for stocktake_line in seeded if stocktake_line["item_id"] == item_id)
@@ -455,14 +442,7 @@ def test_inbound_receipt_double_approval_does_not_double_count_in_stocktake(clie
     checker = _login(client, CHECKER)
     item_id, _, loc_id, _ = _seed_loc_item(client, maker)
 
-    unique_date = (date(2037, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
-    opened = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert opened.status_code == 201, opened.text
-    st_id = opened.json()["id"]
+    _opened, st_id = open_shift(client, _idem(maker), loc_id)
 
     seeded = client.get(f"/inventory/stocktakes/{st_id}", headers=maker).json()["lines"]
     target = next(stocktake_line for stocktake_line in seeded if stocktake_line["item_id"] == item_id)
@@ -510,14 +490,7 @@ def test_stocktake_reject_only_valid_when_submitted(client):
     checker = _login(client, CHECKER)
     item_id, _, loc_id, _ = _seed_loc_item(client, maker)
 
-    unique_date = (date(2038, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
-    opened = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert opened.status_code == 201, opened.text
-    st_id = opened.json()["id"]
+    _opened, st_id = open_shift(client, _idem(maker), loc_id)
 
     # Reject while 'open' must fail with 409 STATE_CONFLICT
     rej_open = client.post(
@@ -550,14 +523,7 @@ def test_stocktake_reject_forbidden_for_shift_staff(client):
     maker = _login(client, MAKER)
     item_id, _, loc_id, _ = _seed_loc_item(client, maker)
 
-    unique_date = (date(2039, 1, 1) + timedelta(days=uuid.uuid4().int % 364)).isoformat()
-    opened = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": loc_id, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert opened.status_code == 201, opened.text
-    st_id = opened.json()["id"]
+    _opened, st_id = open_shift(client, _idem(maker), loc_id)
 
     # Submit stocktake
     sub = client.post(f"/inventory/stocktakes/{st_id}/submit", headers=_idem(maker))

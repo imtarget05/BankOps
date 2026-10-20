@@ -5,6 +5,7 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
+from conftest import open_shift
 from sqlalchemy import select
 
 from app.models.inventory import (
@@ -146,7 +147,9 @@ def test_fefo_deduction_across_multiple_lots(client):
     assert appr.status_code == 200, appr.text
 
     # Kiểm tra LotBalance sau xuất
-    bals = client.get("/inventory/balances", headers=checker).json()["balances"]
+    bals = client.get(
+        "/inventory/balances", headers=checker, params={"item_id": item_id}
+    ).json()["balances"]
     item_bal = next(b for b in bals if b["item_id"] == item_id and b["location_id"] == src_loc)
     # Tổng tồn = 15 - 8 = 7 gói
     assert Decimal(str(item_bal["quantity"])) == Decimal("7.000")
@@ -332,7 +335,9 @@ def test_transfer_atomic_and_lot_preservation(client):
     assert appr_tr.status_code == 200, appr_tr.text
 
     # Kiểm tra Kho Tổng còn 2 chai
-    bals = client.get("/inventory/balances", headers=checker).json()["balances"]
+    bals = client.get(
+        "/inventory/balances", headers=checker, params={"item_id": item_id}
+    ).json()["balances"]
     src_bal = next(b for b in bals if b["item_id"] == item_id and b["location_id"] == src_loc)
     assert Decimal(str(src_bal["quantity"])) == Decimal("2.000")
 
@@ -368,15 +373,10 @@ def test_outbound_syncs_used_qty_to_open_stocktake(client):
     client.post(f"/inventory/requests/{r_in['id']}/submit", headers=_idem(maker))
     client.post(f"/inventory/requests/{r_in['id']}/approve", headers=_idem(checker))
 
-    # Mở ca kiểm kê tại kho
-    unique_date = (date(2048, 1, 1) + timedelta(days=uuid.uuid4().int % 360)).isoformat()
-    st_res = client.post(
-        "/inventory/stocktakes",
-        headers=_idem(maker),
-        json={"location_id": src_loc, "shift_code": "morning", "business_date": unique_date},
-    )
-    assert st_res.status_code == 201, st_res.text
-    st_id = st_res.json()["id"]
+    # Mở ca kiểm kê tại kho. Mỗi lần chạy để lại một ca "morning" ở trạng thái
+    # open, nên ngày phải được thử nhiều ngày khác nhau cho tới khi tìm được
+    # ngày chưa có ca nào mở (tránh lỗi 409 SHIFT_ALREADY_OPEN).
+    _st_res, st_id = open_shift(client, _idem(maker), src_loc)
 
     # Xuất nội bộ 2 gói để pha test menu mới
     out_internal = client.post(
@@ -507,6 +507,8 @@ def test_concurrent_issues_do_not_produce_negative_stock(client):
     assert appr1.status_code == 200
 
     # Tồn kho thực tế còn lại 1 gói (không bị âm)
-    bals = client.get("/inventory/balances", headers=checker).json()["balances"]
+    bals = client.get(
+        "/inventory/balances", headers=checker, params={"item_id": item_id}
+    ).json()["balances"]
     item_bal = next(b for b in bals if b["item_id"] == item_id and b["location_id"] == src_loc)
     assert Decimal(str(item_bal["quantity"])) == Decimal("1.000")
