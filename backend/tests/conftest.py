@@ -77,7 +77,28 @@ def _import_or_fail(module: str):
 
 @pytest.fixture(scope="session")
 def app():
-    """Import the FastAPI application, failing loudly if it cannot boot."""
+    """Import the FastAPI application, failing loudly if it cannot boot.
+
+    Ensures the database schema is migrated/seeded before serving requests.
+    CI provides an isolated PostgreSQL `bankops` service database via DATABASE_URL;
+    local runs can override via env. See docs/12-qa-execution-plan.md.
+    """
+    import asyncio
+    import importlib
+
+    import app.config
+    import app.database
+    importlib.reload(app.config)
+    importlib.reload(app.database)
+    try:
+        from app.database import init_db
+        asyncio.run(init_db())
+    except Exception as exc:
+        pytest.fail(
+            f"Database init/migration failed on {os.environ.get('DATABASE_URL')}: "
+            f"{type(exc).__name__}: {exc}",
+            pytrace=False,
+        )
     return _import_or_fail("app.main").app
 
 
