@@ -24,11 +24,8 @@ RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash appuser
 
 # Install Python dependencies into isolated path
-COPY pyproject.toml poetry.lock* ./
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    poetry lock --no-update && \
-    poetry install --no-interaction --no-ansi --only main
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -e ".[main]"
 
 # =============================================================================
 # Runtime stage
