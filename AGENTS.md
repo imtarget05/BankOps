@@ -1,8 +1,10 @@
 # QuanLyKho — Kho Quản Lý & Ngân Hàng AI
 
 **Repo:** `QuanLyKho` (Kho-Trà-Sữa core banking ops)
-**Stack:** FastAPI + SQLAlchemy 2.x + Alembic + PostgreSQL 16 + Poetry/uv + Pytest
+**Stack:** FastAPI + SQLAlchemy 2.x + Alembic + PostgreSQL 16 + Poetry + Pytest
 **Language:** Python 3.11+
+**Python toolchain:** **Poetry** là canonical (`backend/poetry.lock`) — xem
+[`docs/engineering/python-toolchain.md`](docs/engineering/python-toolchain.md).
 
 ---
 
@@ -37,22 +39,23 @@ QuanLyKho/
 
 ```bash
 # Setup
-make dev        # or: docker compose up -d; uv pip install -e backend
+make dev        # or: docker compose up -d
+cd backend && poetry install --with dev   # canonical toolchain: Poetry (xem docs/engineering/python-toolchain.md)
 
 # Lint
 ruff check backend/            # 0.17.0 pinned in CI
 # ruff rules 0.17.0+: I001/UP041 added (enabled explicitly in pyproject)
 
 # Test
-pytest backend/tests           # or: pytest -xvs
+cd backend && poetry run pytest tests -q          # hoặc: pytest -xvs (nếu đã có .venv)
 
 # Migrations
-alembic revision --autogenerate -m "desc"   # after model change
-alembic upgrade head
-alembic downgrade -1
+poetry run alembic revision --autogenerate -m "desc"   # after model change
+poetry run alembic upgrade head
+poetry run alembic downgrade -1
 
 # Run app
-uvicorn app.main:app --reload --port 8000
+poetry run uvicorn app.main:app --reload --port 8000
 ```
 
 ---

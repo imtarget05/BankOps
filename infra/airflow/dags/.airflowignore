@@ -1,0 +1,2 @@
+# Thư mục thư viện dùng chung (không phải DAG file) — Airflow không cần parse.
+qlk_ingest/
