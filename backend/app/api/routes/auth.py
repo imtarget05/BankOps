@@ -20,6 +20,7 @@ from app.api.routes.auth_utils import (
     get_user_roles,
     is_token_revoked,
     login_rate_limited,
+    login_retry_after_seconds,
     oauth2_scheme,
     record_login_failure,
     reset_login_failures,
@@ -31,6 +32,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.activity import AuditEvent
 from app.models.iam import User, UserStatus
+from app.services.approval_controls import DEMO_SUPERVISOR_PIN
 from app.services.email_service import (
     send_activation_confirmation_email,
     send_password_reset_email,
@@ -39,6 +41,32 @@ from app.services.email_service import (
 logger = logging.getLogger("bankops.auth")
 
 router = APIRouter()
+
+
+def _client_ip(request: Request) -> str:
+    """IP nguon ket noi (khong tin `X-Forwarded-For` de tranh gia mao)."""
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client is not None else None
+    return (host or "unknown").strip().lower()
+
+
+async def _audit_rate_limited(db: AsyncSession, username: str, client_ip: str) -> None:
+    """Ghi audit khi mot tai khoan bi khoa do sai mat khau (S11)."""
+    try:
+        db.add(
+            AuditEvent(
+                id=uuid.uuid4(),
+                actor_id=None,
+                action="LOGIN_RATE_LIMITED",
+                subject=f"iam_users:{username.strip().lower()}",
+                occurred_at=datetime.now(UTC),
+                metadata_json={"username": username.strip().lower(), "ip": client_ip},
+            )
+        )
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 - audit fail khong duoc chan login
+        logger.warning("Không ghi được audit LOGIN_RATE_LIMITED: %s", exc)
+        await db.rollback()
 
 
 @router.post("/login")
@@ -72,24 +100,29 @@ async def login(
             detail="username and password are required",
         )
 
-    # Rate limit login (docs/08: chặn brute force, khóa tạm theo username).
-    if login_rate_limited(username):
+    # Rate limit login (docs/08: chặn brute force). S11: khoá theo
+    # `username + IP` để attacker không khoá được tài khoản của người khác
+    # (DoS) bằng cách đoán sai mật khẩu 5 lần.
+    client_ip = _client_ip(request)
+    if login_rate_limited(username, client_ip):
+        await _audit_rate_limited(db, username, client_ip)
+        retry_after = login_retry_after_seconds(username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed login attempts, try again later.",
-            headers={"Retry-After": str(settings.rate_limit_login_window_minutes * 60)},
+            headers={"Retry-After": str(retry_after)},
         )
 
     user = await authenticate_user(db, username, password)
     if not user:
-        record_login_failure(username)
+        record_login_failure(username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    reset_login_failures(username)
+    reset_login_failures(username, client_ip)
     roles = await get_user_roles(db, user.id)
     capabilities = await get_user_capabilities(db, user.id)
 
@@ -108,7 +141,11 @@ async def login(
         access_token_expires,
     )
     refresh_token = create_refresh_token(
-        {"sub": str(user.id), "username": user.username},
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "auth_version": getattr(user, "auth_version", 1),
+        },
         refresh_token_expires,
     )
 
@@ -135,7 +172,9 @@ class RegisterRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=256)
     email: str | None = None
     role: str | None = "staff"
-    pin: str | None = "123456"
+    # D4 — KHÔNG hardcode PIN mặc định. PIN demo chỉ được áp dụng khi demo mode
+    # bật tường minh (xem `accept_invite`).
+    pin: str | None = None
 
 
 @router.post("/register")
@@ -179,7 +218,11 @@ async def accept_invite(
             detail="Mã mời đã hết hạn. Vui lòng liên hệ quản trị viên để nhận mã mới.",
         )
 
-    clean_pin = (body.pin or "123456").strip()
+    # D4 — PIN mặc định `123456` chỉ tồn tại trong demo mode bật tường minh.
+    # Ngoài demo mode: không có PIN mặc định -> user phải tự đặt PIN hoặc để
+    # admin cấp, cổng duyệt dùng PIN cấu hình (fail-closed).
+    default_pin = DEMO_SUPERVISOR_PIN if settings.is_demo_mode else None
+    clean_pin = (body.pin or default_pin or "").strip()
     if clean_pin and (not clean_pin.isdigit() or len(clean_pin) != 6):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -238,7 +281,11 @@ async def accept_invite(
         access_token_expires,
     )
     refresh_token = create_refresh_token(
-        {"sub": str(user.id), "username": user.username},
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "auth_version": getattr(user, "auth_version", 1),
+        },
         timedelta(days=settings.refresh_token_expire_days),
     )
 
@@ -360,17 +407,35 @@ async def refresh_tokens(
     if user is None or user.status != "active":
         raise invalid
 
+    # R3/R4 — refresh token phai mang `auth_version`; admin thu hoi phien (tang
+    # `auth_version`) hoac doi/reset mat khau se lam refresh token cu bi tu choi.
+    token_auth_version = payload.get("auth_version")
+    if token_auth_version is not None and getattr(user, "auth_version", 1) != token_auth_version:
+        raise invalid
+
     # Rotation: refresh token vừa dùng bị revoke, không tái sử dụng.
     revoke_token(body.refresh_token)
 
     roles = await get_user_roles(db, user.id)
     capabilities = await get_user_capabilities(db, user.id)
     access_token = create_access_token(
-        {"sub": str(user.id), "username": user.username, "roles": roles, "caps": capabilities},
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "roles": roles,
+            "caps": capabilities,
+            "auth_version": getattr(user, "auth_version", 1),
+            "branch_id": str(user.branch_id) if getattr(user, "branch_id", None) else None,
+        },
         timedelta(minutes=30),
     )
     new_refresh = create_refresh_token(
-        {"sub": str(user.id), "username": user.username}, timedelta(days=7)
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "auth_version": getattr(user, "auth_version", 1),
+        },
+        timedelta(days=7),
     )
     return {
         "access_token": access_token,
@@ -497,6 +562,8 @@ async def change_password(
         )
 
     current_user.password_hash = get_password_hash(body.new_password)
+    # R4 — doi mat khau phai giet cac phien dang hoat dong (access + refresh).
+    current_user.auth_version = getattr(current_user, "auth_version", 1) + 1
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
@@ -581,13 +648,30 @@ async def forgot_password(
         else f"Mã xác thực OTP đã được tạo cho tài khoản {user.username}."
     )
 
-    return {
+    payload = {
         "message": msg,
         "username": user.username,
-        "otp_demo": otp,
         "email_sent": email_sent,
         "expires_in_seconds": 900,
     }
+    # OTP KHÔNG BAO GIỜ nằm trong response ngoài chế độ demo bật tường minh:
+    # nếu không, ai gọi endpoint cũng đọc được OTP của tài khoản khác và
+    # chiếm tài khoản (đọc OTP qua email/SMS như thiết kế).
+    if settings.is_demo_mode:
+        payload["otp_demo"] = otp
+    else:
+        logger.info(
+            "Password reset OTP generated for user=%s (delivered_by_email=%s)",
+            user.username,
+            email_sent,
+        )
+        if not email_sent:
+            logger.warning(
+                "Password reset OTP for user=%s could not be delivered (SMTP chưa cấu "
+                "hình) và không được trả trong response ngoài demo mode.",
+                user.username,
+            )
+    return payload
 
 
 class ResetPasswordRequest(BaseModel):
@@ -633,6 +717,8 @@ async def reset_password(
         )
 
     user.password_hash = get_password_hash(body.new_password)
+    # R4 — reset mat khau (OTP) cung phai thu hoi cac phien cu.
+    user.auth_version = getattr(user, "auth_version", 1) + 1
     db.add(user)
     await db.commit()
     await db.refresh(user)

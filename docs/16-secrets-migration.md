@@ -226,7 +226,7 @@ For local development, use `.env.example` (committed) with placeholder values:
 DATABASE_URL=postgresql://user:pass@localhost:5432/bankops
 JWT_SECRET=replace-with-openssl-rand-base64-32
 SESSION_SECRET=replace-with-openssl-rand-base64-32
-SUPERVISOR_PIN=123456
+SUPERVISOR_PIN=<SET_VIA_SECRET_MANAGER>
 ```
 
 ```bash

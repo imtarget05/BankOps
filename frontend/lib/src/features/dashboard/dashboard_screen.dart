@@ -9,6 +9,7 @@ import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import '../cash/cash_adjustment.dart';
 import '../cash/cash_screen.dart';
 import 'dashboard_trust_metrics.dart';
 
@@ -252,9 +253,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final amountCtrl = TextEditingController(
-      text: currentAmount > 0
-          ? AppFormat.money(currentAmount.toStringAsFixed(0))
-          : '',
+      text: currentAmount > 0 ? currentAmount.toStringAsFixed(0) : '',
     );
     final reasonCtrl = TextEditingController(
       text: 'Đối soát số dư thực tế quầy ca trực',
@@ -416,6 +415,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   prefixIcon: Icon(Icons.edit_note_rounded),
                 ),
               ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: const Color(0xFFD97706).withValues(alpha: 0.35)),
+                ),
+                child: const Text(
+                  'Số dư KHÔNG đổi ngay: hệ thống tạo phiếu điều chỉnh (journal) '
+                  'và gửi duyệt. Số dư chỉ cập nhật sau khi quản lý phê duyệt.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -443,20 +459,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (updated == true && mounted) {
       final repo = RepositoryScope.of(context);
-      final rawAmount =
-          amountCtrl.text.replaceAll('.', '').replaceAll(',', '').trim();
-      final finalAmt = double.tryParse(rawAmount);
-      if (finalAmt == null) return;
+      final counted = parseVndAmount(amountCtrl.text);
+      if (counted == null) {
+        AppToast.error(context,
+            'Vui lòng nhập số tiền kiểm đếm thực tế (VD: 2.000.000).');
+        return;
+      }
+      final delta = counted - currentAmount;
+      if (delta == 0) {
+        AppToast.info(context,
+            'Số dư đã khớp sổ sách — không cần tạo phiếu điều chỉnh.');
+        return;
+      }
       try {
-        await repo.updateCashbox(
-            id: box.id, balance: finalAmt.toStringAsFixed(2));
+        // Số dư KHÔNG ghi trực tiếp (backend chặn 422
+        // DIRECT_BALANCE_WRITE_FORBIDDEN): tạo phiếu điều chỉnh + gửi duyệt.
+        final created = await submitCashAdjustment(
+          repo: repo,
+          cashboxId: box.id,
+          amount: delta.abs().toStringAsFixed(2),
+          increase: delta > 0,
+          reason: reasonCtrl.text.trim(),
+        );
         if (!mounted) return;
         AppToast.success(context,
-            'Đã cập nhật số dư ${box.name}: ${AppFormat.money(finalAmt.toStringAsFixed(0))} ₫');
+            'Đã tạo phiếu điều chỉnh ${created.id} — đang chờ duyệt. '
+            'Số dư ${box.name} chỉ cập nhật sau khi quản lý phê duyệt.');
         _refresh();
       } catch (e) {
         if (!mounted) return;
-        AppToast.error(context, 'Không thể cập nhật số dư: $e');
+        AppToast.error(context, cashAdjustmentErrorMessage(e));
       }
     }
   }
@@ -464,6 +496,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildCashboxDistribution(BuildContext context, DashboardData data) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    // Quyền ghi bút toán điều chỉnh tài chính (capability từ auth store).
+    final canAdjustCash = RoleVisibility.canPostCashAdjustment(
+      SessionScope.maybeOf(context)?.user,
+    );
 
     final colors = [
       const Color(0xFF2563EB),
@@ -798,8 +835,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
-                                    onPressed: () =>
-                                        _showCashAdjustmentModal(box, amt),
+                                    onPressed: canAdjustCash
+                                        ? () => _showCashAdjustmentModal(box, amt)
+                                        : null,
                                   ),
                                 ),
                               ],

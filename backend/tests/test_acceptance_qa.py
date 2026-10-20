@@ -583,7 +583,10 @@ class TestR1Reconciliation:
 class TestE1SSE:
     def test_sse_replay_after_reconnect(self, api):
 
-        with api.c.stream("GET", "/events/stream") as r:
+        # S7 — SSE stream phát toàn bộ outbox event nên BẮT BUỘC có token +
+        # capability (`activity:view` / `audit:view`).
+        headers = api.h("demo_maker")
+        with api.c.stream("GET", "/events/stream", headers=headers) as r:
             assert r.status_code == 200, f"E1: SSE trả {r.status_code}"
             ctype = r.headers.get("content-type", "")
             assert "text/event-stream" in ctype, f"E1: content-type = {ctype!r}"
@@ -595,12 +598,17 @@ class TestE1SSE:
 
         # reconnect với cursor quá cũ -> resync_required
         with api.c.stream(
-            "GET", "/events/stream", params={"cursor": "0" * 32}
+            "GET", "/events/stream", params={"cursor": "0" * 32}, headers=headers
         ) as r2:
             body = "".join(list(r2.iter_lines())[:5])
         assert "resync_required" in body or "heartbeat" in body, (
             f"E1: replay theo cursor không hoạt động; nhận: {body[:300]!r}"
         )
+
+    def test_sse_requires_authentication(self, api):
+        """S7 — không token thì stream phải từ chối (401)."""
+        with api.c.stream("GET", "/events/stream") as r:
+            assert r.status_code == 401, f"E1: SSE không token trả {r.status_code}"
 
     def test_rest_returns_final_state_after_sse_loss(self, api):
         """E1: 'GET trả state cuối' sau khi SSE rớt."""

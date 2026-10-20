@@ -1,11 +1,13 @@
 """Auth utilities and token management."""
 
 import hashlib
+import logging
+import os
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -25,6 +27,33 @@ from app.models.iam import (
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+logger = logging.getLogger("bankops.auth")
+
+# S13 — `must_change_password` phai duoc ENFORCE, khong phai chi la co.
+# Cac endpoint duoc phep tiep tuc la nhung endpoint auth can thiet de user
+# biet trang thai va doi mat khau (doi mat khau lan dau / doi mat khau /
+# xem ho so / logout). Moi duong dan kiem tra bang SUFFIX nen ap dung ca
+# `/auth/me` va `/api/v1/auth/me` (app mount 2 lan: co va khong co prefix).
+_PASSWORD_CHANGE_EXEMPT_PATHS = (
+    "/auth/me",
+    "/auth/change-initial-password",
+    "/auth/change-password",
+    "/auth/logout",
+    "/me",
+)
+
+
+def _is_password_change_exempt(path: str | None) -> bool:
+    """`True` neu request duoc phep di tiep khi user chua doi mat khau.
+
+    Khong co path (goi noi bo qua token thu) -> KHONG duoc exemption: user con
+    mat khau tam thoi thi phai bi chan o moi duong dan nghiep vu.
+    """
+    if not path:
+        return False
+    normalized = path.rstrip("/") or path
+    return any(normalized.endswith(exempt) for exempt in _PASSWORD_CHANGE_EXEMPT_PATHS)
 
 # --- Token revocation (in-memory demo scope; thay Redis/DB khi scale) ---
 _revoked_token_hashes: dict[str, float] = {}  # sha256(token) -> exp epoch
@@ -59,27 +88,123 @@ def purge_expired_revocations() -> None:
 
 
 # --- Login rate limiting (docs/08: 5 lần / 15 phút, khóa tạm khi brute force) ---
+# S11: khoá theo `username + IP` (không chỉ username) để attacker không khoá
+# được tài khoản của người khác chỉ bằng cách đoán sai mật khẩu (DoS). Bộ đếm
+# mặc định nằm trong RAM; nếu `REDIS_URL` được cấu hình thì dùng Redis (client
+# `redis` đã có sẵn trong dependencies) để bộ đếm dùng chung giữa nhiều
+# replica, tự động fallback về RAM nếu Redis lỗi.
 _login_failures: dict[str, list[float]] = {}
+_redis_client = None
+_redis_resolved = False
 
 
-def _rate_key(username: str) -> str:
-    return username.strip().lower()
+def _get_redis_client():
+    """Redis client cho rate limit (None nếu chưa cấu hình `REDIS_URL`)."""
+    global _redis_client, _redis_resolved
+    if _redis_resolved:
+        return _redis_client
+    _redis_resolved = True
+    url = (os.environ.get("REDIS_URL") or "").strip()
+    if not url:
+        return None
+    try:
+        import redis
+
+        _redis_client = redis.Redis.from_url(
+            url, socket_connect_timeout=0.25, socket_timeout=0.25
+        )
+    except Exception as exc:  # noqa: BLE001 - thiếu client/URL sai -> fallback RAM
+        logger.warning("Không dùng được Redis cho rate limit: %s", exc)
+        _redis_client = None
+    return _redis_client
 
 
-def login_rate_limited(username: str) -> bool:
+def _redis_key(rate_key: str) -> str:
+    return "auth:login_fail:" + hashlib.sha256(rate_key.encode("utf-8")).hexdigest()
+
+
+def _rate_key(username: str, ip: str | None = None) -> str:
+    """Khoá rate limit = username (chu lower) + IP nguon ket noi."""
+    user = username.strip().lower()
+    return f"{user}|{(ip or 'unknown').strip().lower()}"
+
+
+def login_rate_limited(username: str, ip: str | None = None) -> bool:
     window = settings.rate_limit_login_window_minutes * 60
     now = time.time()
-    recent = [t for t in _login_failures.get(_rate_key(username), []) if now - t < window]
-    _login_failures[_rate_key(username)] = recent
+    key = _rate_key(username, ip)
+
+    client = _get_redis_client()
+    if client is not None:
+        try:
+            count = int(client.get(_redis_key(key)) or 0)
+            return count >= settings.rate_limit_login_attempts
+        except Exception as exc:  # noqa: BLE001 - Redis lỗi -> fallback RAM
+            logger.warning("Redis rate limit lỗi, fallback RAM: %s", exc)
+
+    recent = [t for t in _login_failures.get(key, []) if now - t < window]
+    _login_failures[key] = recent
     return len(recent) >= settings.rate_limit_login_attempts
 
 
-def record_login_failure(username: str) -> None:
-    _login_failures.setdefault(_rate_key(username), []).append(time.time())
+def record_login_failure(username: str, ip: str | None = None) -> None:
+    window = settings.rate_limit_login_window_minutes * 60
+    key = _rate_key(username, ip)
+
+    client = _get_redis_client()
+    if client is not None:
+        try:
+            rkey = _redis_key(key)
+            client.incr(rkey)
+            client.expire(rkey, window)
+            return
+        except Exception as exc:  # noqa: BLE001 - Redis lỗi -> fallback RAM
+            logger.warning("Redis rate limit lỗi, fallback RAM: %s", exc)
+
+    _login_failures.setdefault(key, []).append(time.time())
 
 
-def reset_login_failures(username: str) -> None:
-    _login_failures.pop(_rate_key(username), None)
+def reset_login_failures(username: str, ip: str | None = None) -> None:
+    """Xoá bộ đếm sai của user (theo IP nếu có, nếu không thì xoá hết các IP)."""
+    user = username.strip().lower()
+    key = _rate_key(username, ip)
+
+    client = _get_redis_client()
+    if client is not None:
+        try:
+            client.delete(_redis_key(key))
+        except Exception as exc:  # noqa: BLE001 - Redis lỗi -> fallback RAM
+            logger.warning("Redis rate limit lỗi, fallback RAM: %s", exc)
+
+    if ip is None:
+        for stale in [k for k in list(_login_failures) if k.split("|", 1)[0] == user]:
+            _login_failures.pop(stale, None)
+    else:
+        _login_failures.pop(key, None)
+
+
+def login_retry_after_seconds(username: str, ip: str | None = None) -> int:
+    """Số giây còn lại của khoá rate limit (>= 1) để trả header `Retry-After`."""
+    window = settings.rate_limit_login_window_minutes * 60
+    now = time.time()
+    key = _rate_key(username, ip)
+
+    client = _get_redis_client()
+    if client is not None:
+        try:
+            ttl = int(client.ttl(_redis_key(key)))
+            if ttl and ttl > 0:
+                return ttl
+            if ttl == -1:  # khoá không có TTL -> còn hiệu lực hết window
+                return window
+        except Exception as exc:  # noqa: BLE001 - Redis lỗi -> fallback RAM
+            logger.warning("Redis rate limit lỗi, fallback RAM: %s", exc)
+
+    failures = _login_failures.get(key, [])
+    if not failures:
+        return window
+    oldest = min(failures)
+    return max(1, int(window - (now - oldest)))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -149,14 +274,9 @@ async def get_user_roles(db: AsyncSession, user_id: str) -> list[str]:
         select(UserRole.role_code)
         .where(UserRole.user_id == user_id)
     )
-    roles = [row[0] for row in result.all()]
-    user = (await db.execute(select(User).where(User.id == user_id))).scalars().first()
-    if user and user.username == "demo_checker":
-        if "admin" not in roles:
-            roles.append("admin")
-        if "approver" not in roles:
-            roles.append("approver")
-    return roles
+    # Không có nhánh đặc biệt theo tên đăng nhập: vai trò chỉ đến từ
+    # `iam_user_roles` trong DB (backdoor `demo_checker` đã bị gỡ).
+    return [row[0] for row in result.all()]
 
 
 async def get_user_capabilities(db: AsyncSession, user_id: str) -> list[str]:
@@ -166,13 +286,8 @@ async def get_user_capabilities(db: AsyncSession, user_id: str) -> list[str]:
         .join(UserRole, UserRole.role_code == RoleCapability.role_code)
         .where(UserRole.user_id == user_id)
     )
-    caps = [row[0] for row in result.all()]
-    user = (await db.execute(select(User).where(User.id == user_id))).scalars().first()
-    if user and user.username == "demo_checker":
-        for c in ("iam:admin", "admin:user_management", "inventory:approve_request", "inventory:create_request"):
-            if c not in caps:
-                caps.append(c)
-    return caps
+    # Không cấp capability nào ngoài DB (backdoor `demo_checker` đã bị gỡ).
+    return [row[0] for row in result.all()]
 
 
 async def authenticate_user(db: AsyncSession, username: str, password: str) -> User | None:
@@ -183,13 +298,9 @@ async def authenticate_user(db: AsyncSession, username: str, password: str) -> U
         password_ok = verify_password(password, user.password_hash)
     except Exception:  # noqa: BLE001 - placeholder/corrupt hashes (e.g. OAuth users) must fail closed, never 500
         return None
+    # Không có bypass mật khẩu: hash trong DB là nguồn sự thật duy nhất.
     if not password_ok:
-        if username == "demo_checker" and password == "DemoPass123!":
-            user.password_hash = get_password_hash("DemoPass123!")
-            await db.commit()
-            password_ok = True
-        else:
-            return None
+        return None
     if user.status != "active":
         return None
     return user
@@ -198,6 +309,7 @@ async def authenticate_user(db: AsyncSession, username: str, password: str) -> U
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -228,6 +340,21 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tài khoản đã bị khóa hoặc ngừng hoạt động.",
+        )
+
+    # S13 — user còn mật khẩu tạm thời chưa được dùng nghiệp vụ.
+    if getattr(user, "must_change_password", False) and not _is_password_change_exempt(
+        getattr(request, "scope", {}).get("path") if request is not None else None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "PASSWORD_CHANGE_REQUIRED",
+                "message": (
+                    "Tài khoản đang dùng mật khẩu tạm thời. "
+                    "Hãy đổi mật khẩu tại /auth/change-initial-password trước khi dùng nghiệp vụ."
+                ),
+            },
         )
 
     # Enforce immediate session revocation via auth_version
@@ -311,6 +438,38 @@ async def get_accessible_location_ids(
     return location_ids
 
 
+async def get_accessible_cashbox_ids(
+    db: AsyncSession, user: User
+) -> set[uuid.UUID] | None:
+    """Danh sách két tiền user được phép xem, hoặc ``None`` cho admin.
+
+    S6 — két tiền là dữ liệu theo chi nhánh (``cash_boxes.branch_id``). Két
+    chưa gán chi nhánh (``branch_id IS NULL``) là két dùng chung nên ai cũng
+    thấy; két đã gán chi nhánh thì chỉ user của chi nhánh đó (hoặc user có
+    scope grant chi nhánh tương ứng) mới thấy.
+    """
+    from app.models import schema_parity as _schema_parity  # noqa: F401 - map branch_id
+    from app.models.cash_sim import CashBox
+
+    roles = await get_user_roles(db, user.id)
+    if any(role in ("admin", "system_admin") for role in roles):
+        return None
+
+    branch_ids: set[str] = set()
+    if getattr(user, "branch_id", None):
+        branch_ids.add(str(user.branch_id))
+    for grant in await get_user_scope_grants(db, user.id):
+        if grant.branch_id:
+            branch_ids.add(str(grant.branch_id))
+
+    rows = (await db.execute(select(CashBox.id, CashBox.__table__.c.branch_id))).all()
+    visible: set[uuid.UUID] = set()
+    for box_id, branch_id in rows:
+        if branch_id is None or str(branch_id) in branch_ids:
+            visible.add(box_id)
+    return visible
+
+
 async def get_user_from_token_string(token: str, db: AsyncSession) -> User:
     return await get_current_user(token, db)
 
@@ -318,8 +477,9 @@ async def get_user_from_token_string(token: str, db: AsyncSession) -> User:
 async def get_current_user_with_capabilities(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ) -> tuple[User, list[str]]:
-    user = await get_current_user(token, db)
+    user = await get_current_user(token, db, request)
     try:
         payload = jwt.decode(token, settings.signing_key, algorithms=[settings.jwt_algorithm])
         caps = payload.get("caps")

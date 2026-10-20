@@ -109,6 +109,38 @@ class RoleVisibility {
     return caps.contains('etl:run') || caps.contains('etl:admin');
   }
 
+  /// Capability backend dùng cho bút toán điều chỉnh tài chính quỹ (D2).
+  /// Xem `backend/app/api/routes/cash_sim.py` (`_ADJUSTMENT_CAPS`).
+  static const String cashPostAdjustmentCapability = 'cash:post_adjustment';
+
+  /// Vai trò được cấp `cash:post_adjustment` trong seed backend
+  /// (`backend/app/seed.py`) — chỉ dùng làm fallback khi chưa có dữ liệu
+  /// capability (phiên offline / test).
+  static const _cashAdjustmentRoles = {
+    'admin',
+    'system_admin',
+    'approver',
+    'cash_sim_operator',
+    'manager',
+    'owner',
+  };
+
+  /// Được tạo phiếu điều chỉnh số dư quỹ (journal có kiểm soát + duyệt).
+  ///
+  /// Nguồn sự thật là capability `cash:post_adjustment` trả về từ backend
+  /// (đã nằm sẵn trong `AppUser.capabilities` của auth store) — không chế
+  /// hệ thống quyền mới. Khi server đã trả danh sách capability thì tin
+  /// chính xác danh sách đó; chỉ khi danh sách rỗng (chưa rõ) mới fallback
+  /// theo vai trò để phiên offline/dev vẫn dùng được.
+  static bool canPostCashAdjustment(AppUser? user) {
+    if (user == null) return true; // dev default
+    final caps = user.capabilities.map((e) => e.toLowerCase()).toSet();
+    if (caps.isNotEmpty) return caps.contains(cashPostAdjustmentCapability);
+    final roles = rolesOf(user);
+    if (roles.isEmpty) return true;
+    return roles.intersection(_cashAdjustmentRoles).isNotEmpty;
+  }
+
   /// Danh sách tab (full index theo AppShell) user được thấy.
   /// Pilot trà sữa: ẩn 2 Quỹ, 5 Tích hợp/ETL khỏi UI chính
   /// (backend giữ nguyên để rollback). Index giữ nguyên để không vỡ _go().

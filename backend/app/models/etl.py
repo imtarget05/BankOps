@@ -38,7 +38,7 @@ class EtlConnection(Base, TimestampMixin):
     secret_ref = Column(String(256), nullable=True)
     allowlist_sheets = Column(JSON, nullable=True)  # list of allowed sheet IDs/ranges
     config_json = Column(JSON, nullable=True)
-    branch_id = Column(UUID(as_uuid=True), ForeignKey("org_branches.id", ondelete="SET NULL"), nullable=True)
+    branch_id = Column(UUID(as_uuid=True), ForeignKey("org_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
 
 
@@ -48,10 +48,10 @@ class EtlPipeline(Base, TimestampMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(256), nullable=False)
     target = Column(
-        String(64), nullable=False
+        String(64), nullable=False, index=True
     )  # catalog_upsert, inventory_receipt, inventory_issue, inventory_transfer, stocktake, balance_adjustment_admin
     connection_id = Column(UUID(as_uuid=True), ForeignKey("etl_connections.id", ondelete="CASCADE"), nullable=False)
-    branch_id = Column(UUID(as_uuid=True), ForeignKey("org_branches.id", ondelete="SET NULL"), nullable=True)
+    branch_id = Column(UUID(as_uuid=True), ForeignKey("org_branches.id", ondelete="SET NULL"), nullable=True, index=True)
     location_id = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id", ondelete="SET NULL"), nullable=True)
     destination_location_id = Column(
         UUID(as_uuid=True), ForeignKey("inv_locations.id", ondelete="SET NULL"), nullable=True

@@ -6,15 +6,20 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import AppError
 from app.api.observability import record_approval_decision
 from app.api.routes.auth import get_current_user
+from app.api.routes.auth_utils import (
+    get_accessible_cashbox_ids,
+    require_any_capability,
+)
 from app.config import settings
 from app.database import get_db
+from app.models import schema_parity as _schema_parity  # noqa: F401 - map cash_boxes.branch_id
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.cash_sim import (
     CashBalance,
@@ -39,10 +44,35 @@ class ApprovalInput(BaseModel):
 _SIM_CASH_PREFIX = "SIM_CASH:"
 _SIM_OFFSET = "SIM_OFFSET:DEMO"
 _SUBJECT = "cash_request"
+_SUBJECT_BOX = "cash_box"
+
+# Tách quyền két tiền mặt (D2) — ba quyền độc lập, không gộp:
+# - `cash:manage_box`      -> quản lý THÔNG TIN két (tạo/sửa tên, trạng thái).
+#                            KHÔNG đụng tới số dư.
+# - `cash:reconcile`       -> nghiệp vụ đối soát (giữ nguyên cho API đối soát).
+# - `cash:post_adjustment` -> tạo/duyệt/thực hiện bút toán TÀI CHÍNH
+#                            (journal điều chỉnh / đảo giao dịch). Tách riêng,
+#                            KHÔNG nằm trong `cash:manage_box`.
+_CASHBOX_CAPS = ("cash:manage_box",)
+_ADJUSTMENT_CAPS = ("cash:post_adjustment",)
+# Kind của phiếu quỹ là bút toán điều chỉnh tài chính (không phải thu/chi thường).
+_ADJUSTMENT_KINDS = ("adjustment",)
+
+# Field client gửi lên để "ghi tay" số dư quỹ. Số dư chỉ được đổi qua
+# journal (phiếu thu/chi/đảo), không ghi trực tiếp từ input client.
+_DIRECT_BALANCE_FIELDS = ("amount", "balance", "opening_balance")
+
+# Độ dài tối đa của `Idempotency-Key` (khớp cột `cash_requests.idempotency_key`).
+_IDEMPOTENCY_KEY_MAX_LEN = 128
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+async def _visible_cashbox_ids(db: AsyncSession, user) -> set[uuid.UUID] | None:
+    """Wrapper cục bộ -> helper dùng chung trong `auth_utils`."""
+    return await get_accessible_cashbox_ids(db, user)
 
 
 def _cashbox_id(payload: dict[str, Any]) -> uuid.UUID | None:
@@ -54,12 +84,19 @@ def _cashbox_id(payload: dict[str, Any]) -> uuid.UUID | None:
     return None
 
 
-async def _balance_for_box(db: AsyncSession, cashbox_id: uuid.UUID):
-    rows = (
-        await db.execute(
-            select(CashBalance).where(CashBalance.cashbox_id == cashbox_id)
-        )
-    ).scalars().all()
+async def _balance_for_box(
+    db: AsyncSession, cashbox_id: uuid.UUID, *, for_update: bool = False
+):
+    """Đọc số dư quỹ.
+
+    `for_update=True` khoá row (SELECT ... FOR UPDATE) để 2 approve song song
+    không cùng đọc một số dư rồi cùng ghi (double-spend, R1) — pattern đã dùng
+    ở `inventory.py::_get_balance`.
+    """
+    stmt = select(CashBalance).where(CashBalance.cashbox_id == cashbox_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    rows = (await db.execute(stmt)).scalars().all()
     return rows[0] if rows else None
 
 
@@ -70,8 +107,13 @@ def _uuid(val: str, field: str = "id") -> uuid.UUID:
         raise AppError(422, "INVALID_UUID", f"{field} không hợp lệ") from None
 
 
-async def _load_request(db: AsyncSession, request_id: uuid.UUID):
-    return (await db.execute(select(CashRequest).where(CashRequest.id == request_id))).scalar_one_or_none()
+async def _load_request(
+    db: AsyncSession, request_id: uuid.UUID, *, for_update: bool = False
+):
+    stmt = select(CashRequest).where(CashRequest.id == request_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def _user_capabilities(db: AsyncSession, user_id: str) -> set[str]:
@@ -133,8 +175,12 @@ async def list_cashboxes(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Danh sách cash boxes (read-only)."""
-    boxes = (await db.execute(select(CashBox))).scalars().all()
+    """Danh sách cash boxes (read-only, lọc theo chi nhánh)."""
+    stmt = select(CashBox)
+    visible = await _visible_cashbox_ids(db, current_user)
+    if visible is not None:
+        stmt = stmt.where(CashBox.id.in_(visible))
+    boxes = (await db.execute(stmt)).scalars().all()
     return {
         "simulation": True,
         "currency": "VND",
@@ -151,12 +197,45 @@ async def list_cashboxes(
     }
 
 
+def _reject_direct_balance_write(payload: dict) -> None:
+    """Chặn client ghi tay số dư quỹ (S4).
+
+    Số dư chỉ đổi qua journal chuẩn (phiếu thu/chi/đảo đã approve). Nếu client
+    gửi field số dư vào PUT két thì trả 422 thay vì âm thầm ghi đè.
+    """
+    offending = [f for f in _DIRECT_BALANCE_FIELDS if f in payload]
+    if offending:
+        raise AppError(
+            422,
+            "DIRECT_BALANCE_WRITE_FORBIDDEN",
+            "Số dư quỹ chỉ đổi qua phiếu (journal), không ghi trực tiếp từ API két. "
+            f"Field bị từ chối: {', '.join(sorted(offending))}",
+            {"rejected_fields": sorted(offending)},
+        )
+
+
+def _decimal(raw: Any, field: str) -> Decimal:
+    try:
+        return Decimal(str(raw).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        raise AppError(422, "INVALID_AMOUNT", f"{field} không hợp lệ") from None
+
+
 @router.post("/cash-sim/boxes", status_code=201)
 async def create_cashbox(
     payload: dict,
-    current_user=Depends(get_current_user),
+    user=Depends(require_any_capability(*_CASHBOX_CAPS)),
     db: AsyncSession = Depends(get_db),
 ):
+    """Mở két tiền mặt.
+
+    Yêu cầu capability quản lý THÔNG TIN két (`cash:manage_box`). Nếu mở két
+    kèm số dư đầu kỳ thì còn phải có `cash:post_adjustment` vì đó là bút toán
+    tài chính (mở két). Số dư mở két KHÔNG ghi thẳng vào `CashBalance.amount`:
+    nó được post thành một bút toán mở két (journal cân debit/credit) để ledger
+    và read model không lệch nhau.
+    """
+    _reject_direct_balance_write({k: v for k, v in payload.items() if k != "opening_balance"})
     code = str(payload.get("code", "")).strip().upper()
     name = str(payload.get("name", "")).strip()
     currency = str(payload.get("currency", "VND")).strip().upper() or "VND"
@@ -165,6 +244,19 @@ async def create_cashbox(
         raise AppError(422, "MISSING_CODE", "Mã két không được để trống")
     if not name:
         raise AppError(422, "MISSING_NAME", "Tên két không được để trống")
+    opening = _decimal(opening_balance, "opening_balance")
+    if opening < _ZERO:
+        raise AppError(422, "INVALID_AMOUNT", f"opening_balance phải >= 0, nhận {opening}")
+    if opening > _ZERO:
+        # Mở két có số dư đầu kỳ = bút toán tài chính -> cần quyền riêng.
+        caps = await _user_capabilities(db, user.id)
+        if not any(c in caps for c in _ADJUSTMENT_CAPS):
+            raise AppError(
+                403,
+                "FORBIDDEN",
+                "Mở két kèm số dư đầu kỳ cần quyền ghi bút toán tài chính "
+                f"({', '.join(_ADJUSTMENT_CAPS)}).",
+            )
     existing = (await db.execute(select(CashBox).where(CashBox.code == code))).scalars().first()
     if existing:
         raise AppError(409, "DUPLICATE_CODE", f"Mã két {code} đã tồn tại")
@@ -177,12 +269,54 @@ async def create_cashbox(
     )
     db.add(box)
     await db.flush()
+    # S6 — két mới gắn với chi nhánh của người mở két để số dư quỹ không bị
+    # lọt sang chi nhánh khác (`cash_boxes.branch_id` do schema_parity map).
+    if getattr(user, "branch_id", None):
+        await db.execute(
+            update(CashBox.__table__)
+            .where(CashBox.__table__.c.id == box.id)
+            .values(branch_id=user.branch_id)
+        )
     balance = CashBalance(
         cashbox_id=box.id,
-        amount=Decimal(opening_balance),
+        amount=_ZERO,
         version=1,
     )
     db.add(balance)
+    await db.flush()
+
+    if opening > _ZERO:
+        # Bút toán mở két: debit SIM_CASH (quỹ tăng), credit SIM_OFFSET.
+        opening_req = CashRequest(
+            id=uuid.uuid4(),
+            cashbox_id=box.id,
+            kind="opening",
+            amount=opening,
+            status="posted",
+            maker_id=user.id,
+            approver_id=user.id,
+            reason=f"Mở két {code}",
+            version=1,
+            created_by=user.id,
+        )
+        db.add(opening_req)
+        await db.flush()
+        journal = CashJournal(
+            id=uuid.uuid4(),
+            request_id=opening_req.id,
+            posted_at=_now(),
+            correlation_id=uuid.uuid4().hex[:12],
+            reversal_of=None,
+        )
+        db.add(journal)
+        await db.flush()
+        db.add(_cash_entry(journal.id, f"{_SIM_CASH_PREFIX}{box.id}", opening, _ZERO))
+        db.add(_cash_entry(journal.id, _SIM_OFFSET, _ZERO, opening))
+        balance.amount = opening
+        balance.version += 1
+
+    await _audit_box(db, user.id, "create", box, {"opening_balance": str(opening)})
+    await _outbox_box(db, "cash_box.created", box, {"opening_balance": str(opening)})
     await db.commit()
     await db.refresh(box)
     return {
@@ -199,31 +333,34 @@ async def create_cashbox(
 async def update_cashbox(
     cashbox_id: str,
     payload: dict,
-    current_user=Depends(get_current_user),
+    user=Depends(require_any_capability(*_CASHBOX_CAPS)),
     db: AsyncSession = Depends(get_db),
 ):
+    """Sửa thông tin két (tên / trạng thái) — cần `cash:manage_box`.
+
+    KHÔNG sửa được số dư quỹ (S4): mọi field số dư bị chặn 422
+    `DIRECT_BALANCE_WRITE_FORBIDDEN`."""
+    _reject_direct_balance_write(payload)
     cid = _uuid(cashbox_id, "cashbox_id")
     box = (await db.execute(select(CashBox).where(CashBox.id == cid))).scalars().first()
     if not box:
         raise AppError(404, "CASHBOX_NOT_FOUND", "Không tìm thấy két sắt")
+    before = {"name": box.name, "active": box.active}
     if "name" in payload and payload["name"]:
         box.name = str(payload["name"]).strip()
     if "active" in payload:
         box.active = bool(payload["active"])
-    
-    opening_bal = payload.get("opening_balance") or payload.get("balance") or payload.get("amount")
-    if opening_bal is not None:
-        try:
-            val = Decimal(str(opening_bal).strip())
-            bal = (await db.execute(select(CashBalance).where(CashBalance.cashbox_id == cid))).scalars().first()
-            if bal:
-                bal.amount = val
-                bal.version += 1
-            else:
-                db.add(CashBalance(cashbox_id=cid, amount=val, version=1))
-        except Exception:
-            pass
 
+    await _audit_box(
+        db,
+        user.id,
+        "update",
+        box,
+        {"before": before, "after": {"name": box.name, "active": box.active}},
+    )
+    await _outbox_box(
+        db, "cash_box.updated", box, {"before": before, "after": {"name": box.name, "active": box.active}}
+    )
     await db.commit()
     await db.refresh(box)
     cur_bal = (await db.execute(select(CashBalance).where(CashBalance.cashbox_id == cid))).scalars().first()
@@ -240,7 +377,7 @@ async def update_cashbox(
 @router.delete("/cash-sim/boxes/{cashbox_id}")
 async def delete_cashbox(
     cashbox_id: str,
-    current_user=Depends(get_current_user),
+    user=Depends(require_any_capability(*_CASHBOX_CAPS)),
     db: AsyncSession = Depends(get_db),
 ):
     cid = _uuid(cashbox_id, "cashbox_id")
@@ -248,6 +385,8 @@ async def delete_cashbox(
     if not box:
         raise AppError(404, "CASHBOX_NOT_FOUND", "Không tìm thấy két sắt")
     box.active = False
+    await _audit_box(db, user.id, "delete", box, {"active": False})
+    await _outbox_box(db, "cash_box.deleted", box, {"active": False})
     await db.commit()
     return {"status": "deleted", "id": str(box.id)}
 
@@ -258,7 +397,11 @@ async def list_cash_balances(
     db: AsyncSession = Depends(get_db),
 ):
     """Tồn quỹ của từng cash box - read model, nguồn sự thật là journals."""
-    rows = (await db.execute(select(CashBalance))).scalars().all()
+    stmt = select(CashBalance)
+    visible = await _visible_cashbox_ids(db, current_user)
+    if visible is not None:
+        stmt = stmt.where(CashBalance.cashbox_id.in_(visible))
+    rows = (await db.execute(stmt)).scalars().all()
     return {
         "simulation": True,
         "currency": "VND",
@@ -284,6 +427,11 @@ async def list_journals(
     offset: int = 0,
 ):
     stmt = select(CashJournal).order_by(CashJournal.posted_at.desc())
+    visible = await _visible_cashbox_ids(db, current_user)
+    if visible is not None:
+        stmt = stmt.where(CashJournal.request_id.in_(
+            select(CashRequest.id).where(CashRequest.cashbox_id.in_(visible))
+        ))
     if request_id:
         stmt = stmt.where(CashJournal.request_id == uuid.UUID(request_id))
     total = (
@@ -292,7 +440,16 @@ async def list_journals(
     rows = (await db.execute(stmt.limit(limit).offset(offset))).scalars().all()
     req_map = {
         r.id: r
-        for r in (await db.execute(select(CashRequest))).scalars().all()
+        for r in (
+            await db.execute(
+                select(CashRequest)
+                .where(
+                    CashRequest.cashbox_id.in_(visible)
+                    if visible is not None
+                    else CashRequest.id.is_not(None)
+                )
+            )
+        ).scalars().all()
     }
     return {
         "simulation": True,
@@ -341,6 +498,35 @@ async def list_journals(
     }
 
 
+def _same_cash_payload(req: CashRequest, payload: dict[str, Any]) -> bool:
+    """Cùng idempotency-key + cùng payload nội dung -> được replay (A3)."""
+    try:
+        amount = Decimal(str(payload.get("amount", "0")).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+    box_id = _cashbox_id(payload)
+    if box_id is None:
+        return False
+    return (
+        Decimal(str(req.amount)) == amount
+        and str(req.kind) == str(payload.get("kind", "payment"))
+        and str(req.cashbox_id) == str(box_id)
+        and (req.reason or None) == (payload.get("reason") or None)
+    )
+
+
+def _replay_cash_request(req: CashRequest, payload: dict[str, Any], user) -> dict:
+    """Trả lại phiếu đã tạo cho key này; payload khác -> 409 (A4).
+
+    Phiếu của user khác không bao giờ được trả ra -> 409 luôn.
+    """
+    if str(req.maker_id) != str(getattr(user, "id", user)):
+        raise idempotency.IdempotencyConflict(201, {"id": str(req.id)})
+    if not _same_cash_payload(req, payload):
+        raise idempotency.IdempotencyConflict(201, _cash_req_out(req))
+    return _cash_req_out(req)
+
+
 def _cash_req_out(r: CashRequest, extra: dict | None = None) -> dict:
     body = {
         "id": str(r.id),
@@ -368,12 +554,12 @@ async def list_cash_requests(
     db: AsyncSession = Depends(get_db),
     limit: int = 100,
 ):
+    stmt = select(CashRequest).order_by(CashRequest.created_at.desc())
+    visible = await _visible_cashbox_ids(db, current_user)
+    if visible is not None:
+        stmt = stmt.where(CashRequest.cashbox_id.in_(visible))
     rows = (
-        await db.execute(
-            select(CashRequest)
-            .order_by(CashRequest.created_at.desc())
-            .limit(max(1, min(limit, 100)))
-        )
+        await db.execute(stmt.limit(max(1, min(limit, 100))))
     ).scalars().all()
     return {
         "simulation": True,
@@ -392,6 +578,9 @@ async def delete_cash_request(
     req = (await db.execute(select(CashRequest).where(CashRequest.id == rid))).scalars().first()
     if not req:
         raise AppError(404, "REQUEST_NOT_FOUND", "Không tìm thấy phiếu quỹ")
+    # S5 (IDOR) — chỉ chủ sở hữu phiếu mới được xoá phiếu nháp.
+    if str(req.maker_id) != str(user.id):
+        raise AppError(403, "FORBIDDEN", "Chỉ người lập phiếu mới được xoá phiếu này.")
     if req.status != "draft":
         raise AppError(409, "CANNOT_DELETE_NON_DRAFT", "Chỉ có thể xoá phiếu ở trạng thái nháp (draft)")
     await db.delete(req)
@@ -412,9 +601,24 @@ async def create_cash_request(
 ):
     """Tạo phiếu cash draft - maker phải có capability cash:create_request (docs/06)."""
     key = _require_key(request)
+    if len(key) > _IDEMPOTENCY_KEY_MAX_LEN:
+        raise AppError(
+            422,
+            "IDEMPOTENCY_KEY_TOO_LONG",
+            f"Idempotency-Key tối đa {_IDEMPOTENCY_KEY_MAX_LEN} ký tự",
+        )
     caps = await _user_capabilities(db, user.id)
     if "cash:create_request" not in caps:
         raise AppError(403, "FORBIDDEN", "Bạn không có quyền tạo phiếu quỹ.")
+
+    kind = str(payload.get("kind", "payment")).strip().lower()
+    if kind in _ADJUSTMENT_KINDS and not any(c in caps for c in _ADJUSTMENT_CAPS):
+        raise AppError(
+            403,
+            "FORBIDDEN",
+            "Bạn không có quyền tạo bút toán điều chỉnh tài chính "
+            f"({', '.join(_ADJUSTMENT_CAPS)}).",
+        )
 
     try:
         amount = Decimal(str(payload.get("amount", "0")))
@@ -427,6 +631,13 @@ async def create_cash_request(
     if cashbox_id is None:
         raise AppError(422, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
 
+    # Key đã dùng trước đó và còn sống trong DB (bền vững qua restart, R2):
+    # replay phiếu cũ, không tạo phiếu trùng. Tra trước store in-memory để
+    # không bao giờ trả phiếu của user khác cho user này.
+    existing = await idempotency.lookup_persisted(db, key, CashRequest)
+    if existing is not None:
+        return _replay_cash_request(existing, payload, user)
+
     replay = idempotency.check(key, idempotency.payload_hash(payload))
     if replay is not None:
         return replay[1]
@@ -434,16 +645,30 @@ async def create_cash_request(
     req = CashRequest(
         id=uuid.uuid4(),
         cashbox_id=cashbox_id,
-        kind=str(payload.get("kind", "payment")),
+        kind=kind,
         amount=amount,
         status="draft",
         maker_id=user.id,
         reason=payload.get("reason"),
         version=1,
         created_by=user.id,
+        idempotency_key=key,
     )
     db.add(req)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Tranh chấp unique idempotency_key (2 request cùng key chạy song song):
+        # request thua rollback rồi replay phiếu của request thắng.
+        await db.rollback()
+        existing = await idempotency.lookup_persisted(db, key, CashRequest)
+        if existing is None:
+            raise AppError(
+                409,
+                "IDEMPOTENCY_KEY_REUSED",
+                "Idempotency-Key đã được dùng cho một payload khác",
+            ) from None
+        return _replay_cash_request(existing, payload, user)
     await db.refresh(req)
     body = _cash_req_out(req)
     idempotency.remember(db, key, idempotency.payload_hash(payload), 201, body)
@@ -499,7 +724,9 @@ async def approve_cash_request(
     db: AsyncSession = Depends(get_db),
 ):
     """Force post: check quỹ thực, post journal cân, audit + outbox trong tx (docs/06, B08)."""
-    req = await _load_request(db, uuid.UUID(request_id))
+    # Khoá dòng phiếu: 2 approve đồng thời cùng 1 phiếu thì request thứ 2 phải
+    # chờ và thấy trạng thái đã đổi (409) thay vì post 2 journal.
+    req = await _load_request(db, uuid.UUID(request_id), for_update=True)
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     if str(req.maker_id) == str(user.id):
@@ -507,11 +734,23 @@ async def approve_cash_request(
     caps = await _user_capabilities(db, user.id)
     if "cash:approve_request" not in caps:
         raise AppError(403, "FORBIDDEN", "Bạn không có quyền duyệt phiếu quỹ.")
+    if str(req.kind) in _ADJUSTMENT_KINDS and not any(
+        c in caps for c in _ADJUSTMENT_CAPS
+    ):
+        raise AppError(
+            403,
+            "FORBIDDEN",
+            "Bạn không có quyền duyệt bút toán điều chỉnh tài chính "
+            f"({', '.join(_ADJUSTMENT_CAPS)}).",
+        )
     if req.status != "submitted":
         raise AppError(409, "STATE_CONFLICT", f"Không thể duyệt phiếu khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
 
-    box = await _balance_for_box(db, req.cashbox_id)
+    # Khoá dòng số dư (SELECT ... FOR UPDATE) trước khi kiểm tra & ghi: hai
+    # checker approve đồng thời không được cùng đọc một số dư rồi cùng ghi
+    # (double-spend, R1).
+    box = await _balance_for_box(db, req.cashbox_id, for_update=True)
     if box is None:
         raise AppError(404, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
     amount = Decimal(str(req.amount))
@@ -694,8 +933,24 @@ async def reverse_cash_request(
     if req is None:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại")
     caps = await _user_capabilities(db, user.id)
-    if not ({"cash:create_request", "cash:approve_request", "cash:reconcile"} & caps):
-        raise AppError(403, "FORBIDDEN", "Bạn không có quyền đảo giao dịch quỹ.")
+    # Đảo giao dịch = post journal -> KHÔNG được bằng quyền đối soát
+    # (`cash:reconcile` chỉ đọc/đối soát, không ghi ledger).
+    if not ({"cash:create_request", "cash:approve_request"} | set(_ADJUSTMENT_CAPS)) & caps:
+        raise AppError(
+            403,
+            "FORBIDDEN",
+            "Bạn không có quyền đảo giao dịch quỹ "
+            "(cần cash:create_request / cash:approve_request).",
+        )
+    if str(req.kind) in _ADJUSTMENT_KINDS and not any(
+        c in caps for c in _ADJUSTMENT_CAPS
+    ):
+        raise AppError(
+            403,
+            "FORBIDDEN",
+            "Bạn không có quyền đảo bút toán điều chỉnh tài chính "
+            f"({', '.join(_ADJUSTMENT_CAPS)}).",
+        )
     if req.status != "posted":
         raise AppError(409, "STATE_CONFLICT", f"Không thể đảo giao dịch khi đang ở trạng thái {req.status}.")
     _check_if_match(request, req.version)
@@ -706,7 +961,7 @@ async def reverse_cash_request(
     if orig_j is None:
         raise AppError(404, "JOURNAL_NOT_FOUND", "Không tìm thấy journal gốc")
 
-    box = await _balance_for_box(db, req.cashbox_id)
+    box = await _balance_for_box(db, req.cashbox_id, for_update=True)
     if box is None:
         raise AppError(404, "CASHBOX_NOT_FOUND", "Két quỹ không tồn tại.")
     amount = Decimal(str(req.amount))
@@ -810,6 +1065,45 @@ async def _outbox(db: AsyncSession, event_type: str, req: CashRequest, extra: di
                 "status": req.status,
                 "amount": str(req.amount),
                 **extra,
+            },
+            created_at=datetime.now(UTC),
+        )
+    )
+
+
+async def _audit_box(
+    db: AsyncSession, actor_id, action: str, box: CashBox, extra: dict | None = None
+) -> None:
+    """Audit thay đổi cấu hình két (S4: mọi ghi vào két đều có dấu vết)."""
+    db.add(
+        AuditEvent(
+            id=uuid.uuid4(),
+            actor_id=actor_id,
+            action=f"cash_box.{action}",
+            subject=f"{_SUBJECT_BOX}:{box.id}",
+            before_hash=idempotency.payload_hash(extra or {}),
+            after_hash=idempotency.payload_hash(extra or {}),
+            occurred_at=datetime.now(UTC),
+            metadata_json={"code": box.code, **(extra or {})},
+        )
+    )
+
+
+async def _outbox_box(
+    db: AsyncSession, event_type: str, box: CashBox, extra: dict | None = None
+) -> None:
+    db.add(
+        OutboxEvent(
+            id=uuid.uuid4(),
+            event_type=event_type,
+            aggregate_id=str(box.id),
+            payload_json={
+                "subject_type": _SUBJECT_BOX,
+                "subject_id": str(box.id),
+                "code": box.code,
+                "name": box.name,
+                "active": box.active,
+                **(extra or {}),
             },
             created_at=datetime.now(UTC),
         )

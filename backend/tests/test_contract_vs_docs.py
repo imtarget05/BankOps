@@ -1042,12 +1042,20 @@ class TestFlutterAndQa:
             "conftest.py",
         }
         hits = []
+        # `BACKEND_DIR.rglob` also walks into virtualenvs / build output that
+        # ship their own `test_*.py` files (e.g. joblib's big5-encoded test
+        # module). Those are not part of this repository's test suite and one
+        # of them cannot even be decoded as UTF-8, so skip those trees and
+        # decode defensively.
+        ignored_dirs = {".venv", "venv", "node_modules", "build", "dist", ".git", "__pycache__"}
         for f in BACKEND_DIR.rglob("test_*.py"):
+            if any(part in ignored_dirs for part in f.parts):
+                continue
             if f.name in reviewer:
                 continue
             if f.stat().st_size == 0:
                 continue
-            text = f.read_text()
+            text = f.read_text(errors="ignore")
             if "openapi" in text.lower() and "snapshot" in text.lower():
                 hits.append(f.name)
         if not hits:

@@ -3,11 +3,15 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.auth import get_current_user
-from app.api.routes.auth_utils import get_user_capabilities
+from app.api.routes.auth_utils import (
+    get_accessible_cashbox_ids,
+    get_accessible_location_ids,
+    get_user_capabilities,
+)
 from app.database import get_db
 from app.models.cash_sim import CashBalance, CashBox, CashRequest
 from app.models.iam import User
@@ -65,8 +69,17 @@ async def get_dashboard_summary(
         c in caps for c in ("cash:reconcile", "audit:view", "approval:view_inbox")
     )
 
+    # S6 — dashboard là báo cáo tiền/tồn: phải lọc theo phạm vi chi nhánh của
+    # user (cùng cơ chế scope như `list_balances` / `list_locations`).
+    # `None` = admin (thấy toàn bộ).
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    allowed_cashbox_ids = await get_accessible_cashbox_ids(db, current_user)
+
     # 1. Locations
-    locs = (await db.execute(select(Location).order_by(Location.code))).scalars().all()
+    loc_stmt = select(Location).order_by(Location.code)
+    if allowed_location_ids is not None:
+        loc_stmt = loc_stmt.where(Location.id.in_(allowed_location_ids))
+    locs = (await db.execute(loc_stmt)).scalars().all()
     locations_out = [
         {"id": str(loc.id), "code": loc.code, "name": loc.name, "active": loc.active}
         for loc in locs
@@ -89,7 +102,10 @@ async def get_dashboard_summary(
     ]
 
     # 3. Balances
-    balances = (await db.execute(select(Balance).order_by(Balance.location_id, Balance.item_id))).scalars().all()
+    bal_stmt = select(Balance).order_by(Balance.location_id, Balance.item_id)
+    if allowed_location_ids is not None:
+        bal_stmt = bal_stmt.where(Balance.location_id.in_(allowed_location_ids))
+    balances = (await db.execute(bal_stmt)).scalars().all()
     balances_out = [
         {
             "location_id": str(b.location_id),
@@ -103,7 +119,10 @@ async def get_dashboard_summary(
     ]
 
     # 4. Assets
-    assets = (await db.execute(select(Asset).order_by(Asset.serial).limit(200))).scalars().all()
+    asset_stmt = select(Asset).order_by(Asset.serial).limit(200)
+    if allowed_location_ids is not None:
+        asset_stmt = asset_stmt.where(Asset.location_id.in_(allowed_location_ids))
+    assets = (await db.execute(asset_stmt)).scalars().all()
     assets_out = [
         {
             "id": str(a.id),
@@ -123,6 +142,13 @@ async def get_dashboard_summary(
     )
     if "inventory:approve_request" not in caps:
         req_stmt = req_stmt.where(InventoryRequest.maker_id == current_user.id)
+    elif allowed_location_ids is not None:
+        req_stmt = req_stmt.where(
+            or_(
+                InventoryRequest.source_id.in_(allowed_location_ids),
+                InventoryRequest.dest_id.in_(allowed_location_ids),
+            )
+        )
     requests = (await db.execute(req_stmt.limit(50))).scalars().all()
     req_ids = [r.id for r in requests]
     lines_by_req: dict[uuid.UUID, list[dict]] = {r.id: [] for r in requests}
@@ -173,18 +199,19 @@ async def get_dashboard_summary(
         requests_out.append(body)
 
     # 6. Low stock alerts (single outerjoin query)
-    low_stock_rows = (
-        await db.execute(
-            select(StockLevel, Balance, Item, Location)
-            .outerjoin(
-                Balance,
-                (Balance.location_id == StockLevel.location_id)
-                & (Balance.item_id == StockLevel.item_id),
-            )
-            .outerjoin(Item, Item.id == StockLevel.item_id)
-            .outerjoin(Location, Location.id == StockLevel.location_id)
+    low_stock_stmt = (
+        select(StockLevel, Balance, Item, Location)
+        .outerjoin(
+            Balance,
+            (Balance.location_id == StockLevel.location_id)
+            & (Balance.item_id == StockLevel.item_id),
         )
-    ).all()
+        .outerjoin(Item, Item.id == StockLevel.item_id)
+        .outerjoin(Location, Location.id == StockLevel.location_id)
+    )
+    if allowed_location_ids is not None:
+        low_stock_stmt = low_stock_stmt.where(StockLevel.location_id.in_(allowed_location_ids))
+    low_stock_rows = (await db.execute(low_stock_stmt)).all()
     low_stock_out = []
     for level, bal, it, loc in low_stock_rows:
         current_qty = Decimal(str(bal.quantity)) if bal and bal.quantity is not None else Decimal("0")
@@ -214,7 +241,10 @@ async def get_dashboard_summary(
             })
 
     # 7. Cashboxes
-    boxes = (await db.execute(select(CashBox).where(CashBox.active.is_(True)))).scalars().all()
+    box_stmt = select(CashBox).where(CashBox.active.is_(True))
+    if allowed_cashbox_ids is not None:
+        box_stmt = box_stmt.where(CashBox.id.in_(allowed_cashbox_ids))
+    boxes = (await db.execute(box_stmt)).scalars().all()
     cashboxes_out = [
         {
             "id": str(b.id),
@@ -228,7 +258,10 @@ async def get_dashboard_summary(
     ]
 
     # 8. Cash Balances
-    c_balances = (await db.execute(select(CashBalance))).scalars().all()
+    cb_stmt = select(CashBalance)
+    if allowed_cashbox_ids is not None:
+        cb_stmt = cb_stmt.where(CashBalance.cashbox_id.in_(allowed_cashbox_ids))
+    c_balances = (await db.execute(cb_stmt)).scalars().all()
     cash_balances_out = [
         {
             "cashbox_id": str(cb.cashbox_id),
@@ -247,20 +280,29 @@ async def get_dashboard_summary(
             str(u.id): (u.display_name_demo or u.username)
             for u in (await db.execute(select(User))).scalars().all()
         }
-        inv_pending = (
-            await db.execute(
-                select(InventoryRequest)
-                .where(InventoryRequest.status == "submitted")
-                .order_by(InventoryRequest.submitted_at.asc())
+        inv_pending_stmt = (
+            select(InventoryRequest)
+            .where(InventoryRequest.status == "submitted")
+            .order_by(InventoryRequest.submitted_at.asc())
+        )
+        if allowed_location_ids is not None:
+            inv_pending_stmt = inv_pending_stmt.where(
+                or_(
+                    InventoryRequest.source_id.in_(allowed_location_ids),
+                    InventoryRequest.dest_id.in_(allowed_location_ids),
+                )
             )
-        ).scalars().all()
-        cash_pending = (
-            await db.execute(
-                select(CashRequest)
-                .where(CashRequest.status == "submitted")
-                .order_by(CashRequest.submitted_at.asc())
+        inv_pending = (await db.execute(inv_pending_stmt)).scalars().all()
+        cash_pending_stmt = (
+            select(CashRequest)
+            .where(CashRequest.status == "submitted")
+            .order_by(CashRequest.submitted_at.asc())
+        )
+        if allowed_cashbox_ids is not None:
+            cash_pending_stmt = cash_pending_stmt.where(
+                CashRequest.cashbox_id.in_(allowed_cashbox_ids)
             )
-        ).scalars().all()
+        cash_pending = (await db.execute(cash_pending_stmt)).scalars().all()
         inv_pending_ids = [r.id for r in inv_pending]
         qty_by_req: dict = {}
         if inv_pending_ids:

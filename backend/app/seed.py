@@ -18,6 +18,7 @@ from app.database import AsyncSessionLocal
 from app.models.cash_sim import CashBalance, CashBox
 from app.models.iam import Branch, Capability, Role, RoleCapability, User, UserRole
 from app.models.inventory import Asset, Balance, Item, Location, StockLevel
+from app.services.approval_controls import DEMO_SUPERVISOR_PIN
 
 # Demo password - used for all seeded demo users.
 DEMO_PASSWORD = "DemoPass123!"
@@ -96,6 +97,12 @@ async def seed_demo():
             Capability(code="cash:approve_request", name="Approve cash request"),
             Capability(code="cash:reconcile", name="Reconcile cash ledger"),
             Capability(code="cash:view_balances", name="View cash balances"),
+            # D2 — quyền quản lý két CHỈ gồm thông tin két (tên/mã/trạng thái),
+            # không bao gồm ghi số dư.
+            Capability(code="cash:manage_box", name="Manage cash box metadata (name/code/branch)"),
+            # D2 — quyền ghi bút toán tài chính (journal điều chỉnh / đảo giao dịch),
+            # tách riêng khỏi `cash:manage_box` và `cash:reconcile`.
+            Capability(code="cash:post_adjustment", name="Post cash adjustment / reversal journal"),
             Capability(code="approval:view_inbox", name="View approval inbox"),
             Capability(code="activity:view", name="View activity feed"),
             Capability(code="integration:manage", name="Manage integrations"),
@@ -125,6 +132,11 @@ async def seed_demo():
             RoleCapability(role_code="approver", capability_code="cash:approve_request"),
             RoleCapability(role_code="cash_sim_operator", capability_code="cash:reconcile"),
             RoleCapability(role_code="cash_sim_operator", capability_code="cash:view_balances"),
+            # D2 — mapping quyền mới (quản lý thông tin két / ghi bút toán tài chính).
+            RoleCapability(role_code="cash_sim_operator", capability_code="cash:manage_box"),
+            RoleCapability(role_code="cash_sim_operator", capability_code="cash:post_adjustment"),
+            RoleCapability(role_code="approver", capability_code="cash:manage_box"),
+            RoleCapability(role_code="approver", capability_code="cash:post_adjustment"),
             RoleCapability(role_code="approver", capability_code="approval:view_inbox"),
             RoleCapability(role_code="staff", capability_code="activity:view"),
             RoleCapability(role_code="approver", capability_code="activity:view"),
@@ -197,7 +209,13 @@ async def seed_demo():
         default_branch_id = await _resolve_default_branch(db)
         if missing_specs:
             password_hash = get_password_hash(DEMO_PASSWORD)
-            default_pin_hash = get_password_hash("123456")
+            # D4 — PIN mặc định `123456` CHỈ được gán khi demo mode bật tường
+            # minh. Ngoài demo mode user mới không có PIN sẵn: cổng duyệt phải
+            # dùng PIN cấu hình / PIN do admin đặt (fail-closed), không tự động
+            # dùng PIN demo.
+            default_pin_hash = (
+                get_password_hash(DEMO_SUPERVISOR_PIN) if settings.is_demo_mode else None
+            )
             users = []
             user_roles = []
             for u in missing_specs:

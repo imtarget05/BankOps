@@ -191,25 +191,28 @@ class TestEtlPipeline:
         run_id = run["id"]
         assert run["valid_rows"] == 1
 
-        # Post the run (single admin override)
+        # Post the run (single admin override).
+        # R11 — runner tự post => KHÔNG được tự tạo phiếu `approved` (vi phạm
+        # maker != checker). Phiếu được tạo ở trạng thái `draft` chờ duyệt độc
+        # lập, chưa ghi movement và chưa đụng tồn.
         post_res = client.post(f"/etl/runs/{run_id}/post", headers=admin)
         assert post_res.status_code == 200, post_res.text
         post_data = post_res.json()
-        assert post_data["status"] == "posted"
+        assert post_data["status"] == "pending_approval"
         assert post_data["single_admin_override"] is True
-        assert post_data["movements_count"] >= 1
+        assert post_data["movements_count"] == 0
         req_id = post_data["request_id"]
 
-        # Verify that an InventoryRequest of kind="adjustment" was created and approved
+        # Verify that an InventoryRequest of kind="adjustment" was created in draft
         req_info = client.get(f"/inventory/requests/{req_id}", headers=admin).json()
         assert req_info["kind"] == "adjustment"
-        assert req_info["status"] == "approved"
+        assert req_info["status"] == "draft"
 
-        # Verify new balance updated correctly
+        # Verify the balance was NOT touched before an independent approval
         updated_bals = fetch_all_balances(client, admin)
         new_bal_obj = next((b for b in updated_bals if b["item_id"] == item["id"] and b["location_id"] == loc_id), None)
         assert new_bal_obj is not None
-        assert float(new_bal_obj["quantity"]) == target_qty
+        assert float(new_bal_obj["quantity"]) == initial_qty
 
         # Verify posting cannot be replayed
         repost_res = client.post(f"/etl/runs/{run_id}/post", headers=admin)

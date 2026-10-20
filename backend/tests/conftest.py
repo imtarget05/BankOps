@@ -28,6 +28,12 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg2://bankops:bankops@127.0.0.1:5432/bankops"
 )
 
+# Demo mode là opt-in TƯỜNG MINH (APP_ENV=demo + DEMO_MODE=true). Bộ test chạy
+# trên dữ liệu demo (user demo_*, seed lúc startup) nên bật tường minh ở đây.
+# Test kiểm tra an toàn sẽ TẮT lại bằng monkeypatch (`demo_mode=False`) để
+# khẳng định hành vi ngoài demo mode.
+os.environ.setdefault("DEMO_MODE", "true")
+
 
 def _import_or_fail(module: str):
     try:

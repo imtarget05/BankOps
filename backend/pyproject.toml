@@ -24,6 +24,9 @@ opentelemetry-instrumentation-httpx = "^0.46b0"
 opentelemetry-instrumentation-sqlalchemy = "^0.46b0"
 opentelemetry-instrumentation-logging = "^0.46b0"
 prometheus-client = "^0.21.0"
+mlflow = "^2.10.0"
+pandas = "^2.2.0"
+scikit-learn = "^1.4.0"
 setuptools = ">=80.9,<81"
 python-jose = { extras = ["cryptography"], version = "^3.3.0" }
 passlib = { extras = ["bcrypt"], version = "^1.7.4" }

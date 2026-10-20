@@ -2,7 +2,17 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.base import Base, TimestampMixin, utc_now
@@ -17,9 +27,12 @@ class UserStatus(enum.StrEnum):
 class Branch(Base, TimestampMixin):
     """Organizational branch."""
     __tablename__ = "org_branches"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_org_branches_code"),
+    )
 
     id: str = Column(UUID(as_uuid=True), primary_key=True)
-    code: str = Column(String(64), unique=True, nullable=False, index=True)
+    code: str = Column(String(64), nullable=False, index=True)
     name: str = Column(String(256), nullable=False)
     address: str | None = Column(String(512), nullable=True)
     active: bool = Column(Boolean, default=True, nullable=False)
@@ -56,6 +69,9 @@ class User(Base, TimestampMixin):
 class ScopeGrant(Base, TimestampMixin):
     """Data scope grant for a user (branch and/or location level)."""
     __tablename__ = "iam_scope_grants"
+    __table_args__ = (
+        Index("ix_iam_scope_grants_user_branch", "user_id", "branch_id"),
+    )
 
     id: str = Column(UUID(as_uuid=True), primary_key=True)
     user_id: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)

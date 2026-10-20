@@ -14,6 +14,7 @@ import app.models.activity  # noqa: F401
 import app.models.approval  # noqa: F401
 import app.models.cash_sim  # noqa: F401
 import app.models.etl  # noqa: F401
+import app.models.expense  # noqa: F401
 import app.models.iam  # noqa: F401
 import app.models.integration  # noqa: F401
 import app.models.inventory  # noqa: F401

@@ -27,6 +27,7 @@ frontend/.flutter-plugins-dependencies
 .env
 .env.*
 !.env.example
+!.env.production.example
 .dev.vars
 # Local Compose overrides and secret-store exports.
 compose.override.yml
@@ -35,6 +36,13 @@ secrets/
 *.dump
 *.dump.gpg
 *.dump.sha256
+
+# Local MLflow tracking artifacts (training samples + local tracking DB)
+mlruns/
+**/mlruns/
+**/mlruns*/
+mlflow.db
+**/*mlflow*.db
 
 # Node / Cloudflare Worker
 node_modules/

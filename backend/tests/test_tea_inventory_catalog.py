@@ -1,6 +1,8 @@
 """Catalog fields required by the milk-tea inventory specification."""
 import uuid
 
+from conftest import fetch_all_balances
+
 DEMO_PASSWORD = "DemoPass123!"
 
 
@@ -181,8 +183,15 @@ def test_manager_can_batch_delete_items(client):
     assert id2 not in active_ids
 
 
-def test_delete_item_with_stock_and_movements_deactivates_and_clears_balance(client):
-    """Deleting an item with stock balance clears balances and safely deactivates the item."""
+def test_delete_item_with_stock_and_movements_deactivates_and_keeps_balance(client):
+    """Soft delete vật tư đã có tồn: CHỈ ngừng hoạt động, GIỮ NGUYÊN tồn kho.
+
+    R9 — trước đây API xoá vật tư xoá luôn `inv_balances`/`inv_stock_levels`
+    TRƯỚC khi quyết định hard/soft delete. Ở nhánh soft delete (vật tư đã có
+    movement/phiếu) điều đó làm MẤT TỒN trong khi movement vẫn còn -> đối soát
+    lệch vĩnh viễn.  Nay chỉ nhánh hard delete mới xoá tồn; nhánh soft giữ
+    tồn và đòi lập Phiếu điều chỉnh để giảm tồn.
+    """
     sku = f"STOCK-ITEM-{uuid.uuid4().hex[:8]}"
     create_resp = client.post(
         "/inventory/items",
@@ -232,7 +241,7 @@ def test_delete_item_with_stock_and_movements_deactivates_and_clears_balance(cli
     )
     assert app_resp.status_code == 200, app_resp.text
 
-    # Delete the item -> succeeds, clears balance, and deactivates (soft delete)
+    # Delete the item -> succeeds, keeps the balance, and deactivates (soft delete)
     del_resp = client.delete(
         f"/inventory/items/{item_id}",
         headers=_manager_headers(client),
@@ -246,10 +255,11 @@ def test_delete_item_with_stock_and_movements_deactivates_and_clears_balance(cli
     assert listed.status_code == 200
     assert not any(i["id"] == item_id for i in listed.json()["items"])
 
-    # Verify balance is cleared
-    bals = client.get("/inventory/balances", headers=_manager_headers(client))
-    assert bals.status_code == 200
-    assert not any(b.get("item_id") == item_id for b in bals.json().get("balances", []))
+    # Verify the stock balance is PRESERVED (soft delete must not destroy stock)
+    bals = fetch_all_balances(client, _manager_headers(client))
+    kept = [b for b in bals if b.get("item_id") == item_id]
+    assert kept, "soft delete KHÔNG được xoá tồn kho"
+    assert float(kept[0]["quantity"]) == 10.0, kept[0]
 
 
 

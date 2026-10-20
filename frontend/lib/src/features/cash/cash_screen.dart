@@ -7,6 +7,7 @@ import '../../core/util/role_visibility.dart';
 import '../../core/widgets/state_views.dart';
 import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
+import 'cash_adjustment.dart';
 
 /// Màn quản lý quỹ tiền mặt chuẩn ngân hàng:
 /// Hiển thị chi tiết từng két sắt (Vaults), số dư thực tế, số dư đầu ngày, và sổ nhật ký giao dịch (Journals).
@@ -134,6 +135,7 @@ class _CashScreenState extends State<CashScreen> {
     required double currentAmount,
     required List<JournalEntry> journals,
     required bool isAdmin,
+    required bool canAdjustBalance,
   }) async {
     final relatedJournals = journals.where((j) =>
       j.cashboxId == box.id ||
@@ -204,8 +206,28 @@ class _CashScreenState extends State<CashScreen> {
                           label: const Text('Chỉnh sửa'),
                           onPressed: () {
                             Navigator.of(ctx).pop();
-                            _showEditCashboxDialog(box, currentAmount);
+                            _showEditCashboxDialog(box);
                           },
+                        ),
+                      if (canAdjustBalance)
+                        FilledButton.tonalIcon(
+                          key: const Key('btn-sheet-cash-adjustment'),
+                          icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                          label: const Text('Tạo phiếu điều chỉnh'),
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _showCashAdjustmentDialog(box, currentAmount);
+                          },
+                        )
+                      else
+                        Tooltip(
+                          message: kNoAdjustmentPermissionMessage,
+                          child: FilledButton.tonalIcon(
+                            key: const Key('btn-sheet-cash-adjustment-disabled'),
+                            icon: const Icon(Icons.lock_outline, size: 16),
+                            label: const Text('Tạo phiếu điều chỉnh'),
+                            onPressed: null,
+                          ),
                         ),
                     ],
                   ),
@@ -327,10 +349,10 @@ class _CashScreenState extends State<CashScreen> {
     );
   }
 
-  Future<void> _showEditCashboxDialog(Cashbox box, [double? currentAmount]) async {
+  /// Sửa THÔNG TIN két (tên). KHÔNG sửa số dư ở đây: số dư chỉ đổi qua
+  /// phiếu điều chỉnh (journal) được duyệt — xem `_showCashAdjustmentDialog`.
+  Future<void> _showEditCashboxDialog(Cashbox box) async {
     final nameCtrl = TextEditingController(text: box.name);
-    final initialBal = currentAmount != null ? currentAmount.toStringAsFixed(0) : box.openingBalance;
-    final balanceCtrl = TextEditingController(text: initialBal);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -341,7 +363,7 @@ class _CashScreenState extends State<CashScreen> {
             const Icon(Icons.edit_outlined, color: Color(0xFF059669)),
             const SizedBox(width: 8),
             Expanded(
-              child: Text('Chỉnh Sửa Két: ${box.code}',
+              child: Text('Chỉnh Sửa Thông Tin Két: ${box.code}',
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis),
             ),
@@ -358,14 +380,13 @@ class _CashScreenState extends State<CashScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: balanceCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Điều Chỉnh Số Dư Quỹ (VND) *',
-                helperText: 'Dành cho Quản lý / Admin cập nhật tiền quỹ',
-                border: OutlineInputBorder(),
+            const SizedBox(height: 12),
+            Text(
+              'Số dư quỹ KHÔNG sửa ở đây. Muốn chỉnh số dư, hãy tạo phiếu '
+              'điều chỉnh (journal) — số dư chỉ đổi sau khi phiếu được duyệt.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -387,7 +408,6 @@ class _CashScreenState extends State<CashScreen> {
         await repo.updateCashbox(
           id: box.id,
           name: nameCtrl.text.trim(),
-          balance: balanceCtrl.text.trim().isEmpty ? '0' : balanceCtrl.text.trim(),
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -402,6 +422,154 @@ class _CashScreenState extends State<CashScreen> {
           );
         }
       }
+    }
+  }
+
+  /// Tạo phiếu ĐIỀU CHỈNH số dư quỹ (draft → gửi duyệt).
+  ///
+  /// Số dư KHÔNG đổi thẳng: backend chặn 422 `DIRECT_BALANCE_WRITE_FORBIDDEN`
+  /// khi ghi `balance` trực tiếp, và chỉ post journal khi phiếu được duyệt
+  /// bởi người khác (Maker ≠ Checker).
+  Future<void> _showCashAdjustmentDialog(Cashbox box, double currentAmount) async {
+    final repo = RepositoryScope.of(context);
+    var increase = false;
+    final amountCtrl = TextEditingController();
+    final reasonCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.receipt_long_rounded, color: Color(0xFF059669)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Tạo Phiếu Điều Chỉnh Số Dư',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Két: ${box.name} • Số dư sổ sách: ${AppFormat.money(currentAmount.toStringAsFixed(0))} ₫',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<bool>(
+                  key: const Key('cash-adjustment-direction'),
+                  segments: const [
+                    ButtonSegment<bool>(
+                      value: false,
+                      label: Text('Giảm quỹ'),
+                      icon: Icon(Icons.trending_down_rounded, size: 16),
+                    ),
+                    ButtonSegment<bool>(
+                      value: true,
+                      label: Text('Tăng quỹ'),
+                      icon: Icon(Icons.trending_up_rounded, size: 16),
+                    ),
+                  ],
+                  selected: {increase},
+                  onSelectionChanged: (sel) =>
+                      setSheetState(() => increase = sel.first),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  key: const Key('cash-adjustment-amount'),
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Số tiền điều chỉnh (VND) *',
+                    helperText: 'Số tiền tuyệt đối muốn điều chỉnh',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  key: const Key('cash-adjustment-reason'),
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Lý do điều chỉnh *',
+                    hintText: 'VD: Kiểm đếm ca chiều lệch 500.000 ₫',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Số dư KHÔNG đổi ngay. Hệ thống tạo phiếu điều chỉnh và gửi '
+                  'duyệt; số dư chỉ cập nhật sau khi quản lý phê duyệt.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Hủy')),
+            FilledButton(
+              key: const Key('cash-adjustment-submit'),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF059669)),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Tạo phiếu & gửi duyệt'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final amount = parseVndAmount(amountCtrl.text);
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng nhập số tiền điều chỉnh lớn hơn 0.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final created = await submitCashAdjustment(
+        repo: repo,
+        cashboxId: box.id,
+        amount: amount.toStringAsFixed(2),
+        increase: increase,
+        reason: reasonCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã tạo phiếu điều chỉnh ${created.id} — đang chờ duyệt. '
+            'Số dư cập nhật sau khi phiếu được phê duyệt.',
+          ),
+          backgroundColor: const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(cashAdjustmentErrorMessage(e)),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -650,6 +818,8 @@ class _CashScreenState extends State<CashScreen> {
                     final user = SessionScope.maybeOf(context)?.user;
                     final roles = RoleVisibility.rolesOf(user);
                     final isAdmin = RoleVisibility.isAdmin(roles);
+                    final canAdjustBalance =
+                        RoleVisibility.canPostCashAdjustment(user);
                     final effectiveSelectedId = _selectedCashboxId ??
                         (data.cashboxes.isNotEmpty ? data.cashboxes.first.id : null);
                     final isSelected = box.id == effectiveSelectedId;
@@ -764,7 +934,17 @@ class _CashScreenState extends State<CashScreen> {
                                               children: [
                                                 Icon(Icons.edit_outlined, size: 16),
                                                 SizedBox(width: 8),
-                                                Text('Điều chỉnh số dư (Admin)'),
+                                                Text('Sửa thông tin két (Admin)'),
+                                              ],
+                                            ),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'adjust',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.receipt_long_rounded, size: 16),
+                                                SizedBox(width: 8),
+                                                Text('Tạo phiếu điều chỉnh số dư'),
                                               ],
                                             ),
                                           ),
@@ -786,9 +966,13 @@ class _CashScreenState extends State<CashScreen> {
                                               currentAmount: currentAmount,
                                               journals: data.journals,
                                               isAdmin: isAdmin,
+                                              canAdjustBalance: canAdjustBalance,
                                             );
                                           }
-                                          if (v == 'edit') _showEditCashboxDialog(box, currentAmount);
+                                          if (v == 'edit') _showEditCashboxDialog(box);
+                                          if (v == 'adjust') {
+                                            _showCashAdjustmentDialog(box, currentAmount);
+                                          }
                                           if (v == 'delete') _confirmDeleteCashbox(box);
                                         },
                                       ),
@@ -888,6 +1072,16 @@ class _CashScreenState extends State<CashScreen> {
 
                   final displayedJournals = _showAllJournals ? data.journals : boxJournals;
 
+                  // Phiếu điều chỉnh CHƯA được duyệt: số dư chưa đổi, phải
+                  // hiện trạng thái "chờ duyệt" thay vì hiện số dư mới.
+                  final pendingAdjustments = data.requests
+                      .where((r) =>
+                          r.cashboxId == selectedBox.id &&
+                          isCashAdjustmentRequest(r) &&
+                          (r.status == RequestStatus.draft ||
+                              r.status == RequestStatus.pending))
+                      .toList();
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -960,7 +1154,10 @@ class _CashScreenState extends State<CashScreen> {
                                       textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                    onPressed: () => _showEditCashboxDialog(selectedBox, currentAmount),
+                                    // Số dư KHÔNG ghi trực tiếp: mở phiếu điều chỉnh
+                                    // (draft -> gửi duyệt -> journal).
+                                    onPressed: () =>
+                                        _showCashAdjustmentDialog(selectedBox, currentAmount),
                                   ),
                                 ],
                               ],
@@ -989,6 +1186,61 @@ class _CashScreenState extends State<CashScreen> {
                           ],
                         ),
                       ),
+                      if (pendingAdjustments.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          key: const Key('cash-pending-adjustments'),
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD97706).withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFD97706).withValues(alpha: 0.45),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.hourglass_top_rounded,
+                                      size: 16, color: Color(0xFFD97706)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Phiếu điều chỉnh đang chờ duyệt (${pendingAdjustments.length})',
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFFD97706),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Số dư chỉ cập nhật sau khi phiếu được phê duyệt.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              for (final r in pendingAdjustments)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    '• ${r.id} • ${AppFormat.money(r.amount, currency: r.currency)} • '
+                                    '${r.status == RequestStatus.draft ? 'Nháp' : 'Chờ duyệt'}'
+                                    '${r.reason.isEmpty ? '' : ' • ${r.reason}'}',
+                                    style: const TextStyle(fontSize: 11.5),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Sổ nhật ký giao dịch hiển thị bên dưới
@@ -1215,11 +1467,13 @@ class _CashScreenState extends State<CashScreen> {
       repo.getCashboxes(),
       repo.getCashBalances(),
       repo.getJournals(),
+      repo.getCashRequests(),
     ]);
     return _CashData(
       cashboxes: results[0] as List<Cashbox>,
       balances: results[1] as List<CashBalance>,
       journals: results[2] as List<JournalEntry>,
+      requests: results[3] as List<CashRequest>,
     );
   }
 }
@@ -1229,9 +1483,13 @@ class _CashData {
     required this.cashboxes,
     required this.balances,
     required this.journals,
+    this.requests = const <CashRequest>[],
   });
 
   final List<Cashbox> cashboxes;
   final List<CashBalance> balances;
   final List<JournalEntry> journals;
+
+  /// Phiếu quỹ (dùng để hiện trạng thái "chờ duyệt" của phiếu điều chỉnh).
+  final List<CashRequest> requests;
 }

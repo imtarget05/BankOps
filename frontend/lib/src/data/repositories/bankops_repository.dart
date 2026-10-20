@@ -3,6 +3,11 @@ import 'dart:async';
 import '../models/dtos.dart';
 
 /// Kết quả lỗi API demo (409/422…).
+/// Tiền tố lý do phiếu điều chỉnh số dư quỹ — dùng để nhận diện phiếu điều
+/// chỉnh (kể cả chiều TĂNG số dư, vì backend chỉ có `kind=receipt` cho dòng
+/// tiền vào quỹ — xem `backend/app/api/routes/cash_sim.py`).
+const String kCashAdjustmentReasonPrefix = 'Điều chỉnh số dư quỹ';
+
 class ApiException implements Exception {
   ApiException(this.code, this.message, {this.requestId});
 
@@ -184,13 +189,31 @@ abstract class BankOpsRepository {
     String currency = 'VND',
     String openingBalance = '0.00',
   });
+  /// Sửa THÔNG TIN két (tên / trạng thái) — KHÔNG sửa được số dư.
+  ///
+  /// Số dư quỹ chỉ đổi qua journal (phiếu) đã được duyệt; backend chặn 422
+  /// `DIRECT_BALANCE_WRITE_FORBIDDEN` nếu client gửi field số dư vào đây.
   Future<Cashbox> updateCashbox({
     required String id,
     String? name,
-    String? balance,
     bool? active,
   });
   Future<void> deleteCashbox(String id);
+
+  /// Tạo phiếu quỹ ĐIỀU CHỈNH (journal) — luồng có kiểm soát + duyệt.
+  ///
+  /// - [amount]: số tiền TUYỆT ĐỐI (> 0).
+  /// - [increase]: `true` = quỹ TĂNG (tiền vào quỹ), `false` = quỹ GIẢM.
+  ///
+  /// Backend (`backend/app/api/routes/cash_sim.py`) coi `kind=adjustment` là
+  /// bút toán RA quỹ (chi) và chỉ `kind=receipt` mới là dòng tiền VÀO quỹ,
+  /// nên hệ thống ánh xạ hướng điều chỉnh sang kind tương ứng.
+  Future<CashRequest> createCashAdjustmentRequest({
+    required String cashboxId,
+    required String amount,
+    required bool increase,
+    String? reason,
+  });
 
   Future<List<CashBalance>> getCashBalances();
   Future<List<JournalEntry>> getJournals();

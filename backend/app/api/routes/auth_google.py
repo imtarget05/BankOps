@@ -166,6 +166,15 @@ async def login_with_google(
 
     raw_token = (body.id_token or body.access_token or "").strip()
     if raw_token.startswith("mock-"):
+        # Token `mock-` KHÔNG phải credential thật: ngoài chế độ demo bật
+        # tường minh thì từ chối, nếu không ai cũng tự tạo user (và nhận
+        # role admin) chỉ bằng một chuỗi bất kỳ.
+        if not settings.is_demo_mode:
+            return error_envelope(
+                "GOOGLE_TOKEN_INVALID",
+                "Google token không hợp lệ hoặc hết hạn.",
+                401,
+            )
         parts = raw_token.split(":")
         email = parts[1] if len(parts) > 1 else "demo_google@khotrasua.internal"
         name = parts[2] if len(parts) > 2 else "Google Demo User"
@@ -251,10 +260,14 @@ async def login_with_google(
             display_name_demo=display_name,
         )
         db.add(user)
+        # S9/A1 — user Google MOI chỉ được `staff`: KHÔNG tự cấp
+        # `inventory_manager` (có `inventory:approve_request`) vì sẽ phá
+        # nguyên tắc maker != checker. Quyền duyệt do admin cấp qua
+        # `/admin/users/{id}/roles`.
         initial_roles = (
             ["admin", "inventory_manager", "approver", "system_admin"]
             if is_superadmin
-            else ["staff", "inventory_manager"]
+            else ["staff"]
         )
         for role_code in initial_roles:
             role = (
@@ -264,25 +277,8 @@ async def login_with_google(
                 db.add(UserRole(user_id=new_id, role_code=role_code))
         await db.commit()
         await db.refresh(user)
-    else:
-        existing_roles = await get_user_roles(db, user.id)
-        roles_to_ensure = (
-            ["admin", "inventory_manager", "system_admin", "approver"]
-            if is_superadmin
-            else ["inventory_manager"]
-        )
-        added_any = False
-        for role_code in roles_to_ensure:
-            if role_code not in existing_roles:
-                role = (
-                    await db.execute(select(Role).where(Role.code == role_code))
-                ).scalar_one_or_none()
-                if role is not None:
-                    db.add(UserRole(user_id=user.id, role_code=role_code))
-                    added_any = True
-        if added_any:
-            await db.commit()
-            await db.refresh(user)
+    # S9 — user ĐÃ tồn tại: KHÔNG tự cấp/thay đổi role. Vai trò chỉ do admin
+    # cấp qua `/admin/users/{id}/roles` (tránh leo thang đặc quyền qua OAuth).
 
     if user.status != UserStatus.active and user.status != "active":
         return error_envelope(
@@ -307,7 +303,11 @@ async def login_with_google(
         access_expires,
     )
     refresh_token = create_refresh_token(
-        {"sub": str(user.id), "username": user.username},
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "auth_version": getattr(user, "auth_version", 1),
+        },
         timedelta(days=settings.refresh_token_expire_days),
     )
     return {

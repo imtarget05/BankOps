@@ -197,6 +197,11 @@ def _merge_assessment(data: dict, policy: dict, suggestion: dict, source: str, m
 
 async def assess_request(data: dict, settings: Settings, client: httpx.AsyncClient) -> dict:
     policy = assess_request_heuristic(data)
+    if settings.ai_provider != 'cloudflare':
+        # F1 — AI đã tắt (hoặc dùng provider khác): TUYỆT ĐỐI không gửi dữ liệu
+        # phiếu (amount/maker/reason) ra ngoài hệ thống. Chỉ còn chính sách
+        # xác định tại chỗ.
+        return _merge_assessment(data, policy, policy, 'heuristic_fallback', settings.cloudflare_model)
     try:
         suggestion = await _cloudflare_assessment(data, settings, client)
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
@@ -265,6 +270,9 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
 
 async def stream_ollama(message: str, settings: Settings, client: httpx.AsyncClient):
     """Yield Ollama tokens as they arrive; the route wraps them as SSE frames."""
+    if settings.ai_provider != 'ollama':
+        # F1 — provider khác/đã tắt: không được mở kết nối ra ngoài.
+        raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE})
     payload = {
         'model': settings.ollama_model,
         'messages': [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': message}],

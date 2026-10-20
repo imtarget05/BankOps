@@ -18,7 +18,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.errors import AppError
 from app.models.activity import AuditEvent, OutboxEvent
 from app.models.etl import EtlMappingVersion, EtlPipeline, EtlRun, EtlRunRow
-from app.models.iam import User
+from app.models.iam import Capability, RoleCapability, User, UserRole
 from app.models.inventory import (
     Balance,
     InventoryRequest,
@@ -36,9 +36,40 @@ from app.models.inventory import (
     Movement,
 )
 
+# Capability review bắt buộc cho đường điều chỉnh tồn kho "single-admin".
+_CAP_REVIEW = "etl:review"
+
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _MAX_ROWS = 20_000
 _ZERO = Decimal("0")
+# Độ chính xác làm việc cho số lượng: 6 chữ số thập phân (lớn hơn độ chính xác
+# lưu trữ của DB là Numeric(20,3)) — đủ để float không làm lệch số.
+_QTY_SCALE = Decimal("0.000001")
+
+
+def _to_decimal(value: Any) -> Decimal:
+    """Chuyển giá trị sang Decimal mà KHÔNG đi qua float (R10).
+
+    - Decimal -> giữ nguyên.
+    - int -> Decimal(int).
+    - float -> Decimal(repr(float)): `repr` cho dạng ngắn nhất khớp lại chính
+      xác với float, nên 0.1 -> Decimal('0.1') (không phải 0.1000000000000000055).
+    - str -> Decimal(str) (lỗi -> ValueError/ArithmeticError cho caller xử lý).
+
+    Lý do: 0.3 - 0.1 bằng float ra 0.19999999999999998, tức phiếu điều chỉnh
+    tồn bị lệch số so với giá trị người dùng nhập.
+    """
+    if isinstance(value, Decimal):
+        dec = value
+    elif isinstance(value, bool):
+        raise TypeError("bool không phải số lượng hợp lệ")
+    elif isinstance(value, int):
+        dec = Decimal(value)
+    elif isinstance(value, float):
+        dec = Decimal(repr(value))
+    else:
+        dec = Decimal(str(value).strip())
+    return dec.quantize(_QTY_SCALE, rounding=ROUND_HALF_UP)
 
 
 def utc_now() -> datetime:
@@ -406,27 +437,27 @@ async def generate_staging_run(
             else:
                 item = item_by_sku[sku]
                 current_bal = balance_by_item_id.get(item.id)
-                current_qty = float(current_bal.quantity) if current_bal else 0.0
+                current_qty = _to_decimal(current_bal.quantity) if current_bal else _ZERO
 
                 target_qty = None
                 delta = None
 
                 if canonical.get("target_quantity") is not None:
                     try:
-                        target_qty = float(canonical["target_quantity"])
+                        target_qty = _to_decimal(canonical["target_quantity"])
                         delta = target_qty - current_qty
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, ArithmeticError):
                         errors.append(f"Giá trị target_quantity không hợp lệ: {canonical.get('target_quantity')}")
                 elif canonical.get("delta_quantity") is not None:
                     try:
-                        delta = float(canonical["delta_quantity"])
+                        delta = _to_decimal(canonical["delta_quantity"])
                         target_qty = current_qty + delta
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, ArithmeticError):
                         errors.append(f"Giá trị delta_quantity không hợp lệ: {canonical.get('delta_quantity')}")
                 else:
                     errors.append("Cần cung cấp 'target_quantity' hoặc 'delta_quantity'")
 
-                if target_qty is not None and target_qty < 0:
+                if target_qty is not None and target_qty < _ZERO:
                     errors.append(f"Tồn kho mục tiêu ({target_qty}) không thể âm")
 
                 if delta is not None:
@@ -436,9 +467,9 @@ async def generate_staging_run(
                         "sku": sku,
                         "item_name": item.name,
                         "location_id": str(pipeline.location_id) if pipeline.location_id else None,
-                        "current_quantity": current_qty,
-                        "target_quantity": target_qty,
-                        "delta_quantity": delta,
+                        "current_quantity": float(current_qty),
+                        "target_quantity": float(target_qty),
+                        "delta_quantity": float(delta),
                         "direction": direction,
                         "reason": canonical.get("reason") or "Điều chỉnh tồn qua ETL Admin",
                     }
@@ -452,22 +483,22 @@ async def generate_staging_run(
             else:
                 item = item_by_sku[sku]
                 try:
-                    qty = float(canonical.get("quantity", 0))
-                    if qty <= 0:
+                    qty = _to_decimal(canonical.get("quantity", 0))
+                    if qty <= _ZERO:
                         errors.append("Số lượng nhập phải lớn hơn 0")
-                except (ValueError, TypeError):
-                    qty = 0.0
+                except (ValueError, TypeError, ArithmeticError):
+                    qty = _ZERO
                     errors.append("Số lượng không hợp lệ")
 
                 current_bal = balance_by_item_id.get(item.id)
-                current_qty = float(current_bal.quantity) if current_bal else 0.0
+                current_qty = _to_decimal(current_bal.quantity) if current_bal else _ZERO
                 action_preview = {
                     "action": "receipt",
                     "sku": sku,
                     "item_name": item.name,
-                    "quantity": qty,
-                    "current_quantity": current_qty,
-                    "projected_quantity": current_qty + qty,
+                    "quantity": float(qty),
+                    "current_quantity": float(current_qty),
+                    "projected_quantity": float(current_qty + qty),
                 }
 
         elif target == "inventory_issue":
@@ -479,16 +510,16 @@ async def generate_staging_run(
             else:
                 item = item_by_sku[sku]
                 try:
-                    qty = float(canonical.get("quantity", 0))
-                    if qty <= 0:
+                    qty = _to_decimal(canonical.get("quantity", 0))
+                    if qty <= _ZERO:
                         errors.append("Số lượng xuất phải lớn hơn 0")
-                except (ValueError, TypeError):
-                    qty = 0.0
+                except (ValueError, TypeError, ArithmeticError):
+                    qty = _ZERO
                     errors.append("Số lượng không hợp lệ")
 
                 current_bal = balance_by_item_id.get(item.id)
-                current_qty = float(current_bal.quantity) if current_bal else 0.0
-                avail_qty = float(current_bal.available_quantity) if current_bal else 0.0
+                current_qty = _to_decimal(current_bal.quantity) if current_bal else _ZERO
+                avail_qty = _to_decimal(current_bal.available_quantity) if current_bal else _ZERO
 
                 if qty > avail_qty:
                     errors.append(f"Không đủ tồn khả dụng (cần {qty}, tồn khả dụng {avail_qty})")
@@ -497,9 +528,9 @@ async def generate_staging_run(
                     "action": "issue",
                     "sku": sku,
                     "item_name": item.name,
-                    "quantity": qty,
-                    "available_quantity": avail_qty,
-                    "projected_quantity": max(0.0, current_qty - qty),
+                    "quantity": float(qty),
+                    "available_quantity": float(avail_qty),
+                    "projected_quantity": float(max(_ZERO, current_qty - qty)),
                 }
 
         elif target == "inventory_transfer":
@@ -511,29 +542,30 @@ async def generate_staging_run(
             else:
                 item = item_by_sku[sku]
                 try:
-                    qty = float(canonical.get("quantity", 0))
-                    if qty <= 0:
+                    qty = _to_decimal(canonical.get("quantity", 0))
+                    if qty <= _ZERO:
                         errors.append("Số lượng điều chuyển phải lớn hơn 0")
-                except (ValueError, TypeError):
-                    qty = 0.0
+                except (ValueError, TypeError, ArithmeticError):
+                    qty = _ZERO
                     errors.append("Số lượng không hợp lệ")
 
                 current_bal = balance_by_item_id.get(item.id)
-                avail_qty = float(current_bal.available_quantity) if current_bal else 0.0
+                avail_qty = _to_decimal(current_bal.available_quantity) if current_bal else _ZERO
                 if qty > avail_qty:
                     errors.append(f"Không đủ tồn khả dụng tại kho nguồn (cần {qty}, còn {avail_qty})")
 
                 dest_bal = dest_balance_by_item_id.get(item.id)
-                dest_qty = float(dest_bal.quantity) if dest_bal else 0.0
+                dest_qty = _to_decimal(dest_bal.quantity) if dest_bal else _ZERO
+                current_qty = _to_decimal(current_bal.quantity) if current_bal else _ZERO
 
                 action_preview = {
                     "action": "transfer",
                     "sku": sku,
-                    "quantity": qty,
+                    "quantity": float(qty),
                     "source_location_id": str(pipeline.location_id) if pipeline.location_id else None,
                     "dest_location_id": str(pipeline.destination_location_id) if pipeline.destination_location_id else None,
-                    "source_projected": max(0.0, float(current_bal.quantity if current_bal else 0.0) - qty),
-                    "dest_projected": dest_qty + qty,
+                    "source_projected": float(max(_ZERO, current_qty - qty)),
+                    "dest_projected": float(dest_qty + qty),
                 }
 
         elif target == "stocktake":
@@ -545,11 +577,11 @@ async def generate_staging_run(
             else:
                 item = item_by_sku[sku]
                 current_bal = balance_by_item_id.get(item.id)
-                book_qty = float(current_bal.quantity) if current_bal else 0.0
+                book_qty = _to_decimal(current_bal.quantity) if current_bal else _ZERO
                 try:
-                    counted_qty = float(canonical.get("counted_quantity", 0))
-                except (ValueError, TypeError):
-                    counted_qty = 0.0
+                    counted_qty = _to_decimal(canonical.get("counted_quantity", 0))
+                except (ValueError, TypeError, ArithmeticError):
+                    counted_qty = _ZERO
                     errors.append("counted_quantity không hợp lệ")
 
                 variance = counted_qty - book_qty
@@ -557,9 +589,9 @@ async def generate_staging_run(
                     "action": "stocktake",
                     "sku": sku,
                     "item_name": item.name,
-                    "book_quantity": book_qty,
-                    "counted_quantity": counted_qty,
-                    "variance": variance,
+                    "book_quantity": float(book_qty),
+                    "counted_quantity": float(counted_qty),
+                    "variance": float(variance),
                     "direction": "increase" if variance > 0 else ("decrease" if variance < 0 else "none"),
                 }
 
@@ -587,6 +619,129 @@ async def generate_staging_run(
     return run, staged_rows
 
 
+async def _actor_capabilities(db: AsyncSession, user_id: Any) -> set[str]:
+    """Capability của user, đọc trực tiếp từ DB (không tin JWT cache)."""
+    result = await db.execute(
+        select(Capability.code)
+        .join(RoleCapability, RoleCapability.capability_code == Capability.code)
+        .join(UserRole, UserRole.role_code == RoleCapability.role_code)
+        .where(UserRole.user_id == user_id)
+    )
+    return {row[0] for row in result.all()}
+
+
+async def _create_pending_balance_adjustment(
+    *,
+    db: AsyncSession,
+    run: EtlRun,
+    pipeline: EtlPipeline,
+    actor: User,
+    valid_rows: list[EtlRunRow],
+    item_by_sku: dict[str, Item],
+    now: datetime,
+) -> dict[str, Any]:
+    """Override single-admin hợp lệ: tạo phiếu DRAFT chờ duyệt độc lập.
+
+    Runner tự post phiếu của chính mình là vi phạm maker ≠ checker. Thay vì
+    tự tạo phiếu `approved` (và tự bị chính mình là approver), phiếu được tạo ở
+    trạng thái `draft`, KHÔNG ghi movement, KHÔNG đụng tồn — người duyệt độc lập
+    sẽ submit/approve theo luồng kho bình thường. Override được ghi nhận rõ
+    bằng audit event + outbox event.
+    """
+    req_id = uuid.uuid4()
+    req = InventoryRequest(
+        id=req_id,
+        kind="adjustment",
+        status="draft",
+        maker_id=run.runner_id,
+        approver_id=None,
+        source_id=pipeline.location_id,
+        dest_id=pipeline.location_id,
+        reason=(
+            f"ETL Run {run.id} - Điều chỉnh tồn bởi {actor.username} "
+            "[Single-Admin Override - chờ duyệt độc lập]"
+        ),
+        version=1,
+        created_by=run.runner_id,
+        submitted_at=None,
+    )
+    db.add(req)
+    await db.flush()
+
+    lines_count = 0
+    for r in valid_rows:
+        preview = r.action_preview or {}
+        sku = str(preview.get("sku") or "").upper()
+        delta = Decimal(str(preview.get("delta_quantity", 0)))
+        if delta == _ZERO:
+            continue
+        item = item_by_sku.get(sku)
+        if not item:
+            continue
+        db.add(
+            InventoryRequestLine(
+                id=uuid.uuid4(),
+                request_id=req.id,
+                item_id=item.id,
+                quantity=abs(delta),
+                direction="increase" if delta > 0 else "decrease",
+            )
+        )
+        lines_count += 1
+
+    run.status = "pending_approval"
+    run.reviewer_id = actor.id
+    run.single_admin_override = True
+    run.generated_reference_type = "inventory_request"
+    run.generated_reference_id = str(req.id)
+
+    audit = AuditEvent(
+        id=uuid.uuid4(),
+        action="etl.balance_adjustment.override_pending",
+        actor_id=actor.id,
+        subject=f"etl_run:{run.id}",
+        metadata_json={
+            "pipeline_id": str(pipeline.id),
+            "request_id": str(req.id),
+            "location_id": str(pipeline.location_id),
+            "maker_id": str(run.runner_id),
+            "actor_id": str(actor.id),
+            "self_approval": True,
+            "single_admin_override": True,
+            "request_status": "draft",
+            "lines_count": lines_count,
+            "note": "Runner tự post: phiếu để ở draft chờ duyệt độc lập, chưa ghi movement.",
+        },
+        occurred_at=now,
+    )
+    db.add(audit)
+
+    outbox = OutboxEvent(
+        id=uuid.uuid4(),
+        event_type="inventory.balance_adjustment.pending_approval",
+        aggregate_id=str(run.id),
+        payload_json={
+            "run_id": str(run.id),
+            "request_id": str(req.id),
+            "location_id": str(pipeline.location_id),
+            "single_admin_override": True,
+        },
+        created_at=now,
+    )
+    db.add(outbox)
+
+    await db.commit()
+    return {
+        "status": "pending_approval",
+        "run_id": str(run.id),
+        "target": pipeline.target,
+        "request_id": str(req.id),
+        "request_status": "draft",
+        "movements_count": 0,
+        "single_admin_override": True,
+    }
+
+
 # --------------------------------------------------------------------------
 # 4. Posting Execution (Transactional & Invariant Preserving)
 # --------------------------------------------------------------------------
@@ -609,6 +764,13 @@ async def execute_etl_posting(
     """
     if run.status == "posted":
         raise AppError(409, "RUN_ALREADY_POSTED", f"ETL Run {run.id} đã được thực thi và hạch toán trước đó")
+
+    if run.status == "pending_approval":
+        raise AppError(
+            409,
+            "RUN_ALREADY_POSTED",
+            f"ETL Run {run.id} đã tạo phiếu chờ duyệt; không thể post lại.",
+        )
 
     if run.status in ("rejected", "cancelled", "failed"):
         raise AppError(409, "INVALID_RUN_STATE", f"Không thể post Run ở trạng thái {run.status}")
@@ -706,6 +868,28 @@ async def execute_etl_posting(
 
     # 2. Target: Balance Adjustment Admin (Single-admin override allowed with etl:post_balance)
     if target == "balance_adjustment_admin":
+        # R11 — maker ≠ checker. Người chạy pipeline (runner) KHÔNG được tự
+        # phê duyệt phiếu điều chỉnh tồn của chính mình.
+        if str(run.runner_id) == str(actor.id):
+            caps = await _actor_capabilities(db, actor.id)
+            if _CAP_REVIEW not in caps:
+                raise AppError(
+                    403,
+                    "MAKER_CHECKER_CONFLICT",
+                    "Người chạy pipeline không được tự phê duyệt phiếu điều chỉnh tồn "
+                    "của chính mình; cần một người duyệt độc lập có capability "
+                    f"'{_CAP_REVIEW}'.",
+                )
+            return await _create_pending_balance_adjustment(
+                db=db,
+                run=run,
+                pipeline=pipeline,
+                actor=actor,
+                valid_rows=valid_rows,
+                item_by_sku=item_by_sku,
+                now=now,
+            )
+
         # Create canonical InventoryRequest for this adjustment
         req_id = uuid.uuid4()
         req = InventoryRequest(
@@ -732,7 +916,7 @@ async def execute_etl_posting(
         for r in valid_rows:
             preview = r.action_preview or {}
             sku = str(preview.get("sku") or "").upper()
-            delta = Decimal(str(preview.get("delta_quantity", 0)))
+            delta = _to_decimal(preview.get("delta_quantity", 0))
             direction = "increase" if delta > 0 else "decrease"
             qty_abs = abs(delta)
 
@@ -772,7 +956,7 @@ async def execute_etl_posting(
                 bal = Balance(
                     location_id=pipeline.location_id,
                     item_id=item.id,
-                    quantity=Decimal(str(preview.get("target_quantity", 0))),
+                    quantity=_to_decimal(preview.get("target_quantity", 0)),
                     reserved_quantity=_ZERO,
                     version=1,
                 )
@@ -857,7 +1041,7 @@ async def execute_etl_posting(
         for r in valid_rows:
             preview = r.action_preview or {}
             sku = str(preview.get("sku") or "").upper()
-            qty = Decimal(str(preview.get("quantity", 0)))
+            qty = _to_decimal(preview.get("quantity", 0))
             if qty <= _ZERO:
                 continue
             item = item_by_sku.get(sku)
@@ -953,7 +1137,7 @@ async def execute_etl_posting(
         for r in valid_rows:
             preview = r.action_preview or {}
             sku = str(preview.get("sku") or "").upper()
-            qty = Decimal(str(preview.get("quantity", 0)))
+            qty = _to_decimal(preview.get("quantity", 0))
             if qty <= _ZERO:
                 continue
             item = item_by_sku.get(sku)
@@ -1061,7 +1245,7 @@ async def execute_etl_posting(
         for r in valid_rows:
             preview = r.action_preview or {}
             sku = str(preview.get("sku") or "").upper()
-            qty = Decimal(str(preview.get("quantity", 0)))
+            qty = _to_decimal(preview.get("quantity", 0))
             if qty <= _ZERO:
                 continue
             item = item_by_sku.get(sku)

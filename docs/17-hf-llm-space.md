@@ -1,19 +1,48 @@
-# 17 — Backend LLM tự host trên Hugging Face Space (llama.cpp)
+# 17 — Backend LLM trên Modal (llama.cpp)
 
-> Mục tiêu: chạy LLM riêng (Qwen2.5-1.5B-Instruct, GGUF Q4_K_M) trên Hugging Face
-> Space miễn phí (CPU 2 vCPU / 16 GB RAM) và đưa vào sau Cloudflare Worker của
-> BankOps. Worker ưu tiên backend này; Cloudflare Workers AI giữ vai trò fallback
-> nên API không bao giờ chết khi Space lỗi hoặc đang ngủ.
-
-> **Cập nhật 2026-10:** HF yêu cầu gói PRO để tạo Space Docker/Gradio trên
-> hardware free. Phương án thay thế giữ nguyên API: chạy GGUF fine-tune trên
-> **Modal** (miễn phí $30 credit/tháng, scale-to-zero) — xem `infra/modal/README.md`
-> và `infra/scripts/upload-model-to-modal.sh`. Các mục dưới đây vẫn đúng khi bạn
-> có HF PRO; Worker chỉ khác giá trị `HF_LLM_BASE_URL`.
+> **⚠️ ARKIVED / KHÔNG DÙNG.** Tài liệu này chỉ là lịch sử tham khảo.
+> Theo ADR 0001 (quyết định năm 2026-10-14), phương án **Hugging Face Space đã bị
+> khử** — HF yêu cầu gói PRO cho Space Docker/Gradio, không còu đủ điều kiện.
+> Lộ trình hiện tại: chạy GGUF trên **Modal** (miễn phí $30 credit/tháng,
+> scale-to-zero). Xem `infra/modal/README.md` và
+> `infra/scripts/upload-model-to-modal.sh`.
 >
-> **⚠️ SUPERSEDED 2026-10-14.** Phương án HF Space **không được dùng** (HF yêu cầu PRO cho Space Docker/Gradio; đã chọn
-> **Modal** — `infra/modal/`). 6 ô checklist cuối (build Space, `/v1/chat/completions`, upload GGUF, Worker deploy,
-> fallback, token) **cố ý để trống** — không thực thi theo hướng này. Giữ tài liệu làm tham chiếu nếu sau này có HF PRO.
+> **Hành động bắt buộc**: bất kỳ tài liệu nào còn hướng dẫn `set HF_LLM_BASE_URL`
+> hoặc deploy Worker với backend HF Space đều **PHẢI được cập nhật lại** — chúng
+> mâu thuẫn với ADR 0001 và hợp đồng test `assert "HF_LLM_BASE_URL" not in env`.
+> Chỉ có `MODAL_LLM_BASE_URL` mới là hợp lệ.
+
+## 0. Lịch sử (KHÔNG thực thi)
+
+| Tiêu chí | HF Space (llama.cpp) | Workers AI (fallback) | Colab |
+|---|---|---|---|
+| Chi phí | Miễn phí | Miễn phí (có quota/ngày) | Miễn phí nhưng chết sau ~90 phút |
+| Chạy 24/7 | ✅ (ngủ sau 48h không dùng) | ✅ | ❌ |
+| Kiểm soát model | ✅ tự chọn GGUF | ❌ chỉ model của CF | ✅ |
+| Bảo mật | Token HF trong Secrets của Space | binding nội bộ | — |
+| Tích hợp | 1 biến `HF_LLM_BASE_URL` trên Worker | đã chạy sẵn | cần proxy |
+
+Không cần GPU: model 1.5B Q4_K_M (~1.1 GB) chạy tốt trên CPU.
+
+## Trạng thái hiện tại: Modal (theo ADR 0001)
+
+Lưu trữ backend LLM riêng — Qwen2.5-1.5B-Instruct, GGUF Q4_K_M — trên **Modal**
+(miễn phí $30 credit/tháng, scale-to-zero). Worker ưu tiên backend này;
+Cloudflare Workers AI giữ vai trò fallback nên API không bao giờ chết khi
+Modal lỗi hoặc đang ngủ.
+
+- Code: `infra/modal/`
+- Upload model: `infra/scripts/upload-model-to-modal.sh`
+- Biến Worker: `MODAL_LLM_BASE_URL` (KHÔNG phải `HF_LLM_BASE_URL`)
+- Test contract: `assert "HF_LLM_BASE_URL" not in os.environ` (xem
+  `backend/tests/conftest.py` — fail nếu biến này xuất hiện)
+
+## Checklist năm 2026-10-14 đã ngưng lưu động
+
+- [x] Chọn Modal thay thế HF Space
+- [x] Xóa `ai.ts` (Worker AI module — không còn dùng Workers AI làm primary)
+- [x] `wrangler.toml` chỉ còn health-check (không có OTEL LLM endpoint)
+- [x] Test cấm `HF_LLM_BASE_URL`
 
 ## 0. Vì sao phương án này
 

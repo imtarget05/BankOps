@@ -810,22 +810,26 @@ async def update_item(
 
 async def _perform_delete_item(db: AsyncSession, item: Item) -> dict:
     iid = item.id
-    # Clear balances and stock levels for this item
-    await db.execute(delete(Balance).where(Balance.item_id == iid))
-    await db.execute(delete(StockLevel).where(StockLevel.item_id == iid))
-
     # Check if item has historical ledger or operational references
     has_movements = (await db.execute(select(Movement.id).where(Movement.item_id == iid).limit(1))).scalars().first()
     has_requests = (await db.execute(select(InventoryRequestLine.id).where(InventoryRequestLine.item_id == iid).limit(1))).scalars().first()
     has_stocktakes = (await db.execute(select(StocktakeLine.id).where(StocktakeLine.item_id == iid).limit(1))).scalars().first()
 
     if not has_movements and not has_requests and not has_stocktakes:
+        # Hard delete: vật tư chưa từng phát sinh giao dịch -> xoá sạch cả
+        # tồn kho và ngưỡng tồn kho (không còn dữ liệu tham chiếu).
+        await db.execute(delete(Balance).where(Balance.item_id == iid))
+        await db.execute(delete(StockLevel).where(StockLevel.item_id == iid))
         # Safe to hard delete completely, along with any unused assets
         await db.execute(delete(Asset).where(Asset.item_id == iid))
         await db.delete(item)
         mode = "hard_deleted"
     else:
-        # Soft delete: deactivate to preserve ledger history and audit reports
+        # R9 — soft delete: chỉ NGỪNG hoạt động vật tư, GIỮ NGUYÊN tồn kho
+        # (`Balance`) và ngưỡng tồn kho (`StockLevel`). Xoá tồn ở nhánh này sẽ
+        # làm mất tồn trong khi movement vẫn còn -> đối soát lệch vĩnh viễn.
+        # Muốn giảm tồn thì phải lập Phiếu điều chỉnh (adjustment) qua luồng
+        # maker -> checker, không xoá thẳng trong API xoá vật tư.
         item.active = False
         mode = "soft_deleted"
 
@@ -1199,6 +1203,10 @@ async def delete_request(
     req = (await db.execute(select(InventoryRequest).where(InventoryRequest.id == rid))).scalars().first()
     if not req:
         raise AppError(404, "REQUEST_NOT_FOUND", "Không tìm thấy phiếu yêu cầu")
+    # S5 (IDOR) — chỉ chủ sở hữu phiếu mới được xoá; user khác dù có quyền
+    # `inventory:create_request` cũng không được xoá phiếu nháp của người ta.
+    if str(req.maker_id) != str(user.id):
+        raise AppError(403, "FORBIDDEN", "Chỉ người lập phiếu mới được xoá phiếu này.")
     if req.status != "draft":
         raise AppError(409, "CANNOT_DELETE_NON_DRAFT", "Chỉ có thể xoá phiếu ở trạng thái nháp (draft)")
     lines = (await db.execute(select(InventoryRequestLine).where(InventoryRequestLine.request_id == rid))).scalars().all()
@@ -2958,8 +2966,14 @@ async def list_stocktakes(
     user=Depends(require_any_capability(*_VIEW_CATALOG)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Danh sách các đợt kiểm kê."""
+    """Danh sách các đợt kiểm kê (lọc theo phạm vi chi nhánh của user)."""
     stmt = select(Stocktake).order_by(Stocktake.created_at.desc())
+    # S6 — kiểm kê là dữ liệu tồn kho theo chi nhánh: user branch B không
+    # được thấy đợt kiểm kê của branch A (cùng cơ chế scope như
+    # `list_balances` / `list_locations`).
+    allowed_location_ids = await get_accessible_location_ids(db, user)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Stocktake.location_id.in_(allowed_location_ids))
     if location_id:
         stmt = stmt.where(Stocktake.location_id == _uuid(location_id, "location_id"))
     if status:
@@ -2995,6 +3009,13 @@ async def get_stocktake(
     sid = _uuid(stocktake_id, "stocktake_id")
     st = (await db.execute(select(Stocktake).where(Stocktake.id == sid))).scalars().first()
     if not st:
+        raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    # S6 — ngoài phạm vi chi nhánh thì coi như không tồn tại (404).
+    allowed_location_ids = await get_accessible_location_ids(db, user)
+    if (
+        allowed_location_ids is not None
+        and str(st.location_id) not in {str(i) for i in allowed_location_ids}
+    ):
         raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
     lines = (
         await db.execute(select(StocktakeLine).where(StocktakeLine.stocktake_id == sid))
@@ -3066,13 +3087,15 @@ async def update_stocktake_lines(
         ).scalars().first()
 
         if existing_line:
-            # SRS §3.3: nhân viên chỉ nhập Sử dụng + Kiểm thực tế;
-            # Tồn đầu/Nhập do hệ thống giữ, Còn lại + Lệch tự tính.
-            # Giao diện ca hiển thị cả ba thành phần công thức. Khi client gửi
-            # số liệu mở ca/nhập hàng (ví dụ ca được bàn giao thủ công), ghi
-            # nhận chúng; nếu không gửi thì giữ số hệ thống đã khởi tạo.
-            opening_qty = _qty(row.get("opening_qty", existing_line.opening_qty))
-            received_qty = _qty(row.get("received_qty", existing_line.received_qty))
+            # SRS §3.3 + S8: nhân viên chỉ nhập Sử dụng + Kiểm thực tế;
+            # Tồn đầu/Nhập do HỆ THỐNG giữ, Còn lại + Lệch tự tính.
+            # S8 — client KHÔNG được tự ghi đè `opening_qty`/`received_qty`:
+            # nếu client tự chỉnh được số tồn đầu/nhập thì chênh lệch kiểm kê
+            # luôn = 0 và người làm đối soát bị "tự rửa" sai lệch. Server luôn
+            # tính `theoretical_qty` từ số liệu hệ thống; giá trị client gửi
+            # lên bị BỎ QUA (không phải lỗi 422 để client cũ không vỡ).
+            opening_qty = Decimal(str(existing_line.opening_qty))
+            received_qty = Decimal(str(existing_line.received_qty))
             used_qty = _qty(row.get("used_qty", existing_line.used_qty))
             if used_qty < 0:
                 raise AppError(422, "NEGATIVE_USED", "Sử dụng trong ca không được âm")
@@ -3087,9 +3110,12 @@ async def update_stocktake_lines(
             if "reason" in row:
                 existing_line.reason = str(row["reason"])
         else:
-            opening_qty = _qty(row.get("opening_qty", book_qty))
-            received_qty = _qty(row.get("received_qty", 0))
+            # Dòng mới: tồn đầu lấy từ sổ cái (Balance) của server, nhập = 0.
+            opening_qty = book_qty
+            received_qty = _ZERO
             used_qty = _qty(row.get("used_qty", 0))
+            if used_qty < 0:
+                raise AppError(422, "NEGATIVE_USED", "Sử dụng trong ca không được âm")
             theoretical_qty = opening_qty + received_qty - used_qty
             expected_qty = theoretical_qty if st.shift_code else book_qty
             db.add(

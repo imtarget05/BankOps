@@ -3,6 +3,8 @@ import json
 import uuid
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def test_google_login_validation_errors(client):
     """Missing or short tokens must return 422 with validation envelope."""
@@ -27,7 +29,7 @@ def test_google_login_validation_errors(client):
     assert r.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_google_login_mock_id_token(client):
+def test_google_login_mock_id_token(client, demo_mode):
     """Mock id_token flow provisions staff user and returns JWT."""
     username = f"mock_u_{uuid.uuid4().hex[:6]}@bankops.internal"
     mock_token = f"mock-google-token:{username}:Mock Test User"
@@ -46,7 +48,7 @@ def test_google_login_mock_id_token(client):
     assert r2.json()["is_new_user"] is False
 
 
-def test_google_login_mock_access_token(client):
+def test_google_login_mock_access_token(client, demo_mode):
     """Mock access_token flow provisions staff user and returns JWT."""
     username = f"mock_acc_{uuid.uuid4().hex[:6]}@bankops.internal"
     mock_token = f"mock-google-token:{username}:Mock Access User"
@@ -92,7 +94,7 @@ def test_google_login_access_token_mocked_google_api(client):
         assert "access_token" in body
 
 
-def test_google_login_disambiguates_email_and_username(client):
+def test_google_login_disambiguates_email_and_username(client, demo_mode):
     """When a user has matching email and another has matching username, no MultipleResultsFound."""
     shared_email = "tanmainguyenbinh@gmail.com"
     mock_token = f"mock-google-token:{shared_email}:Tan Mai"
@@ -102,3 +104,57 @@ def test_google_login_disambiguates_email_and_username(client):
     # Should resolve to admin user whose email is tanmainguyenbinh@gmail.com
     assert body["user"]["username"] in ("admin", "tanmainguyenbinh", shared_email)
     assert "access_token" in body
+
+
+# ---------------------------------------------------------------------------
+# Demo mode phải là opt-in tường minh: token `mock-` chỉ hợp lệ khi demo bật
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def demo_mode(monkeypatch):
+    """Bật demo mode TƯỜNG MINH cho các test dùng token `mock-`."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "demo_mode", True)
+    assert settings.is_demo_mode is True
+    return settings
+
+
+@pytest.fixture
+def non_demo_mode(monkeypatch):
+    """Tắt demo mode — môi trường thật."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "demo_mode", False)
+    assert settings.is_demo_mode is False
+    return settings
+
+
+def test_google_mock_token_rejected_outside_demo_mode(client, non_demo_mode):
+    """Ngoài demo mode, token `mock-` phải bị từ chối (401).
+
+    Trước đây bất kỳ chuỗi `mock-...` nào cũng tạo user + cấp role; nếu email
+    trùng `settings.admin_emails` thì nhận full admin.
+    """
+    username = f"mock_reject_{uuid.uuid4().hex[:6]}@bankops.internal"
+    mock_token = f"mock-google-token:{username}:Should Not Exist"
+    r = client.post("/api/v1/auth/google", json={"id_token": mock_token})
+    assert r.status_code == 401, r.text
+    assert r.json()["error"]["code"] == "GOOGLE_TOKEN_INVALID"
+
+    # Không tạo user nào từ token giả
+    r2 = client.post("/api/v1/auth/google", json={"access_token": mock_token})
+    assert r2.status_code == 401, r2.text
+    assert r2.json()["error"]["code"] == "GOOGLE_TOKEN_INVALID"
+
+
+def test_google_mock_token_accepted_in_demo_mode(client, demo_mode):
+    """Demo mode bật -> token `mock-` vẫn tạo user staff như luồng QA cũ."""
+    username = f"mock_ok_{uuid.uuid4().hex[:6]}@bankops.internal"
+    mock_token = f"mock-google-token:{username}:Demo Mock User"
+    r = client.post("/api/v1/auth/google", json={"id_token": mock_token})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["user"]["username"] == username
+    assert "staff" in body["user"]["roles"]

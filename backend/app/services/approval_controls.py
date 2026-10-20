@@ -54,7 +54,10 @@ def verify_supervisor_pin(
         reset_pin_failures(user)
         return
 
-    if settings.is_demo:
+    if settings.is_demo_mode:
+        # PIN demo CHỈ được dùng khi demo mode bật tường minh
+        # (`APP_ENV=demo` + `DEMO_MODE=true`). Ngoài demo mode, đường này bị
+        # chặn hoàn toàn -> fail-closed (không bypass PIN được).
         expected = DEMO_SUPERVISOR_PIN
     else:
         expected = settings.supervisor_pin.get_secret_value()

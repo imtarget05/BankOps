@@ -22,13 +22,24 @@ class FakeUser:
 
 
 class FakeSettings:
-    def __init__(self, app_env="demo", supervisor_pin="123456"):
+    """Cài đặt giả cho `Settings`.
+
+    `demo_mode` mô phỏng demo mode **bật tường minh** (APP_ENV=demo +
+    DEMO_MODE=true). Ngoài demo mode, PIN demo phải bị từ chối (D4).
+    """
+
+    def __init__(self, app_env="demo", supervisor_pin="123456", demo_mode=True):
         self.app_env = app_env
         self._supervisor_pin = supervisor_pin
+        self._demo_mode = demo_mode
 
     @property
     def is_demo(self):
         return self.app_env == "demo"
+
+    @property
+    def is_demo_mode(self):
+        return bool(self._demo_mode) and self.app_env == "demo"
 
     @property
     def supervisor_pin(self):
@@ -58,6 +69,17 @@ class TestVerifySupervisorPin:
         with pytest.raises(HTTPException) as exc:
             verify_supervisor_pin("wrong-pin", settings, user=FakeUser())
         assert exc.value.status_code == 403
+
+    def test_demo_pin_rejected_when_demo_mode_disabled(self):
+        """D4 — ngoài demo mode, PIN demo không được chấp nhận."""
+        settings = FakeSettings(app_env="demo", supervisor_pin="654321", demo_mode=False)
+        with pytest.raises(HTTPException) as exc:
+            verify_supervisor_pin(DEMO_SUPERVISOR_PIN, settings, user=FakeUser())
+        assert exc.value.status_code == 403
+
+    def test_configured_pin_accepted_when_demo_mode_disabled(self):
+        settings = FakeSettings(app_env="demo", supervisor_pin="654321", demo_mode=False)
+        verify_supervisor_pin("654321", settings, user=FakeUser())
 
     def test_pin_hash_path_verifies_password(self, monkeypatch):
         from app.services import approval_controls

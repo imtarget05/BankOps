@@ -227,7 +227,9 @@ async def _stage_run(
                 errors_json=v["errors"],
             )
         )
-        await db.commit()
+    # R12 — commit MỘT lần ở cuối. Trước đây commit trong vòng lặp từng dòng:
+    # crash giữa chừng để lại run "staged" thiếu dữ liệu, im lặng.
+    await db.commit()
     await db.refresh(run)
     return {
         "run_id": str(run.id),

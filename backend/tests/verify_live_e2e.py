@@ -228,6 +228,16 @@ def main():
 
     # 15. Kiểm thử Quên mật khẩu & Đặt lại bằng OTP (POST /auth/forgot-password & /auth/reset-password)
     forgot_res = post("/auth/forgot-password", {"username": "demo_maker"})
+    # OTP chỉ được trả trong response khi stack chạy với demo mode bật tường minh
+    # (APP_ENV=demo + DEMO_MODE=true). Ngoài demo mode, OTP đi qua email/SMTP.
+    if "otp_demo" not in forgot_res:
+        print(
+            "15. Bỏ qua bước reset bằng OTP: response không có `otp_demo` -> stack "
+            "đang chạy KHÔNG bật demo mode (thiếu DEMO_MODE=true). Hãy khởi động "
+            "stack với APP_ENV=demo DEMO_MODE=true để chạy trọn luồng demo."
+        )
+        print("\n=== LUỒNG E2E HOÀN TẤT (bỏ qua bước OTP ngoài demo mode) ===")
+        return
     otp = forgot_res["otp_demo"]
     print(f"15. Sinh mã OTP khôi phục mật khẩu cho demo_maker: {otp}")
     reset_res = post(

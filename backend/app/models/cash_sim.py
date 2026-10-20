@@ -52,6 +52,10 @@ class CashRequest(Base, TimestampMixin):
     version: int = Column(Integer, default=1, nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_by: str = Column(UUID(as_uuid=True), ForeignKey("iam_users.id"), nullable=False)
+    # Kho idempotency bền vững (migration 002 `002_idempotency_and_balances.py`
+    # đã tạo cột này + unique constraint). Bảng `idempotency_keys` chưa tồn tại
+    # trong Alembic nên cột này là kho sống sót qua restart cho phiếu quỹ.
+    idempotency_key: str | None = Column(String(128), nullable=True, unique=True)
 
     __mapper_args__ = {
         "version_id_col": version

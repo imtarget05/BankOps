@@ -1,0 +1,190 @@
+# =============================================================================
+# K8s Manifests — Model Serving (Phase M — S9)
+# =============================================================================
+# Deployment, Service, HPA, PDB cho FastAPI inference model serving.
+# - Sử dụng Docker image đã build S9.1
+# - Model artifact không phụ thuộc local filesystem
+# - Health checks, readiness, startup probes
+# - Argo Rollouts canary nếu có sẵn, xoay còn rolling restart
+# - Resource requests/limits
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-serving
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlflow-credentials
+  namespace: ml-serving
+type: Opaque
+stringData:
+  # These would be populated from external secret store in production
+  MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-serving-config
+  namespace: ml-serving
+data:
+  MODEL_NAME: "DemandForecastModel"
+  PREDICTION_THRESHOLD: "0.5"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving
+  namespace: ml-serving
+  labels:
+    app: model-serving
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: model-serving
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: model-serving
+      annotations:
+        # Argo Rollouts canary steps (nếu controller cài)
+        ArgoRollouts.io/steps: "1"
+        ArgoRollouts.io/maxUnavailable: "1"
+        ArgoRollouts.io/maxSurge: "1"
+    spec:
+      serviceAccountName: mlflow-reader
+      restartPolicy: Always
+      containers:
+        - name: inference
+          image: ghcr.io/mainguyenbinhtan/quanlykho/model-serving:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: mlflow-credentials
+            - configMapRef:
+                name: model-serving-config
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+          # Liveness probe - kiểm tra app còn chạy
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe - kiểm tra sẵn sàng phục vụ traffic
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Startup probe - chờ app khởi động xong (tránh premature readiness)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          # Security context
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          # Volume mount cho model artifact (được mount từ Secret/ConfigMap)
+          volumeMounts:
+            - name: model-artifact
+              mountPath: /app/mlartifacts
+        # Sidecar for Prometheus metrics scraping
+        - name: metrics-sidecar
+          image: prom/prometheus-node-exporter:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9100
+          # Thống kê resource cho sidecar
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "50Mi"
+            requests:
+              cpu: "50m"
+              memory: "25Mi"
+      # Volumes - model artifact được volume từ persistent claim hoặc pre-seeded
+      volumes:
+        - name: model-artifact
+          persistentVolumeClaim:
+            claimName: model-artifacts-pvc
+        # Fallback: emptyDir nếu PVC không được provision
+        # - name: model-artifact
+        #   emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving
+  namespace: ml-serving
+  labels:
+    app: model-serving
+spec:
+  type: ClusterIP
+  selector:
+    app: model-serving
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: model-serving-hpa
+  namespace: ml-serving
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: model-serving
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: model-serving-pdb
+  namespace: ml-serving
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: model-serving

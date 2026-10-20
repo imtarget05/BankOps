@@ -157,11 +157,16 @@ async def get_activity_feed(
 
 @router.get("/events/stream")
 async def events_stream(
+    current_user=Depends(require_any_capability("activity:view", "audit:view")),
     db: AsyncSession = Depends(get_db),
     cursor: str | None = Query(default=None),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
 ):
-    """SSE stream chuẩn docs/06: GET /events/stream?cursor= + Last-Event-ID."""
+    """SSE stream chuẩn docs/06: GET /events/stream?cursor= + Last-Event-ID.
+
+    S7 — stream này phát toàn bộ outbox event (request_id, status, amount) nên
+    BẮT BUỘC có token + capability (`activity:view` hoặc `audit:view`).
+    """
     effective_cursor = cursor or last_event_id
     return StreamingResponse(
         _event_generator(db, effective_cursor),

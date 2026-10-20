@@ -6,6 +6,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     event,
@@ -69,6 +70,9 @@ class OutboxEvent(Base):
 
 class Job(Base, TimestampMixin):
     __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_claimable", "status", "next_attempt", "lease_until"),
+    )
 
     id: str = Column(UUID(as_uuid=True), primary_key=True)
     type: str = Column(String(128), nullable=False)

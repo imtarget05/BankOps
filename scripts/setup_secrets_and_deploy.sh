@@ -12,7 +12,7 @@
 #   --cf-tunnel-token <token>     Cloudflare Tunnel Token
 #   --r2-key-id <id>              Cloudflare R2 Access Key ID
 #   --r2-secret-key <key>         Cloudflare R2 Secret Access Key
-#   --supervisor-pin <pin>        Supervisor PIN (default: 123456)
+#   --supervisor-pin <pin>        Supervisor PIN (required, no default — never reuse a published value)
 #   --jwt-secret <secret>         JWT Secret Key (auto-generated if omitted)
 #   --gpg-passphrase <passphrase> Backup GPG Passphrase (auto-generated if omitted)
 #   --apply-k8s                   Apply secret and kustomize to current K8s context
@@ -59,7 +59,7 @@ CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 CF_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
 R2_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
 R2_SECRET_KEY="${AWS_SECRET_ACCESS_KEY:-}"
-PIN="${SUPERVISOR_PIN:-123456}"
+PIN="${SUPERVISOR_PIN:-}"
 JWT_SEC="${SECRET_KEY:-}"
 GPG_PASS="${BACKUP_GPG_PASSPHRASE:-}"
 APPLY_K8S=0
@@ -93,6 +93,13 @@ echo "║      BankOps — Automated Cloudflare & Secrets Deploy Tool       ║"
 echo "║          Zero Trust & Instant Disaster Recovery Sizing           ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
+
+# 0. Supervisor PIN must be provided explicitly.
+#    S10: no default PIN — a default that lives in git is a published credential
+#    and was the reason the production PIN matched the value in the repo.
+if [ -z "${PIN}" ] || [ "${PIN}" = "123456" ]; then
+    error "Supervisor PIN is required (--supervisor-pin <pin> or SUPERVISOR_PIN env). Refusing to fall back to a published/default PIN."
+fi
 
 # 1. Database URL check/prompt
 if [ -z "${DB_URL}" ]; then
@@ -218,9 +225,10 @@ echo "=================================================================="
 echo "Summary of generated configurations:"
 echo " - K8s Secret:     ${K8S_SECRET_FILE}"
 echo " - Env File:       ${ENV_PROD_FILE}"
-echo " - Database URL:   ${DB_URL:0:30}..."
+DB_URL_REDACTED="$(printf '%s' "${DB_URL}" | sed -E 's#(://)[^/@]+@#\1<redacted>@#')"
+echo " - Database URL:   ${DB_URL_REDACTED}"
 echo " - Cloudflare AI:  Account ID (${CF_ACCOUNT_ID:0:8}...), Token configured"
-echo " - Supervisor PIN: ${PIN}"
+echo " - Supervisor PIN: configured (${#PIN} chars, value not printed)"
 echo " - Cloudflare R2:  Endpoint https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com"
 echo ""
 if [ -z "${CF_TUNNEL_TOKEN}" ]; then

@@ -8,10 +8,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     UniqueConstraint,
+    func,
+    literal_column,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -45,7 +49,11 @@ class Item(Base, TimestampMixin):
     category: str | None = Column(String(128), nullable=True)
     packaging: str | None = Column(String(256), nullable=True)
     cost_price: Decimal | None = Column(Numeric(14, 2), nullable=True)
-    selling_price: Decimal | None = Column(Numeric(14, 2), nullable=True)
+    # NUMERIC(15, 2) — the precision the deployed database and the
+    # `init_db` ALTER statement use; keeping the model identical to both
+    # means `alembic check` reports no drift for a migrated *and* for a
+    # bootstrapped database.
+    selling_price: Decimal | None = Column(Numeric(15, 2), nullable=True)
     min_stock: Decimal | None = Column(Numeric(12, 2), nullable=True)
     tracked_serial: bool = Column(Boolean, default=False, nullable=False)
     active: bool = Column(Boolean, default=True, nullable=False)
@@ -149,6 +157,10 @@ class Movement(Base, TimestampMixin):
 
 class LotMovement(Base, TimestampMixin):
     __tablename__ = "inv_lot_movements"
+    __table_args__ = (
+        Index("ix_inv_lot_movements_movement_id", "movement_id"),
+        Index("ix_inv_lot_movements_request_id", "request_id"),
+    )
 
     id: str = Column(UUID(as_uuid=True), primary_key=True)
     movement_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_movements.id", ondelete="CASCADE"), nullable=False)
@@ -193,18 +205,35 @@ class LotBalance(Base, TimestampMixin):
     __tablename__ = "inv_lot_balances"
     __table_args__ = (
         CheckConstraint("quantity >= 0", name="lot_qty_non_negative"),
+        Index("ix_inv_lot_balances_loc", "location_id"),
+        Index("ix_inv_lot_balances_item", "item_id"),
+        Index("ix_inv_lot_balances_exp", "expiry_date"),
     )
 
     id: str = Column(UUID(as_uuid=True), primary_key=True)
-    location_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    item_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_items.id", ondelete="RESTRICT"), nullable=False, index=True)
-    lot_no: str | None = Column(String(64), nullable=True, index=True)
-    expiry_date = Column(Date, nullable=True, index=True)
+    location_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_locations.id", ondelete="RESTRICT"), nullable=False)
+    item_id: str = Column(UUID(as_uuid=True), ForeignKey("inv_items.id", ondelete="RESTRICT"), nullable=False)
+    lot_no: str | None = Column(String(64), nullable=True)
+    expiry_date = Column(Date, nullable=True)
     quantity = Column(Numeric(20, 3), nullable=False, default=0)
     unit_cost = Column(Numeric(14, 2), nullable=True)
 
     def __repr__(self):
         return f"<LotBalance loc={self.location_id} item={self.item_id} lot={self.lot_no} exp={self.expiry_date} qty={self.quantity}>"
+
+
+# One lot-balance row per (location, item, lot, expiry). NULL lot/expiry are
+# folded to a sentinel so the uniqueness also covers legacy rows without a
+# lot number. Mirrors the expression index created by migration 021 so that
+# autogenerate sees no drift between the ORM metadata and the database.
+Index(
+    "uq_lot_balance_record",
+    LotBalance.location_id,
+    LotBalance.item_id,
+    func.coalesce(LotBalance.lot_no, literal_column("''::character varying")),
+    func.coalesce(LotBalance.expiry_date, literal_column("'2099-12-31'::date")),
+    unique=True,
+)
 
 
 class AssetLog(Base):
@@ -261,6 +290,18 @@ class Stocktake(Base, TimestampMixin):
 
     def __repr__(self):
         return f"<Stocktake {self.id} status={self.status}>"
+
+
+# At most one open stocktake shift per (location, business date, shift).
+# Mirrors the partial unique index created by migration 017.
+Index(
+    "uq_open_stocktake_shift",
+    Stocktake.location_id,
+    Stocktake.business_date,
+    func.coalesce(Stocktake.shift_code, literal_column("'none'::character varying")),
+    unique=True,
+    postgresql_where=text("status::text = 'open'::text"),
+)
 
 
 class StocktakeLine(Base):

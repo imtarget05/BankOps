@@ -40,7 +40,7 @@ async def assess(body: RequestAssessmentInput, user: User = Depends(get_current_
     if user.status != 'active':
         raise HTTPException(403, 'Tài khoản không hoạt động.')
     _enforce_ai_rate_limit(user)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
         return await assess_request(body.model_dump(), settings, client)
 
 
@@ -65,7 +65,7 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
     if not sources:
         return {'answer': 'Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.', 'sources': [], 'simulation': True}
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
             result = await generate(grounded_prompt(body.message, sources), settings, client)
     except HTTPException:
         top = sources[0]
@@ -88,7 +88,7 @@ async def chat_stream(body: ChatRequest, user: User = Depends(get_current_user))
             answer = 'Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.'
         else:
             try:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
                     prompt = grounded_prompt(body.message, sources)
                     if settings.ai_provider == 'ollama':
                         async for token in stream_ollama(prompt, settings, client):

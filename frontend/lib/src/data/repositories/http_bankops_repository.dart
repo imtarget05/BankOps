@@ -1142,12 +1142,13 @@ class HttpBankOpsRepository implements BankOpsRepository {
   Future<Cashbox> updateCashbox({
     required String id,
     String? name,
-    String? balance,
     bool? active,
   }) async {
+    // CHỈ gửi metadata. Tuyệt đối KHÔNG gửi field số dư
+    // (`balance`/`amount`/`opening_balance`): backend trả 422
+    // DIRECT_BALANCE_WRITE_FORBIDDEN — số dư chỉ đổi qua phiếu (journal).
     final body = await _put('/cash-sim/boxes/$id', {
       if (name != null) 'name': name,
-      if (balance != null) 'balance': balance,
       if (active != null) 'active': active,
     });
     return Cashbox(
@@ -1156,6 +1157,33 @@ class HttpBankOpsRepository implements BankOpsRepository {
       name: _str(body, 'name'),
       openingBalance: _str(body, 'balance', _str(body, 'opening_balance', '0')),
     );
+  }
+
+  @override
+  Future<CashRequest> createCashAdjustmentRequest({
+    required String cashboxId,
+    required String amount,
+    required bool increase,
+    String? reason,
+  }) async {
+    // Contract backend (backend/app/api/routes/cash_sim.py):
+    //  - `adjustment` = bút toán RA quỹ (chi) -> giảm số dư.
+    //  - `receipt`    = dòng tiền VÀO quỹ      -> tăng số dư.
+    // Backend chưa có kind điều chỉnh có dấu (xem báo cáo D3), nên hướng
+    // điều chỉnh được ánh xạ sang kind tương ứng ở trên.
+    final kind = increase ? 'receipt' : 'adjustment';
+    final res = await _post(
+      '/cash-sim/requests',
+      {
+        'kind': kind,
+        'cashbox_id': cashboxId,
+        'amount': amount,
+        'currency': 'VND',
+        'reason': reason ?? '',
+      },
+      extraHeaders: {'Idempotency-Key': _idemKey()},
+    );
+    return _parseCashRequest(res);
   }
 
   @override

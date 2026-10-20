@@ -28,9 +28,32 @@ def _ephemeral_secret(name: str) -> str:
     return _ephemeral_secrets[name]
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Đọc cờ boolean từ env: `os.environ` trước, sau đó file `.env` (gitignored).
+
+    Dùng cho các cờ phải **bật tường minh** (opt-in): mặc định `False` để
+    môi trường thật không bao giờ tự bật hành vi demo.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        raw = _env_vals.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 class Settings(BaseSettings):
     app_env: str = Field(default="demo")
     app_name: str = Field(default="kho-tra-sua-api")
+
+    # Demo mode là **opt-in tường minh**: mặc định TẮT (an toàn).
+    # Bật cần CẢ HAI điều kiện: `APP_ENV=demo` VÀ `DEMO_MODE=true`.
+    # Khi tắt, mọi đường tắt "demo" bị chặn: OTP trả trong response,
+    # Google token `mock-`, seed dữ liệu demo, backdoor theo username.
+    demo_mode: bool = Field(
+        default_factory=lambda: _env_flag("DEMO_MODE"),
+        description="Bật tường minh chế độ demo (cần APP_ENV=demo). Mặc định tắt.",
+    )
 
     database_url: str = Field(
         default_factory=lambda: os.environ.get("DATABASE_URL")
@@ -160,6 +183,15 @@ class Settings(BaseSettings):
         return self.app_env == "demo"
 
     @property
+    def is_demo_mode(self) -> bool:
+        """Chế độ demo **được bật tường minh**: `APP_ENV=demo` + `DEMO_MODE=true`.
+
+        Mặc định `False` -> không endpoint nào được phép trả OTP, chấp nhận
+        token `mock-`, seed dữ liệu demo hay cấp quyền theo tên đăng nhập.
+        """
+        return bool(self.demo_mode) and self.app_env == "demo"
+
+    @property
     def session_secret(self) -> str:
         """Env trước; demo/test fallback secret ephemeral (không hardcode)."""
         env_value = os.environ.get("BANKOPS_SESSION_SECRET", "")
@@ -171,11 +203,14 @@ class Settings(BaseSettings):
             "BANKOPS_SESSION_SECRET must be set outside demo environments"
         )
 
-    @property
-    def signing_key(self) -> str:
-        key = os.environ.get("BANKOPS_SIGNING_KEY", "") or os.environ.get(
+    def _signing_key_from_env(self) -> str:
+        return os.environ.get("BANKOPS_SIGNING_KEY", "") or os.environ.get(
             f"BANKOPS_{self.jwt_signing_key_ref}", ""
         )
+
+    @property
+    def signing_key(self) -> str:
+        key = self._signing_key_from_env()
         if key:
             return key
         if self.app_env in ("demo", "test"):
@@ -183,6 +218,20 @@ class Settings(BaseSettings):
         raise RuntimeError(
             "JWT signing key must be set via BANKOPS_SIGNING_KEY environment variable"
         )
+
+    def assert_runtime_secrets(self) -> None:
+        """Fail fast lúc khởi động khi môi trường non-demo thiếu secret JWT.
+
+        Ở `production`/`staging` (không phải demo/test) key ký JWT **bắt buộc**
+        phải do env cấp: thiếu thì app không được khởi động, thay vì chạy tiếp
+        rồi chết lúc ký token đầu tiên.
+        """
+        if self.app_env in ("demo", "test"):
+            return
+        if not self._signing_key_from_env():
+            raise RuntimeError(
+                "JWT signing key must be set via BANKOPS_SIGNING_KEY environment variable"
+            )
 
     @model_validator(mode='after')
     def _validate_ai_provider(self) -> 'Settings':
@@ -234,3 +283,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+# Fail fast: môi trường non-demo thiếu BANKOPS_SIGNING_KEY -> không khởi động.
+settings.assert_runtime_secrets()

@@ -1212,9 +1212,10 @@ class FakeBankOpsRepository implements BankOpsRepository {
   Future<Cashbox> updateCashbox({
     required String id,
     String? name,
-    String? balance,
     bool? active,
   }) async {
+    // KHÔNG có đường ghi số dư trực tiếp (giống backend 422
+    // DIRECT_BALANCE_WRITE_FORBIDDEN): số dư chỉ đổi qua phiếu điều chỉnh.
     final idx = _cashboxes.indexWhere((b) => b.id == id);
     if (idx < 0) throw ApiException('NOT_FOUND', 'Không tìm thấy két sắt');
     final cur = _cashboxes[idx];
@@ -1222,19 +1223,26 @@ class FakeBankOpsRepository implements BankOpsRepository {
       id: cur.id,
       code: cur.code,
       name: name ?? cur.name,
-      openingBalance: balance ?? cur.openingBalance,
+      openingBalance: cur.openingBalance,
     );
-    if (balance != null) {
-      final bals = _getCashBalancesList();
-      final bIdx = bals.indexWhere((b) => b.cashboxId == id);
-      if (bIdx >= 0) {
-        final existingCurrency = bals[bIdx].currency;
-        bals[bIdx] = CashBalance(cashboxId: id, amount: balance, currency: existingCurrency.isNotEmpty ? existingCurrency : 'VND');
-      } else {
-        bals.add(CashBalance(cashboxId: id, amount: balance, currency: 'VND'));
-      }
-    }
     return _delay(_cashboxes[idx]);
+  }
+
+  @override
+  Future<CashRequest> createCashAdjustmentRequest({
+    required String cashboxId,
+    required String amount,
+    required bool increase,
+    String? reason,
+  }) async {
+    // Phiếu điều chỉnh luôn đi qua flow draft -> submit -> duyệt; số dư
+    // KHÔNG đổi ngay khi tạo phiếu (giống backend).
+    return createCashRequest(
+      cashboxId: cashboxId,
+      kind: increase ? RequestKind.receipt : RequestKind.adjustment,
+      amount: amount,
+      reason: reason,
+    );
   }
 
   @override
@@ -1246,8 +1254,13 @@ class FakeBankOpsRepository implements BankOpsRepository {
   @override
   Future<List<CashBalance>> getCashBalances() => _delay(List.of(_getCashBalancesList()));
 
+  List<JournalEntry>? _journals;
+
+  List<JournalEntry> _getJournalsList() =>
+      _journals ??= List.of(_seedJournals());
+
   @override
-  Future<List<JournalEntry>> getJournals() => _delay(_seedJournals());
+  Future<List<JournalEntry>> getJournals() => _delay(List.of(_getJournalsList()));
 
   final _cashRequests = <CashRequest>[];
 
@@ -1303,11 +1316,60 @@ class FakeBankOpsRepository implements BankOpsRepository {
       _transitionCash(id, RequestStatus.pending);
 
   @override
-  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) {
+  Future<CashRequest> approveCashRequest(String id, {String? supervisorPin}) async {
     if (supervisorPin != null && supervisorPin != _supervisorPin) {
       throw ApiException('FORBIDDEN', 'Mã PIN kiểm soát viên không đúng.');
     }
-    return _transitionCash(id, RequestStatus.posted);
+    final approved = await _transitionCash(id, RequestStatus.posted);
+    // Số dư chỉ đổi khi phiếu ĐÃ ĐƯỢC DUYỆT (post journal) — giống backend.
+    _postCashAdjustmentJournal(approved);
+    return approved;
+  }
+
+  /// Post bút toán cho phiếu điều chỉnh đã duyệt (demo mode).
+  ///
+  /// - `kind=adjustment` -> bút toán RA quỹ (chi): số dư GIẢM.
+  /// - `kind=receipt` kèm tiền tố điều chỉnh -> bút toán VÀO quỹ: số dư TĂNG.
+  void _postCashAdjustmentJournal(CashRequest request) {
+    final isAdjustment = request.kind == RequestKind.adjustment;
+    final isIncrease =
+        request.kind == RequestKind.receipt &&
+        request.reason.startsWith(kCashAdjustmentReasonPrefix);
+    if (!isAdjustment && !isIncrease) return;
+
+    final amount = double.tryParse(request.amount) ?? 0;
+    if (amount <= 0) return;
+
+    final bals = _getCashBalancesList();
+    final idx = bals.indexWhere((b) => b.cashboxId == request.cashboxId);
+    final currency = idx >= 0 && bals[idx].currency.isNotEmpty
+        ? bals[idx].currency
+        : 'VND';
+    final current = idx >= 0 ? (double.tryParse(bals[idx].amount) ?? 0) : 0;
+    final next = isIncrease ? current + amount : current - amount;
+    final entry = CashBalance(
+      cashboxId: request.cashboxId,
+      amount: next.toStringAsFixed(2),
+      currency: currency,
+    );
+    if (idx >= 0) {
+      bals[idx] = entry;
+    } else {
+      bals.add(entry);
+    }
+
+    _getJournalsList().insert(
+      0,
+      JournalEntry(
+        id: 'je-${request.id}',
+        cashboxId: request.cashboxId,
+        kind: isIncrease ? 'receipt' : 'adjustment',
+        amount: request.amount,
+        currency: currency,
+        reason: request.reason,
+        createdAt: DateTime.now().toUtc(),
+      ),
+    );
   }
 
   @override

@@ -99,7 +99,20 @@ class TestIamAdmin:
         )
         assert ho_request.status_code == 201, ho_request.text
 
-        scoped_auth = _login(client, username, created.json()["temporary_password"])
+        temp_password = created.json()["temporary_password"]
+        scoped_auth = _login(client, username, temp_password)
+        # S13 — user cấp mật khẩu tạm thời phải đổi mật khẩu trước khi dùng
+        # nghiệp vụ; đổi xong đăng nhập lại để tiếp tục kiểm tra branch scope.
+        changed = client.post(
+            "/auth/change-initial-password",
+            headers=_idem(scoped_auth),
+            json={
+                "current_password": temp_password,
+                "new_password": "BranchScopedPass123!",
+            },
+        )
+        assert changed.status_code == 200, changed.text
+        scoped_auth = _login(client, username, "BranchScopedPass123!")
         balances = client.get("/inventory/balances", headers=scoped_auth)
 
         assert balances.status_code == 200, balances.text
