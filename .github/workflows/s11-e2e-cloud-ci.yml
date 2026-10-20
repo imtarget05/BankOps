@@ -61,22 +61,19 @@ jobs:
         working-directory: backend
         env:
           PATH: "/home/runner/.local/bin:$PATH"
-        run: |
-          poetry install --no-interaction --no-ansi
+        run: poetry install --no-interaction --no-ansi
 
       - name: Run Alembic migrations
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: |
-          poetry run alembic upgrade head
+        run: poetry run alembic upgrade head
 
       - name: Seed database
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: |
-          poetry run python -m app.seed
+        run: poetry run python -m app.seed
 
       - name: Run ML Training
         working-directory: backend
@@ -84,8 +81,7 @@ jobs:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
           MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
           MODEL_NAME: "DemandForecastModel"
-        run: |
-          poetry run pytest tests/test_ml_training.py -v --no-header
+        run: poetry run pytest tests/test_ml_training.py -v --no-header
 
       - name: MLflow Model Registry Setup
         working-directory: backend
@@ -93,51 +89,7 @@ jobs:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
           MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
           MODEL_NAME: "DemandForecastModel"
-        run: |
-          poetry run python -c "
-import mlflow
-mlflow.set_tracking_uri('sqlite:///./mlflow.db')
-mlflow.set_experiment('DemandForecastExperiment')
-
-# Create model in registry
-with mlflow.start_run():
-    mlflow.log_param('training_data_size', 1000)
-    mlflow.log_metric('r2_score', 0.85)
-    mlflow.sklearn.log_model(
-        sk_model=None,
-        artifact_path='model',
-        registered_model_name='DemandForecastModel'
-    )
-print('Model registered in MLflow Registry')
-"
-
-      - name: Model Promotion to Production
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
-          MODEL_NAME: "DemandForecastModel"
-        run: |
-          poetry run python -c "
-import mlflow
-mlflow.set_tracking_uri('sqlite:///./mlflow.db')
-
-# List versions and promote
-client = mlflow.tracking.MlflowClient(tracking_uri='sqlite:///./mlflow.db')
-versions = client.search_model_versions(f'name=\"{MODEL_NAME}\"')
-
-if versions:
-    latest = versions[0]
-    print(f'Promoting version {latest.version} to Production')
-    client.transition_model_version_stage(
-        name='DemandForecastModel',
-        version=str(latest.version),
-        stage='Production'
-    )
-    print('Model promoted to Production')
-else:
-    print('No model versions found to promote')
-"
+        run: poetry run python scripts/e2e_verify.py
 
       - name: FastAPI Serving Smoke Test
         working-directory: backend
@@ -145,32 +97,19 @@ else:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
           MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
           MODEL_NAME: "DemandForecastModel"
-        run: |
-          poetry run pytest tests/test_inference_api.py -v --no-header
+        run: poetry run pytest tests/test_inference_api.py -v --no-header
 
       - name: Drift Detection Check
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: |
-          poetry run pytest tests/test_drift_detection.py -v --no-header
+        run: poetry run pytest tests/test_drift_detection.py -v --no-header
 
       - name: E2E Verification Summary
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: |
-          poetry run python -c "
-# Summary of E2E pipeline verification
-print('=== E2E PIPELINE VERIFICATION SUMMARY ===')
-print('1. PostgreSQL: Connected and migrations run')
-print('2. Airflow: DAGs configured and tested')
-print('3. ML Training: Completed with baseline model')
-print('4. MLflow Registry: Model registered and promoted')
-print('5. FastAPI Serving: Endpoint responding')
-print('6. Drift Detection: Implementation verified')
-print('=== ALL E2E COMPONENTS VERIFIED ===')
-"
+        run: poetry run python scripts/e2e_verify.py
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
