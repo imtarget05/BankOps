@@ -4,8 +4,8 @@
 # Deployment, Service cho FastAPI inference model serving.
 # - Sử dụng Docker image đã build S9.1
 # - Health check endpoints optimized for kind/GCB environments
-# - Resource requests/limits合理
-# - Probe configs: startup → readiness → liveness theo trình tự
+# - Resource requests/limits leaner for kind-on-GitHubActions
+# - Probe configs: startup → readiness → liveness theo trình tự, grace periods
 # =============================================================================
 apiVersion: v1
 kind: Namespace
@@ -48,7 +48,7 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
-      maxUnavailable: 0
+      maxUnavailable: 1
   template:
     metadata:
       labels:
@@ -68,40 +68,40 @@ spec:
                 name: model-serving-config
           resources:
             limits:
-              cpu: "500m"
-              memory: "512Mi"
-            requests:
               cpu: "250m"
               memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
           # Liveness probe - kiểm tra app còn chạy (ít can thiệp vào rollout)
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 20
-            periodSeconds: 30
+            initialDelaySeconds: 30
+            periodSeconds: 40
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 5
           # Readiness probe - kiểm tra sẵn sàng phục vụ traffic
-          # Thiết kế: delay moderate, tolerance cao để tránh đánh đánh nhầm pod mới
+          # Thiết kế: delay lengthier, failureThreshold cao cho environmentconstraints
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            initialDelaySeconds: 15
+            periodSeconds: 15
             timeoutSeconds: 3
-            failureThreshold: 8
+            failureThreshold: 10
           # Startup probe - chờ app khởi động xong (tránh premature readiness)
-          # Cấu hình nhẹ: cho phép app khởi động trong 30s
+          # Cấu hình nhẹ: timeout lengthier để match kind environment
           startupProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 2
+            initialDelaySeconds: 10
+            periodSeconds: 3
             timeoutSeconds: 3
-            failureThreshold: 15
+            failureThreshold: 20
           # Security context
           securityContext:
             runAsNonRoot: true
@@ -143,14 +143,14 @@ spec:
     kind: Deployment
     name: model-serving
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 50
+          averageUtilization: 70
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
