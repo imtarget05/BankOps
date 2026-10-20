@@ -51,6 +51,7 @@ jobs:
         env:
           PATH: "/home/runner/.local/bin:$PATH"
         run: |
+          poetry lock
           poetry install --no-interaction --no-ansi
 
       - name: Run Alembic migrations
