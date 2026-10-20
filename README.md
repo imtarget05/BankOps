@@ -1,11 +1,11 @@
 # Kho-Trà-Sữa — Hệ Thống Vận Hành Kho & Quỹ Ngân Hàng Thông Minh (AI-Powered Core Banking Ops)
 
-[![CI](https://github.com/imtarget05/Kho-Trà-Sữa/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/Kho-Trà-Sữa/actions/workflows/ci.yml)
+[![CI](https://github.com/imtarget05/QuanLyKho/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/QuanLyKho/actions/workflows/ci.yml)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24+-02569B?logo=flutter)](https://flutter.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql)](https://postgresql.org)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%20%2F%20AI%20provider-F38020?logo=cloudflare)](https://developers.cloudflare.com)
-[![Quality Gate](https://img.shields.io/badge/Quality_Gate-Passed-success)](https://github.com/imtarget05/Kho-Trà-Sữa)
+[![Quality Gate](https://img.shields.io/badge/Quality_Gate-Passed-success)](https://github.com/imtarget05/QuanLyKho)
 
 > **Lưu ý an toàn:** Tất cả số tiền, tồn quỹ, giao dịch, mã ấn chỉ và danh tính trong hệ thống là **mô phỏng nghiệp vụ** (`simulation: true`). Không kết nối trực tiếp core banking sản xuất và không sử dụng dữ liệu khách hàng thật.
 
