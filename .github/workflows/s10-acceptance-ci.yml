@@ -65,6 +65,11 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
+          # seed_demo() refuses to run when app_env == "production", and
+          # app_env defaults to production. Without this the step dies with
+          # "seed_demo is blocked in production." before a single row is written.
+          APP_ENV: demo
+          DEMO_MODE: "true"
         run: |
           poetry run python -m app.seed
 
@@ -72,6 +77,8 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
+          APP_ENV: demo
+          DEMO_MODE: "true"
         run: |
           poetry run pytest tests/test_acceptance_qa.py -v --no-header
 
