@@ -7,8 +7,14 @@ set -e
 # ephemeral sẽ hết hạn sau mỗi lần restart).
 # Secret trong k8s/HF đang đặt tên legacy là `SECRET_KEY` -> dùng làm signing
 # key khi chưa cấp `BANKOPS_SIGNING_KEY` riêng.
+#
+# LEGACY FALLBACK: `SECRET_KEY` là tên CŨ của secret deploy. Template
+# (`infra/k8s/base/secret-template.yaml`) đã khai báo `BANKOPS_SIGNING_KEY`
+# (tên đúng mà `app/config.py` đọc) -> deploy mới KHÔNG cần dựa vào shim này.
+# Shim chỉ còn để cluster cũ (chưa cấp lại secret) khởi động được; sẽ bỏ được
+# khi mọi secret đã đổi sang `BANKOPS_SIGNING_KEY`.
 if [ -z "${BANKOPS_SIGNING_KEY:-}" ] && [ -n "${SECRET_KEY:-}" ]; then
-    echo "[Entrypoint] BANKOPS_SIGNING_KEY chưa set -> dùng SECRET_KEY (tên legacy của secret deploy)."
+    echo "[Entrypoint] BANKOPS_SIGNING_KEY chưa set -> dùng SECRET_KEY (LEGACY fallback: tên cũ của secret deploy)."
     BANKOPS_SIGNING_KEY="$SECRET_KEY"
     export BANKOPS_SIGNING_KEY
 fi
