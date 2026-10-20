@@ -1,62 +1,104 @@
-# Inventory Ingestion DAG (Phase M — S2)
-#
-# Workflow: ingest → validate → normalize → dedup → transform → version → schedule
-#
-# Dependencies:
-#   - app.models.etl (EtlConnection, EtlPipeline, EtlMappingVersion, EtlRun)
-#   - app.services.etl_engine (parse_csv, parse_json, parse_xlsx, compute_fingerprint)
-#   - app.db.base (Base, TimestampMixin)
-#   - pandas, sklearn (for feature engineering)
-#
+"""Inventory Ingestion DAG (Phase M — S2).
 
-from airflow import DAG
-from datetime import datetime
-from airflow.operators.python import PythonOperator
+Chuỗi ingest thật (không có stub rỗng):
 
-from app.services.etl_engine import parse_csv, parse_json, compute_fingerprint
+    read_source → parse_rows → validate_rows → load_staging
+                → train_demand_model → promote_demand_model
 
+* ``read_source``        – đọc file nguồn (mặc định ``backend/sample-data/inventory.json``).
+* ``parse_rows``         – parse bằng ``app.services.etl_engine.parse_raw_source`` (hàm thật).
+* ``validate_rows``      – kiểm tra trường bắt buộc + fingerprint SHA-256 (idempotency key).
+* ``load_staging``       – ghi dòng vào bảng staging ``qlk_ingest_staging`` (idempotent).
+* ``train_demand_model`` – gọi ``app.services.ml_training.run_full_pipeline`` (MLflow thật).
+* ``promote_demand_model`` – gọi ``app.services.ml_registry.promote_model``, chỉ promote
+  khi R² ≥ ngưỡng (0.7).
 
-dag = DAG(
+Cấu hình qua biến môi trường (không hardcode path tuyệt đối):
+
+===========================  ====================================================
+``QLK_INGEST_INVENTORY_SOURCE``  file nguồn (mặc định ``backend/sample-data/inventory.json``)
+``QLK_INGEST_SOURCE_DIR``        thư mục nguồn dùng chung
+``QLK_INGEST_DATABASE_URL``      database đích cho bảng staging (mặc định ``DATABASE_URL``)
+``QLK_INGEST_STAGING_TABLE``     tên bảng staging (mặc định ``qlk_ingest_staging``)
+``MLFLOW_TRACKING_URI``          tracking store MLflow
+``QLK_INGEST_ML_N_PERIODS``      số kỳ huấn luyện (mặc định 120)
+===========================  ====================================================
+"""
+
+from __future__ import annotations
+
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+# Airflow thêm DAGS_FOLDER vào sys.path, nhưng `airflow dags test --dagfile-path`
+# và môi trường khác có thể không làm vậy → tự chèn để chắc chắn import được.
+_DAGS_DIR = Path(__file__).resolve().parent
+if str(_DAGS_DIR) not in sys.path:
+    sys.path.insert(0, str(_DAGS_DIR))
+
+from airflow import DAG  # noqa: E402
+try:  # Airflow 3: provider chuẩn; fallback cho bản cài không kèm provider.
+    from airflow.providers.standard.operators.python import PythonOperator  # noqa: E402
+except ImportError:  # pragma: no cover - fallback Airflow 2
+    from airflow.operators.python import PythonOperator  # noqa: E402
+
+from qlk_ingest.tasks import (  # noqa: E402
+    load_staging,
+    parse_rows,
+    promote_demand_model,
+    read_source,
+    train_demand_model,
+    validate_rows,
+)
+
+DATASET = "inventory"
+
+DEFAULT_ARGS = {
+    "owner": "data-platform@quanlykho.local",
+    "depends_on_past": False,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+    "start_date": datetime(2024, 1, 1),
+}
+
+with DAG(
     dag_id="inventory_ingestion",
-    start_date=datetime(2024, 1, 1),
+    description="Ingest catalog tồn kho vào bảng staging, huấn luyện + promote model nhu cầu (MLflow).",
+    default_args=DEFAULT_ARGS,
     schedule="@daily",
     catchup=False,
-    tags=["phase-m", "inventory", "etl"],
-)
+    max_active_runs=1,
+    tags=["phase-m", "inventory", "etl", "ml"],
+    doc_md=__doc__,
+) as dag:
+    read = PythonOperator(
+        task_id="read_source",
+        python_callable=read_source,
+        op_kwargs={"dataset": DATASET},
+    )
+    parse = PythonOperator(
+        task_id="parse_rows",
+        python_callable=parse_rows,
+        op_kwargs={"dataset": DATASET},
+    )
+    validate = PythonOperator(
+        task_id="validate_rows",
+        python_callable=validate_rows,
+        op_kwargs={"dataset": DATASET},
+    )
+    load = PythonOperator(
+        task_id="load_staging",
+        python_callable=load_staging,
+        op_kwargs={"dataset": DATASET},
+    )
+    train = PythonOperator(
+        task_id="train_demand_model",
+        python_callable=train_demand_model,
+    )
+    promote = PythonOperator(
+        task_id="promote_demand_model",
+        python_callable=promote_demand_model,
+    )
 
-ingest_csv = PythonOperator(
-    task_id="ingest_csv",
-    python_callable=parse_csv,
-    op_kwargs={"file_path": "/data/inventory/inventory.csv", "format": "csv"},
-)
-
-validate_schema = PythonOperator(
-    task_id="validate_schema",
-    python_callable=compute_fingerprint,
-    op_kwargs={"data": "{{ ti.xcom_pull(task_ids='ingest_csv') }}"},
-)
-
-normalize_data = PythonOperator(
-    task_id="normalize_data",
-    python_callable=lambda data: data,  # placeholder: actual normalize logic
-)
-
-dedup_data = PythonOperator(
-    task_id="dedup_data",
-    python_callable=lambda data: data,  # placeholder: actual dedup logic
-)
-
-transform_features = PythonOperator(
-    task_id="transform_features",
-    python_callable=lambda data: data,  # placeholder: actual feature engineering
-),
-
-version_dataset = PythonOperator(
-    task_id="version_dataset",
-    python_callable=lambda: None,  # placeholder: version dataset via migration
-)
-
-schedule_batch = PythonOperator(
-    task_id="schedule_batch",
-    python_callable=lambda: None,  # placeholder: schedule batch processing
-)
+    read >> parse >> validate >> load >> train >> promote
