@@ -42,7 +42,7 @@ jobs:
             .
 
       - name: Push image to GHCR
-        uses: docker/login-action@f054a8b5397f2a3be7f291d218625864b36e06e5
+        uses: actions/docker-login@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
