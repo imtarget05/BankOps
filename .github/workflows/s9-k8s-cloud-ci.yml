@@ -70,6 +70,7 @@ jobs:
         working-directory: backend
         run: |
           kubectl apply -f k8s/model-serving.yaml
+          kubectl set image deployment/model-serving -n ml-serving inference=ghcr.io/imtarget05/quanlykho/model-serving:${{ github.sha }}
 
       - name: Wait for Deployment rollout
         working-directory: backend

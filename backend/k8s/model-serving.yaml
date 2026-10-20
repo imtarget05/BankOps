@@ -64,7 +64,7 @@ spec:
       restartPolicy: Always
       containers:
         - name: inference
-          image: ghcr.io/mainguyenbinhtan/quanlykho/model-serving:latest
+          image: ghcr.io/imtarget05/quanlykho/model-serving:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
