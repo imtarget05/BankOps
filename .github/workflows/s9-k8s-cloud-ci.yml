@@ -19,42 +19,27 @@ jobs:
     env:
       MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
       MODEL_NAME: "DemandForecastModel"
-      # Image name convention
       IMAGE_NAME: "ghcr.io/${{ github.repository_owner }}/quanlykho/model-serving"
-      # Kind cluster name
       KIND_CLUSTER_NAME: "mlaas"
 
     steps:
-      # -------------------------------------------------------
-      # 1. Checkout repository
-      # -------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # -------------------------------------------------------
-      # 2. Set up Docker BuildKit for efficient builds
-      # -------------------------------------------------------
       - name: Set up Docker BuildKit
         run: |
           export DOCKER_BUILDKIT=1
           echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
 
-      # -------------------------------------------------------
-      # 3. Build Docker image for model serving
-      # -------------------------------------------------------
       - name: Build model serving Docker image
-        working-directory: backend
         run: |
-          docker build \
+          cd backend && docker build \
             -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
             -f Dockerfile.serving \
             .
 
-      # -------------------------------------------------------
-      # 4. Push image to GitHub Container Registry
-      # -------------------------------------------------------
       - name: Push image to GHCR
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,9 +48,6 @@ jobs:
           EOF
           docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
-      # -------------------------------------------------------
-      # 5. Install kind cluster inside GitHub Actions runner
-      # -------------------------------------------------------
       - name: Install kind
         run: |
           [ $(uname -m) = x86_64 ] && ARCH=amd64 || ARCH=arm64
@@ -73,51 +55,29 @@ jobs:
           chmod +x kind
           sudo mv kind /usr/local/bin/
 
-      # -------------------------------------------------------
-      # 6. Create kind cluster
-      # -------------------------------------------------------
       - name: Create kind cluster
         run: |
           kind create cluster --name "${{ env.KIND_CLUSTER_NAME }}"
 
-      # -------------------------------------------------------
-      # 7. Load Docker image into kind cluster
-      # -------------------------------------------------------
       - name: Load image into kind
         run: |
           kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER_NAME }}"
 
-      # -------------------------------------------------------
-      # 8. Apply Kubernetes manifests
-      # -------------------------------------------------------
       - name: Apply K8s manifests
-        working-directory: backend
         run: |
-          kubectl apply -k k8s/
+          cd backend && kubectl apply -k k8s/
 
-      # -------------------------------------------------------
-      # 9. Wait for Deployment rollout
-      # -------------------------------------------------------
       - name: Wait for Deployment rollout
-        working-directory: backend
         run: |
-          kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
+          cd backend && kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
 
-      # -------------------------------------------------------
-      # 10. Verify Pod status
-      # -------------------------------------------------------
       - name: Verify Pod status
-        working-directory: backend
         run: |
-          kubectl get pods -n ml-serving -l app=model-serving -o wide
+          cd backend && kubectl get pods -n ml-serving -l app=model-serving -o wide
 
-      # -------------------------------------------------------
-      # 11. Test Readiness Probe
-      # -------------------------------------------------------
       - name: Test Readiness Probe
-        working-directory: backend
         run: |
-          kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
+          cd backend && kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
           SERVICE_IP=$(kubectl get svc model-serving -n ml-serving -o jsonpath='{.spec.clusterIP}')
           echo "Service ClusterIP: $SERVICE_IP"
           for i in $(seq 1 12); do
@@ -130,46 +90,26 @@ jobs:
             sleep 5
           done
 
-      # -------------------------------------------------------
-      # 12. Test Liveness Probe
-      # -------------------------------------------------------
       - name: Test Liveness Probe
-        working-directory: backend
         run: |
-          POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}')
-          kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
+          cd backend && POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}') && kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
           PORT_FORWARD_PID=$!
           sleep 3
           curl -f http://localhost:8000/health && echo "Liveness probe PASSED" || echo "Liveness probe FAILED"
           kill $PORT_FORWARD_PID 2>/dev/null
 
-      # -------------------------------------------------------
-      # 13. Verify HPA configuration
-      # -------------------------------------------------------
       - name: Verify HPA configuration
-        working-directory: backend
         run: |
-          kubectl describe hpa model-serving-hpa -n ml-serving
+          cd backend && kubectl describe hpa model-serving-hpa -n ml-serving
 
-      # -------------------------------------------------------
-      # 14. Verify PDB behavior
-      # -------------------------------------------------------
       - name: Verify PDB behavior
-        working-directory: backend
         run: |
-          kubectl describe pdb model-serving-pdb -n ml-serving
+          cd backend && kubectl describe pdb model-serving-pdb -n ml-serving
 
-      # -------------------------------------------------------
-      # 15. Check rollout events
-      # -------------------------------------------------------
       - name: Check rollout events
-        working-directory: backend
         run: |
-          kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp | tail -20
+          cd backend && kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp | tail -20
 
-      # -------------------------------------------------------
-      # 16. Upload artifacts
-      # -------------------------------------------------------
       - name: Upload k8s manifest artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -186,9 +126,6 @@ jobs:
             /var/lib/kind
           retention-days: 7
 
-      # -------------------------------------------------------
-      # 17. Final status announcement
-      # -------------------------------------------------------
       - name: Announce CLOUD_CI_KIND_VERIFIED
         if: always()
         run: |
@@ -201,9 +138,6 @@ jobs:
           echo "Status: ${{ job.status }}"
           echo "========================================"
 
-      # -------------------------------------------------------
-      # 18. Export gate result for downstream
-      # -------------------------------------------------------
       - name: Export gate result
         id: gate-result
         run: |
