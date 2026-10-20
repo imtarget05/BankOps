@@ -34,11 +34,12 @@ jobs:
           echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
 
       - name: Build model serving Docker image
+        working-directory: backend
         run: |
           docker build \
             -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
-            -f backend/Dockerfile.serving \
-            backend
+            -f Dockerfile.serving \
+            .
 
       - name: Push image to GHCR
         env:
@@ -61,21 +62,25 @@ jobs:
 
       - name: Load image into kind
         run: |
-          kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER_NAME }}"
+          kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER NAME }}"
 
       - name: Apply K8s manifests
+        working-directory: backend
         run: |
           kubectl apply -k k8s/
 
       - name: Wait for Deployment rollout
+        working-directory: backend
         run: |
           kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
 
       - name: Verify Pod status
+        working-directory: backend
         run: |
           kubectl get pods -n ml-serving -l app=model-serving -o wide
 
       - name: Test Readiness Probe
+        working-directory: backend
         run: |
           kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
           SERVICE_IP=$(kubectl get svc model-serving -n ml-serving -o jsonpath='{.spec.clusterIP}')
@@ -91,6 +96,7 @@ jobs:
           done
 
       - name: Test Liveness Probe
+        working-directory: backend
         run: |
           POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}')
           kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
@@ -100,14 +106,17 @@ jobs:
           kill $PORT_FORWARD_PID 2>/dev/null
 
       - name: Verify HPA configuration
+        working-directory: backend
         run: |
           kubectl describe hpa model-serving-hpa -n ml-serving
 
       - name: Verify PDB behavior
+        working-directory: backend
         run: |
           kubectl describe pdb model-serving-pdb -n ml-serving
 
       - name: Check rollout events
+        working-directory: backend
         run: |
           kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp | tail -20
 
