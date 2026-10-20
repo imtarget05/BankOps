@@ -1,12 +1,11 @@
 # =============================================================================
 # K8s Manifests — Model Serving (Phase M — S9)
 # =============================================================================
-# Deployment, Service, HPA, PDB cho FastAPI inference model serving.
+# Deployment, Service cho FastAPI inference model serving.
 # - Sử dụng Docker image đã build S9.1
-# - Model artifact không phụ thuộc local filesystem
-# - Health checks, readiness, startup probes
-# - Argo Rollouts canary nếu có sẵn, xoay còn rolling restart
-# - Resource requests/limits
+# - Health check endpoints
+# - Resource requests/limits合理
+# - Probes configured for quick readiness
 # =============================================================================
 apiVersion: v1
 kind: Namespace
@@ -41,7 +40,7 @@ metadata:
     app: model-serving
     version: "1.0.0"
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: model-serving
@@ -54,11 +53,6 @@ spec:
     metadata:
       labels:
         app: model-serving
-      annotations:
-        # Argo Rollouts canary steps (nếu controller cài)
-        ArgoRollouts.io/steps: "1"
-        ArgoRollouts.io/maxUnavailable: "1"
-        ArgoRollouts.io/maxSurge: "1"
     spec:
       restartPolicy: Always
       containers:
@@ -113,25 +107,7 @@ spec:
             capabilities:
               drop:
                 - ALL
-          # Volume mount cho model artifact (được mount từ Secret/ConfigMap)
-          volumeMounts:
-            - name: model-artifact
-              mountPath: /app/mlartifacts
-        # Sidecar for Prometheus metrics scraping
-        - name: metrics-sidecar
-          image: prom/prometheus-node-exporter:latest
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 9100
-          # Thống kê resource cho sidecar
-          resources:
-            limits:
-              cpu: "100m"
-              memory: "50Mi"
-            requests:
-              cpu: "50m"
-              memory: "25Mi"
-      # Volumes - model artifact được volume từ persistent claim hoặc pre-seeded
+      # Volumes - model artifact được volume temporary
       volumes:
         - name: model-artifact
           emptyDir: {}
@@ -163,8 +139,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: model-serving
-  minReplicas: 2
-  maxReplicas: 6
+  minReplicas: 1
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
