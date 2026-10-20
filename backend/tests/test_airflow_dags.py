@@ -38,9 +38,6 @@ AIRFLOW_DAGS_DIR.mkdir(parents=True, exist_ok=True)
 # must be parseable by `airflow dags list --parse-only`.
 # ---------------------------------------------------------------------------
 
-pytest.importorskip("airflow", reason="Airflow not installed – DAG tests skipped")
-
-
 def _import_dag(dag_id: str):
     """Import an Airflow DAG by its ID."""
     import importlib
