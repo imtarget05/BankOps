@@ -60,7 +60,6 @@ spec:
         ArgoRollouts.io/maxUnavailable: "1"
         ArgoRollouts.io/maxSurge: "1"
     spec:
-      serviceAccountName: mlflow-reader
       restartPolicy: Always
       containers:
         - name: inference
@@ -153,12 +152,6 @@ spec:
       protocol: TCP
       port: 80
       targetPort: 8000
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: mlflow-reader
-  namespace: ml-serving
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
