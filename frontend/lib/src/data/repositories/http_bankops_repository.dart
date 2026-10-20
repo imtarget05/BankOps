@@ -216,8 +216,14 @@ class HttpBankOpsRepository implements BankOpsRepository {
   }
 
   /// Server kho dùng 'issue' cho xuất kho; quỹ dùng 'payment'.
+  ///
+  /// Backend còn có kind `adjustment_in` (bút toán điều chỉnh chiều TĂNG quỹ,
+  /// xem `backend/app/api/routes/cash_sim.py::_ADJUSTMENT_IN_KINDS`). Frontend
+  /// chưa có enum riêng cho chiều tăng -> ánh xạ về `RequestKind.adjustment`
+  /// để UI hiển thị đúng là "phiếu điều chỉnh" (KHÔNG phải "phiếu thu").
   static RequestKind _kind(String raw) {
     if (raw == 'issue') return RequestKind.payment;
+    if (raw == 'adjustment_in') return RequestKind.adjustment;
     for (final k in RequestKind.values) {
       if (k.name == raw) return k;
     }
@@ -1167,11 +1173,17 @@ class HttpBankOpsRepository implements BankOpsRepository {
     String? reason,
   }) async {
     // Contract backend (backend/app/api/routes/cash_sim.py):
-    //  - `adjustment` = bút toán RA quỹ (chi) -> giảm số dư.
-    //  - `receipt`    = dòng tiền VÀO quỹ      -> tăng số dư.
-    // Backend chưa có kind điều chỉnh có dấu (xem báo cáo D3), nên hướng
-    // điều chỉnh được ánh xạ sang kind tương ứng ở trên.
-    final kind = increase ? 'receipt' : 'adjustment';
+    //  - `adjustment`     = bút toán điều chỉnh RA quỹ (chi) -> giảm số dư.
+    //  - `adjustment_in`  = bút toán điều chỉnh VÀO quỹ (thu) -> tăng số dư.
+    //  - `receipt`        = dòng tiền VÀO quỹ THƯỜNG (nạp quỹ của cashier).
+    //
+    // Không được dùng `receipt` cho chiều TĂNG của phiếu điều chỉnh: `receipt`
+    // là nghiệp vụ thu tiền thường, còn `adjustment_in` là **bút toán điều chỉnh
+    // số dư** -> bắt buộc có `cash:post_adjustment` ngay từ lúc TẠO phiếu
+    // (backend: `_ADJUSTMENT_IN_KINDS` / `_FINANCIAL_ADJUSTMENT_KINDS`).
+    // Gửi `receipt` ở đây làm mất phân quyền chiều tăng: một phiếu điều chỉnh
+    // bị ghi nhận thành phiếu thu tiền thường.
+    final kind = increase ? 'adjustment_in' : 'adjustment';
     final res = await _post(
       '/cash-sim/requests',
       {
