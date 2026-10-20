@@ -121,8 +121,9 @@ cd infra/cloudflare-worker && npm run typecheck
 # 2. Chạy unit & widget tests Frontend (28/28 passed)
 cd frontend && flutter test --no-pub
 
-# 3. Chạy unit & integration tests Backend (136 passed)
-PYTHONPATH=backend python3 -m pytest backend/tests/ -q
+# 3. Chạy unit & integration tests Backend trên PostgreSQL tạm.
+# Không trỏ pytest vào database demo/dev đang chạy ở cổng 5432.
+make test-backend
 ```
 
 ---

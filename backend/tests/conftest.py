@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy.engine import make_url
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
@@ -33,6 +34,33 @@ os.environ.setdefault(
 # Test kiểm tra an toàn sẽ TẮT lại bằng monkeypatch (`demo_mode=False`) để
 # khẳng định hành vi ngoài demo mode.
 os.environ.setdefault("DEMO_MODE", "true")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Refuse to mutate a developer, UAT, or production database in pytest.
+
+    The backend suite performs real HTTP writes, seeds roles, and runs Alembic.
+    A shared ``bankops`` database made those operations depend on stale data and
+    could mutate a developer's demo data.  Test execution is therefore allowed
+    only when the selected database name visibly carries the ``_test`` marker.
+    CI and ``make test-backend`` provide ``bankops_test``.
+    """
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        pytest.exit(
+            "DATABASE_URL is required for integration tests; use `make test-backend` "
+            "to start the isolated PostgreSQL test database.",
+            returncode=2,
+        )
+
+    database_name = make_url(database_url).database or ""
+    if "_test" not in database_name.lower():
+        pytest.exit(
+            "Refusing to run mutating tests against database "
+            f"`{database_name}`. Use a dedicated database whose name contains "
+            "`_test` (for example `bankops_test`) or run `make test-backend`.",
+            returncode=2,
+        )
 
 
 def _import_or_fail(module: str):

@@ -21,8 +21,12 @@ logs: ## Xem log API + worker trực tiếp
 ps: ## Trạng thái container + healthcheck
 	docker compose ps
 
-test-backend: ## Chạy toàn bộ pytest backend (245 tests)
-	cd backend && python3 -m pytest tests -q
+test-backend: ## Chạy pytest với PostgreSQL tạm, cô lập hoàn toàn khỏi DB dev
+	@set -e; \
+	trap 'docker compose -p quanlykho-test -f "$(CURDIR)/docker-compose.test.yml" down -v --remove-orphans >/dev/null 2>&1 || true' EXIT; \
+	docker compose -p quanlykho-test -f "$(CURDIR)/docker-compose.test.yml" up -d --wait; \
+	cd backend && DATABASE_URL="postgresql+psycopg2://bankops:bankops@127.0.0.1:$${TEST_POSTGRES_PORT:-5433}/bankops_test" .venv/bin/python -m alembic upgrade head; \
+	DATABASE_URL="postgresql+psycopg2://bankops:bankops@127.0.0.1:$${TEST_POSTGRES_PORT:-5433}/bankops_test" .venv/bin/python -m pytest tests -q
 
 analyze-backend: ## Lint backend & ai bằng ruff
 	python3 -m ruff check backend/ ai/
