@@ -30,7 +30,7 @@ scikit-learn = "^1.4.0"
 setuptools = ">=80.9,<81"
 python-jose = { extras = ["cryptography"], version = "^3.3.0" }
 passlib = { extras = ["bcrypt"], version = "^1.7.4" }
-bcrypt = "<4.1"
+bcrypt = "<4.2,>=4.0.1"
 itsdangerous = "^2.1.0"
 greenlet = "^3.0.0"
 python-multipart = "^0.0.10"
