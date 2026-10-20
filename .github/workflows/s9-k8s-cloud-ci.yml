@@ -35,10 +35,10 @@ jobs:
 
       - name: Build model serving Docker image
         run: |
-          cd backend && docker build \
+          docker build \
             -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
-            -f Dockerfile.serving \
-            .
+            -f backend/Dockerfile.serving \
+            backend
 
       - name: Push image to GHCR
         env:
@@ -65,19 +65,19 @@ jobs:
 
       - name: Apply K8s manifests
         run: |
-          cd backend && kubectl apply -k k8s/
+          kubectl apply -k k8s/
 
       - name: Wait for Deployment rollout
         run: |
-          cd backend && kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
+          kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
 
       - name: Verify Pod status
         run: |
-          cd backend && kubectl get pods -n ml-serving -l app=model-serving -o wide
+          kubectl get pods -n ml-serving -l app=model-serving -o wide
 
       - name: Test Readiness Probe
         run: |
-          cd backend && kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
+          kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
           SERVICE_IP=$(kubectl get svc model-serving -n ml-serving -o jsonpath='{.spec.clusterIP}')
           echo "Service ClusterIP: $SERVICE_IP"
           for i in $(seq 1 12); do
@@ -92,7 +92,8 @@ jobs:
 
       - name: Test Liveness Probe
         run: |
-          cd backend && POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}') && kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
+          POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}')
+          kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
           PORT_FORWARD_PID=$!
           sleep 3
           curl -f http://localhost:8000/health && echo "Liveness probe PASSED" || echo "Liveness probe FAILED"
@@ -100,15 +101,15 @@ jobs:
 
       - name: Verify HPA configuration
         run: |
-          cd backend && kubectl describe hpa model-serving-hpa -n ml-serving
+          kubectl describe hpa model-serving-hpa -n ml-serving
 
       - name: Verify PDB behavior
         run: |
-          cd backend && kubectl describe pdb model-serving-pdb -n ml-serving
+          kubectl describe pdb model-serving-pdb -n ml-serving
 
       - name: Check rollout events
         run: |
-          cd backend && kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp | tail -20
+          kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp | tail -20
 
       - name: Upload k8s manifest artifacts
         uses: actions/upload-artifact@v4
