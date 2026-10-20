@@ -45,8 +45,7 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          docker login ghcr.io -u "${{ github.actor }}" --password-stdin <<EOF
-          EOF
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
       - name: Install kind
@@ -62,7 +61,7 @@ jobs:
 
       - name: Load image into kind
         run: |
-          kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER NAME }}"
+          kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER_NAME }}"
 
       - name: Apply K8s manifests
         working-directory: backend
