@@ -69,7 +69,7 @@ jobs:
       - name: Apply K8s manifests
         working-directory: backend
         run: |
-          kubectl apply -k k8s/
+          kubectl apply -f k8s/model-serving.yaml
 
       - name: Wait for Deployment rollout
         working-directory: backend
