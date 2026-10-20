@@ -139,4 +139,4 @@ API (FastAPI) → DB (Postgres) → Worker (async jobs)
 ### Follow-up (không chặn)
 
 - Một số test khác vẫn đọc balances bằng 1 GET (vd. `test_phase1_stock_levels.py`, `test_tea_inventory_catalog.py`, `test_reserved_inventory_and_return.py`) — hiện pass vì row mục tiêu tình cờ rơi vào trang đầu; nên chuyển dần sang `fetch_all_balances()`.
-- DB dev tích tụ dữ liệu (259 `inv_balances`, 358 `inv_items`); cân nhắc script reset DB cho môi trường test.
+- DB dev tích tụ dữ liệu (311 `inv_balances`, 440 `inv_items` sau 2 lần chạy full suite). Script reset đã có sẵn: `cd backend && python -m app.reset_demo_db` (xoá dữ liệu giao dịch + re-seed từ `sample-data`, cần `DATABASE_URL` trỏ đúng DB; với flow docker dùng `make reset-demo`). Chạy tay khi cần, không gắn vào CI.
