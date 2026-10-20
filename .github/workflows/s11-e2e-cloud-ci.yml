@@ -1,3 +1,4 @@
+# S11 E2E Pipeline - Redis removed for Docker compatibility
 name: S11 — Cloud CI Full E2E Pipeline
 
 on:
