@@ -25,7 +25,9 @@ RUN groupadd --gid 1000 appuser && \
 
 # Install Python dependencies into isolated path
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e ".[main]"
+RUN pip install --no-cache-dir poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi --no-lock
 
 # =============================================================================
 # Runtime stage
