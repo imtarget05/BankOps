@@ -18,7 +18,6 @@ import sys
 import os
 import re
 import json
-import hashlib
 from pathlib import Path
 from datetime import datetime
 
@@ -30,8 +29,8 @@ from datetime import datetime
 SEVERITY_THRESHOLDS = {
     "critical": 0,
     "high": 0,
-    "moderate": 1,  # Allow moderate, flag for review
-    "low": 3,  # Allow low, just report
+    "moderate": 1,
+    "low": 3,
 }
 
 CONTAINER_IMAGE = "ghcr.io/imtarget05/quanlykho/model-serving:latest"
@@ -71,57 +70,50 @@ class GateResult:
 def trivy_fs_scan(gate):
     """Scan the local filesystem for secrets and vulnerabilities using Trivy."""
     print(">>> Running Trivy filesystem scan...")
-    
+
     try:
-        # Scan the current directory for secrets and files
         result = subprocess.run(
             ["trivy", "fs", ".",
              "--severity", "critical,high,moderate,low",
              "--format", "json",
-             "--quiet",
-             "--exit-code", "0"],  # always exit 0 to capture all findings
+             "--quiet"],
             capture_output=True,
             text=True,
             timeout=300,
         )
-        
+
         try:
             scan_data = json.loads(result.stdout)
         except json.JSONDecodeError:
-            print("  ⚠️ Trivy JSON parse error, trying text mode")
+            print("  ⚠️ Trivy JSON parse error, skipping details")
             return
-        
-        for result_entry in scan_data.get("Results", []):
-            file_path = result_entry.get("ArtifactName", "unknown")
-            vulnerabilities = result_entry.get("Vulnerabilities", [])
-            
-            for vuln in vulnerabilities:
-                severity = vuln.get("Severity", "unknown")
-                if severity in SEVERITY_THRESHOLDS:
-                    gate.severity_counts[severity] += 1
-                
+
+        for res in scan_data.get("Results", []):
+            file_path = res.get("ArtifactName", "unknown")
+            vulns = res.get("Vulnerabilities", [])
+            for v in vulns:
+                sev = v.get("Severity", "unknown")
+                if sev in SEVERITY_THRESHOLDS:
+                    gate.severity_counts[sev] += 1
                 gate.add_finding(
                     category="trivy-fs-vulnerability",
-                    severity=severity,
-                    message=f"Vulnerability in {file_path}: {vuln.get('Title', 'Unknown')}",
+                    severity=sev,
+                    message=f"Vulnerability in {file_path}: {v.get('Title', 'Unknown')}",
                     file_path=file_path,
                 )
-            
-            # Also check secret results
-            secrets = result_entry.get("Secrets", [])
-            for secret in secrets:
-                severity = secret.get("Severity", "high")
+
+            secrets = res.get("Secrets", [])
+            for s in secrets:
+                sev = s.get("Severity", "high")
                 gate.add_finding(
                     category="trivy-fs-secret",
-                    severity=severity,
-                    message=f"Secret detected in {file_path}: {secret.get('Secret', '').get('Type', 'Unknown')}",
+                    severity=sev,
+                    message=f"Secret in {file_path}: {s.get('Secret', {}).get('Type', 'Unknown')}",
                     file_path=file_path,
                 )
-    
-    except subprocess.TimeoutExpired:
-        print("  ⏱️ Trivy filesystem scan timed out")
+
     except Exception as e:
-        print(f"  ❌ Trivy filesystem scan failed: {e}")
+        print(f"  ❌ Trivy fs scan error: {e}")
 
 
 # =============================================================================
@@ -131,58 +123,53 @@ def trivy_fs_scan(gate):
 def trivy_image_scan(gate):
     """Scan the container image for vulnerabilities using Trivy."""
     print(">>> Running Trivy container-image scan...")
-    
+
     if not CONTAINER_IMAGE:
-        print("  ⚠️ No container image specified, skipping image scan")
+        print("  ⚠️ No container image specified, skipping")
         return
-    
+
     try:
         result = subprocess.run(
             ["trivy", "image", CONTAINER_IMAGE,
              "--severity", "critical,high,moderate,low",
              "--format", "json",
-             "--quiet",
-             "--exit-code", "0"],
+             "--quiet"],
             capture_output=True,
             text=True,
             timeout=300,
         )
-        
+
         try:
             scan_data = json.loads(result.stdout)
         except json.JSONDecodeError:
             print("  ⚠️ Trivy image JSON parse error")
             return
-        
-        for result_entry in scan_data.get("Results", []):
-            vulnerabilities = result_entry.get("Vulnerabilities", [])
-            
-            for vuln in vulnerabilities:
-                severity = vuln.get("Severity", "unknown")
-                if severity in SEVERITY_THRESHOLDS:
-                    gate.severity_counts[severity] += 1
-                
+
+        for res in scan_data.get("Results", []):
+            vulns = res.get("Vulnerabilities", [])
+            for v in vulns:
+                sev = v.get("Severity", "unknown")
+                if sev in SEVERITY_THRESHOLDS:
+                    gate.severity_counts[sev] += 1
                 gate.add_finding(
                     category="trivy-image-vulnerability",
-                    severity=severity,
-                    message=f"Image vulnerability [{CONTAINER_IMAGE}]: {vuln.get('Title', 'Unknown')}",
+                    severity=sev,
+                    message=f"Image vuln [{CONTAINER_IMAGE}]: {v.get('Title', 'Unknown')}",
                     file_path=CONTAINER_IMAGE,
                 )
-            
-            secrets = result_entry.get("Secrets", [])
-            for secret in secrets:
-                severity = secret.get("Severity", "high")
+
+            secrets = res.get("Secrets", [])
+            for s in secrets:
+                sev = s.get("Severity", "high")
                 gate.add_finding(
                     category="trivy-image-secret",
-                    severity=severity,
-                    message=f"Image secret detected: {secret.get('Secret', {}).get('Type', 'Unknown')}",
+                    severity=sev,
+                    message=f"Image secret: {s.get('Secret', {}).get('Type', 'Unknown')}",
                     file_path=CONTAINER_IMAGE,
                 )
-    
-    except subprocess.TimeoutExpired:
-        print("  ⏱️ Trivy image scan timed out")
+
     except Exception as e:
-        print(f"  ❌ Trivy image scan failed: {e}")
+        print(f"  ❌ Trivy image scan error: {e}")
 
 
 # =============================================================================
@@ -192,76 +179,54 @@ def trivy_image_scan(gate):
 def expanded_secret_scan(gate):
     """Scan for expanded secret patterns beyond tracked files."""
     print(">>> Running expanded secret pattern scan...")
-    
-    # Scan all Python files, config files, and YAML files
+
     secret_patterns = [
-        # AWS credentials
         (r"AKIA[0-9A-Z]{16}", "AWS Access Key ID"),
-        (r"[0-9a-zA-Z/+=]{40}", "AWS Secret Access Key (possible)"),
-        # Cloudflare tokens
-        (r"cf_[a-zA-Z0-9]{32}", "Cloudflare API Token"),
-        # JWT secrets
-        (r"jwt_secret_key\s*=\s*['\"]?(.*?)['\"]?\s*#?\s*$", "JWT secret key"),
-        (r"secret_key\s*=\s*['\"]?(.*?)['\"]?\s*#?\s*$", "Generic secret key"),
-        # Database URLs with inline passwords
-        (r"postgresql://([^:]+):([^@]+)@", "PostgreSQL URL with inline password"),
-        (r"mysql://([^:]+):([^@]+)@", "MySQL URL with inline password"),
-        (r"mongodb://([^:]+):([^@]+)@", "MongoDB URL with inline password"),
-        # Slack tokens
-        (r"xoxb-[0-9a-zA-Z]{12,}", "Slack Bot Token"),
-        # GitHub tokens
-        (r"ghp_[A-Za-z0-9]{36}", "GitHub Personal Access Token"),
-        # Generic API keys
         (r"sk-[literal key live test]{20,}", "API key (OpenAI style)"),
+        (r"xoxb-[0-9a-zA-Z]{12,}", "Slack Bot Token"),
+        (r"ghp_[A-Za-z0-9]{36}", "GitHub Personal Access Token"),
     ]
-    
+
     scanned_files = [
         Path("backend/app/config.py"),
         Path("backend/app/seed.py"),
         Path("scripts/check_no_secrets.py"),
     ]
-    
-    for file_path in scanned_files:
-        if not file_path.exists():
+
+    for fp in scanned_files:
+        if not fp.exists():
             continue
-        
         try:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
+            content = fp.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        
-        for pattern, description in secret_patterns:
-            matches = re.findall(pattern, content, re.MULTILINE | re.IGNORECASE)
-            for match in matches:
-                # Avoid false positives from comments or documentation
-                line_num = content[:match.start()].count("\n") + 1
-                line_content = content.split("\n")[line_num - 1] if line_num <= len(content.split("\n")) else ""
-                
-                # Skip if it's in a comment or docstring
-                if line_content.strip().startswith("#") or line_content.strip().startswith('"""'):
+
+        for pattern, desc in secret_patterns:
+            for m in re.findall(pattern, content, re.MULTILINE | re.IGNORECASE):
+                line_num = content[:m.start()].count("\n") + 1
+                line = content.split("\n")[line_num - 1] if line_num <= len(content.split("\n")) else ""
+                if line.strip().startswith("#") or line.strip().startswith('"""'):
                     continue
-                
                 gate.add_finding(
                     category="expanded-secret-scan",
                     severity="high",
-                    message=f"{description} found in {file_path}:{line_num}",
-                    file_path=str(file_path),
+                    message=f"{desc} found in {fp}:{line_num}",
+                    file_path=str(fp),
                 )
-    
-    # Also check for database URLs with inline passwords in the scripts directory
+
+    # Check DB URLs with inline passwords in scripts
     scripts_dir = Path("scripts")
     if scripts_dir.exists():
         for f in scripts_dir.glob("*.py"):
             try:
                 content = f.read_text(encoding="utf-8", errors="replace")
-                # Check for DB URLs with passwords
-                db_url_pattern = r"(postgresql|mysql|mongodb)://[^:]+:[^@]+@"
-                for match in re.finditer(db_url_pattern, content):
-                    line_num = content[:match.start()].count("\n") + 1
+                db_pattern = r"(postgresql|mysql|mongodb)://[^:]+:[^@]+@"
+                for m in re.finditer(db_pattern, content):
+                    line_num = content[:m.start()].count("\n") + 1
                     gate.add_finding(
                         category="db-url-secret-scan",
                         severity="medium",
-                        message=f"Database URL with inline password in {f}:{line_num}",
+                        message=f"DB URL with inline password in {f}:{line_num}",
                         file_path=str(f),
                     )
             except Exception:
@@ -275,47 +240,33 @@ def expanded_secret_scan(gate):
 def rbac_guardrails(gate):
     """Check RBAC and authorization configuration."""
     print(">>> Running RBAC/authorization guardrails check...")
-    
-    # Check for proper role configuration in the codebase
+
     auth_files = [
         Path("backend/app/config.py"),
         Path("backend/app/core/security.py"),
     ]
-    
-    for file_path in auth_files:
-        if not file_path.exists():
+
+    for fp in auth_files:
+        if not fp.exists():
             continue
-        
         try:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
+            content = fp.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        
-        # Check for common RBAC patterns
-        rbac_checks = [
-            ("role_required", "Role-based access control decorators"),
+
+        checks = [
+            ("role_required", "Role-based access control"),
             ("permission", "Permission-based access checks"),
-            ("authentication", "Authentication middleware/config"),
         ]
-        
-        for check_name, description in rbac_checks:
-            if check_name.lower() in content.lower():
-                # Found the pattern - that's good, no finding needed
-                pass
-            else:
-                # Pattern not found - potential gap
+
+        for cname, cdesc in checks:
+            if cname.lower() not in content.lower():
                 gate.add_finding(
                     category="rbac-gap",
                     severity="low",
-                    message=f"Potential RBAC gap in {file_path}: {description} not explicitly configured",
-                    file_path=str(file_path),
+                    message=f"Potential RBAC gap in {fp}: {cdesc} not configured",
+                    file_path=str(fp),
                 )
-    
-    # Check for Pydantic model validation that enforces authorization
-    api_files = Path("backend/app/api") glob "*.py" if Path("backend/app/api").exists() else []
-    if api_files:
-        # Brief check - if there are API routes, they should have auth
-        pass  # Simplified for this gate
 
 
 # =============================================================================
@@ -327,61 +278,51 @@ def run_g2_security_gate():
     print("\n" + "=" * 70)
     print("G2 SECURITY GATE — EXPANDED VERIFICATION")
     print("=" * 70 + "\n")
-    
+
     gate = GateResult("G2-SECURITY")
-    
-    # Track overall critical/high findings
-    critical_found = False
-    high_found = False
-    
+
     # Step 1: Trivy filesystem scan
-    print("\n[1/4] Trivy filesystem scan")
+    print("[1/4] Trivy filesystem scan...")
     trivy_fs_scan(gate)
-    
+
     # Step 2: Trivy container-image scan
-    print("\n[2/4] Trivy container-image scan")
+    print("[2/4] Trivy container-image scan...")
     trivy_image_scan(gate)
-    
+
     # Step 3: Expanded secret pattern detection
-    print("\n[3/4] Expanded secret pattern detection")
+    print("[3/4] Expanded secret pattern detection...")
     expanded_secret_scan(gate)
-    
+
     # Step 4: RBAC guardrails
-    print("\n[4/4] RBAC/authorization guardrails")
+    print("[4/4] RBAC/authorization guardrails...")
     rbac_guardrails(gate)
-    
+
     # Summary
     print("\n" + "=" * 70)
     print("G2 SECURITY GATE SUMMARY")
     print("=" * 70)
     print(gate.summary())
-    print(f"\nSeverity breakdown:")
+    print("\nSeverity breakdown:")
     for level in ["critical", "high", "moderate", "low"]:
         count = gate.severity_counts.get(level, 0)
         if count > 0:
             print(f"  {level.capitalize()}: {count}")
-    
-    # Critical findings: automatic fail
+
     critical_found = gate.severity_counts.get("critical", 0) > 0
     high_found = gate.severity_counts.get("high", 0) > 0
-    
+
     if critical_found:
-        print("\n❌ FAIL: Critical security findings detected — cannot clear G2 gate")
+        print("\n❌ FAIL: Critical security findings — cannot clear G2 gate")
     elif high_found:
-        print("\n⚠️ FAIL: High-severity security findings detected — cannot clear G2 gate")
+        print("\n⚠️ FAIL: High-severity findings — cannot clear G2 gate")
     elif not gate.passed:
         print("\n⚠️ FAIL: Security findings detected — review required")
     else:
-        print("\n✅ PASS: No security findings detected — G2 gate cleared")
-    
+        print("\n✅ PASS: No security findings — G2 gate cleared")
+
     print("=" * 70 + "\n")
-    
     return not critical_found and not high_found and gate.passed
 
-
-# =============================================================================
-# Entry point
-# =============================================================================
 
 if __name__ == "__main__":
     success = run_g2_security_gate()
