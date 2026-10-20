@@ -80,6 +80,7 @@ jobs:
           AIRFLOW_HOME: ${{ runner.temp }}/airflow-home
         run: |
           set -e
+          pip install pytest
           poetry run python -m pytest tests/test_airflow_dags.py tests/test_airflow_ingest_tasks.py -v --no-header --tb=short
           # Run the real DAG end-to-end on the isolated metadata DB (no scheduler needed).
           airflow dags test inventory_ingestion "$(date +%Y-%m-%d)" \
