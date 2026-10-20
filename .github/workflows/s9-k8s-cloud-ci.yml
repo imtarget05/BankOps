@@ -6,10 +6,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Dockerfile.serving'
-      - 'k8s/**'
-      - 'app/api/inference.py'
-      - 'app/services/drift_detection.py'
+      - 'backend/Dockerfile.serving'
+      - 'backend/k8s/**'
+      - 'backend/app/api/inference.py'
+      - 'backend/app/services/drift_detection.py'
 
 jobs:
   cloud-ci-kind-verified:
@@ -45,6 +45,7 @@ jobs:
       # 3. Build Docker image for model serving
       # -------------------------------------------------------
       - name: Build model serving Docker image
+        working-directory: backend
         run: |
           docker build \
             -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
@@ -80,54 +81,45 @@ jobs:
           kind create cluster --name "${{ env.KIND_CLUSTER_NAME }}"
 
       # -------------------------------------------------------
-      # 7. Configure Docker to use kind's internal registry
-      # -------------------------------------------------------
-      - name: Configure kind cluster registry
-        run: |
-          KIND_NODE_IP=$(kind get nodes m0 | awk '{print $NF}')
-          # Kind automatically creates a registry on port 5000
-          # We'll use it for image loading
-          echo "Kind registry configured"
-
-      # -------------------------------------------------------
-      # 8. Load Docker image into kind cluster
+      # 7. Load Docker image into kind cluster
       # -------------------------------------------------------
       - name: Load image into kind
         run: |
           kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER_NAME }}"
 
       # -------------------------------------------------------
-      # 9. Apply Kubernetes manifests
+      # 8. Apply Kubernetes manifests
       # -------------------------------------------------------
       - name: Apply K8s manifests
+        working-directory: backend
         run: |
           kubectl apply -k k8s/
 
       # -------------------------------------------------------
-      # 10. Wait for Deployment rollout
+      # 9. Wait for Deployment rollout
       # -------------------------------------------------------
       - name: Wait for Deployment rollout
+        working-directory: backend
         run: |
           kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
 
       # -------------------------------------------------------
-      # 11. Verify Pod status
+      # 10. Verify Pod status
       # -------------------------------------------------------
       - name: Verify Pod status
+        working-directory: backend
         run: |
           kubectl get pods -n ml-serving -l app=model-serving -o wide
 
       # -------------------------------------------------------
-      # 12. Test Readiness Probe
+      # 11. Test Readiness Probe
       # -------------------------------------------------------
       - name: Test Readiness Probe
+        working-directory: backend
         run: |
-          # Wait for service to be ready
           kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
-          # Try curl through the service
           SERVICE_IP=$(kubectl get svc model-serving -n ml-serving -o jsonpath='{.spec.clusterIP}')
           echo "Service ClusterIP: $SERVICE_IP"
-          # Poll until ready
           for i in $(seq 1 12); do
             STATUS=$(kubectl get pod -l app=model-serving -n ml-serving -o jsonpath='{.items[0].status.phase}')
             if [ "$STATUS" = "Running" ]; then
@@ -139,48 +131,50 @@ jobs:
           done
 
       # -------------------------------------------------------
-      # 13. Test Liveness Probe via direct HTTP
+      # 12. Test Liveness Probe
       # -------------------------------------------------------
       - name: Test Liveness Probe
+        working-directory: backend
         run: |
-          # Direct curl to the pod via port-forward or service
           POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}')
           kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
           PORT_FORWARD_PID=$!
           sleep 3
-          # Try the health endpoint
           curl -f http://localhost:8000/health && echo "Liveness probe PASSED" || echo "Liveness probe FAILED"
           kill $PORT_FORWARD_PID 2>/dev/null
 
       # -------------------------------------------------------
-      # 14. Verify HPA configuration
+      # 13. Verify HPA configuration
       # -------------------------------------------------------
       - name: Verify HPA configuration
+        working-directory: backend
         run: |
           kubectl describe hpa model-serving-hpa -n ml-serving
 
       # -------------------------------------------------------
-      # 15. Verify PDB behavior
+      # 14. Verify PDB behavior
       # -------------------------------------------------------
       - name: Verify PDB behavior
+        working-directory: backend
         run: |
           kubectl describe pdb model-serving-pdb -n ml-serving
 
       # -------------------------------------------------------
-      # 16. Check rollout status and events
+      # 15. Check rollout events
       # -------------------------------------------------------
       - name: Check rollout events
+        working-directory: backend
         run: |
           kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp | tail -20
 
       # -------------------------------------------------------
-      # 17. Upload artifacts
+      # 16. Upload artifacts
       # -------------------------------------------------------
       - name: Upload k8s manifest artifacts
         uses: actions/upload-artifact@v4
         with:
           name: k8s-manifests
-          path: k8s/
+          path: backend/k8s/
           retention-days: 30
 
       - name: Upload debug info
@@ -193,7 +187,7 @@ jobs:
           retention-days: 7
 
       # -------------------------------------------------------
-      # 18. Final status announcement
+      # 17. Final status announcement
       # -------------------------------------------------------
       - name: Announce CLOUD_CI_KIND_VERIFIED
         if: always()
@@ -208,7 +202,7 @@ jobs:
           echo "========================================"
 
       # -------------------------------------------------------
-      # 19. Export gate result for downstream
+      # 18. Export gate result for downstream
       # -------------------------------------------------------
       - name: Export gate result
         id: gate-result
