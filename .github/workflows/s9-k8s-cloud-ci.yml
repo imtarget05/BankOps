@@ -16,6 +16,9 @@ jobs:
     name: CLOUD_CI_KIND_VERIFIED
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
     env:
       MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
       MODEL_NAME: "DemandForecastModel"
@@ -42,11 +45,11 @@ jobs:
             .
 
       - name: Push image to GHCR
-        uses: actions/docker-login@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
       - name: Install kind
         run: |
