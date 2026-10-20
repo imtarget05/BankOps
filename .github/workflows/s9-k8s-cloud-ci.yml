@@ -43,6 +43,7 @@ jobs:
             -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
             -f Dockerfile.serving \
             .
+          docker inspect --format='image_id={{.Id}} digest={{.RepoDigests}}' "${{ env.IMAGE_NAME }}:${{ github.sha }}" | tee "$RUNNER_TEMP/s11-evidence/image-digest.txt"
 
       - name: Push image to GHCR
         env:
@@ -50,6 +51,7 @@ jobs:
         run: |
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker inspect --format='{{json .RepoDigests}}' "${{ env.IMAGE_NAME }}:${{ github.sha }}" | tee -a "$RUNNER_TEMP/s11-evidence/image-digest.txt"
 
       - name: Install kind
         run: |
@@ -70,14 +72,15 @@ jobs:
         working-directory: backend
         run: |
           kubectl apply -f k8s/model-serving.yaml
-          kubectl set image deployment/model-serving -n ml-serving inference=ghcr.io/imtarget05/quanlykho/model-serving:${{ github.sha }}
+          kubectl set image deployment/model-serving -n ml-serving inference=${{ env.IMAGE_NAME }}:${{ github.sha }}
+          kubectl -n ml-serving get deployment model-serving "-o=jsonpath=image={.spec.template.spec.containers[0].image} sha=${{ github.sha }}" | tee "$RUNNER_TEMP/s11-evidence/rollout-image.txt"
 
-      - name: Debug: Describe Deployment
+      - name: "Debug: Describe Deployment"
         working-directory: backend
         run: |
           kubectl describe deployment model-serving -n ml-serving
 
-      - name: Debug: Pod Status + Events
+      - name: "Debug: Pod Status + Events"
         working-directory: backend
         run: |
           echo "=== Pods ==="
@@ -88,7 +91,33 @@ jobs:
       - name: Wait for Deployment rollout
         working-directory: backend
         run: |
+          mkdir -p "$RUNNER_TEMP/s11-evidence"
+          set +e
+          mkdir -p "$RUNNER_TEMP/s11-evidence"
           kubectl rollout status deployment/model-serving -n ml-serving --timeout=120s
+          rc=$?
+          set -e
+          echo "rollout_rc=$rc" | tee "$RUNNER_TEMP/s11-evidence/rollout-status.txt"
+          if [ "$rc" -ne 0 ]; then
+            echo "=== rollout FAILED — collecting describe/events/logs/probe/image ==="
+            kubectl describe deployment model-serving -n ml-serving > "$RUNNER_TEMP/s11-evidence/describe-deployment.txt" 2>&1 || true
+            kubectl get events -n ml-serving --sort-by=.metadata.creationTimestamp > "$RUNNER_TEMP/s11-evidence/events.txt" 2>&1 || true
+            kubectl get pods -n ml-serving -l app=model-serving -o wide > "$RUNNER_TEMP/s11-evidence/pods.txt" 2>&1 || true
+            for pod in $(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[*].metadata.name}'); do
+              kubectl describe pod "$pod" -n ml-serving > "$RUNNER_TEMP/s11-evidence/describe-pod-$pod.txt" 2>&1 || true
+              kubectl logs "$pod" -n ml-serving --all-containers=true --tail=500 > "$RUNNER_TEMP/s11-evidence/logs-$pod.txt" 2>&1 || true
+              kubectl get pod "$pod" -n ml-serving -o jsonpath='imageID={.status.containerStatuses[0].imageID} image={.status.containerStatuses[0].image}' > "$RUNNER_TEMP/s11-evidence/image-$pod.txt" 2>&1 || true
+            done
+            POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+            if [ -n "$POD_NAME" ]; then
+              kubectl port-forward "pod/$POD_NAME" 8000:8000 -n ml-serving >/tmp/pf.log 2>&1 &
+              PF_PID=$!
+              sleep 3
+              curl -sv http://localhost:8000/health > "$RUNNER_TEMP/s11-evidence/probe-response.txt" 2>&1 || true
+              kill $PF_PID 2>/dev/null || true
+            fi
+            exit $rc
+          fi
 
       - name: Verify Pod status
         working-directory: backend
@@ -141,6 +170,15 @@ jobs:
         with:
           name: k8s-manifests
           path: backend/k8s/
+          retention-days: 30
+
+      - name: Upload S9 rollout evidence (image digest + describe/events/logs/probe)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s9-rollout-evidence
+          path: ${{ runner.temp }}/s11-evidence/
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Upload debug info
