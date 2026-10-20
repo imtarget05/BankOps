@@ -23,6 +23,7 @@ from app.models import (
     etl,  # noqa: F401
     expense,  # noqa: F401
     iam,  # noqa: F401
+    idempotency,  # noqa: F401
     integration,  # noqa: F401
     inventory,  # noqa: F401
     reconciliation,  # noqa: F401
@@ -64,6 +65,7 @@ __all__ = [
     "etl",
     "expense",
     "iam",
+    "idempotency",
     "integration",
     "inventory",
     "reconciliation",

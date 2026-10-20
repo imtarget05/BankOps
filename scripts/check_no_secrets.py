@@ -20,6 +20,7 @@ Usage::
     python3 scripts/check_no_secrets.py                # tracked files (CI gate)
     python3 scripts/check_no_secrets.py --local        # also report local secret files
     python3 scripts/check_no_secrets.py --strict-local # ... and fail on them
+    python3 scripts/check_no_secrets.py --scan PATH    # scan an arbitrary path (fixtures)
 """
 
 from __future__ import annotations
@@ -50,8 +51,15 @@ FORMAT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("Cloudflare API token", re.compile(r"\bcfut_[A-Za-z0-9_\-]{20,}\b")),
     ("PEM private key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----")),
     ("GitHub personal access token", re.compile(r"\bghp_[A-Za-z0-9]{20,}\b")),
+    ("GitHub OAuth token", re.compile(r"\bgho_[A-Za-z0-9]{20,}\b")),
+    ("GitHub fine-grained PAT", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b")),
     ("AWS access key id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("AWS secret access key", re.compile(r"(?i)\baws_secret_access_key\b[^\n]{0,40}?[A-Za-z0-9/+=]{40}\b")),
+    ("OpenAI-style API key", re.compile(r"\bsk-(?:proj-|ant-|or-)?[A-Za-z0-9_\-]{20,}\b")),
+    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35,}\b")),
+    ("Stripe live secret key", re.compile(r"\bsk_live_[A-Za-z0-9]{16,}\b")),
+    ("Twilio account SID auth token", re.compile(r"\bSK[0-9a-fA-F]{32}\b")),
 )
 
 # --- Assignments that only make sense with a hardcoded value -------------------
@@ -59,6 +67,8 @@ FORMAT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 # start the line (env/yaml/sh style) so prose in docs is not mistaken for config.
 SENSITIVE_ASSIGNMENT_NAMES: tuple[str, ...] = (
     "SMTP_PASSWORD",
+    "GMAIL_APP_PASSWORD",
+    "SMTP_APP_PASSWORD",
     "SECRET_KEY",
     "JWT_SECRET",
     "BACKUP_GPG_PASSPHRASE",
@@ -68,6 +78,8 @@ SENSITIVE_ASSIGNMENT_NAMES: tuple[str, ...] = (
     "AWS_ACCESS_KEY_ID",
     "GOOGLE_CLIENT_SECRET",
     "NEXTAUTH_SECRET",
+    "BANKOPS_SIGNING_KEY",
+    "BANKOPS_SESSION_SECRET",
 )
 
 _ASSIGNMENT_RE = re.compile(
@@ -77,8 +89,10 @@ _ASSIGNMENT_RE = re.compile(
 )
 
 # BANKOPS_<ref>_signing_key / BANKOPS_SESSION_SECRET / JWT_SIGNING_KEY...
+# Case-insensitive on purpose: the repo uses `BANKOPS_dev_signing_key` (lower
+# snake ref) in some places and `BANKOPS_SIGNING_KEY` (upper) in others.
 _SIGNING_ASSIGNMENT_RE = re.compile(
-    r"(?m)^[ \t]*(?:[-*][ \t]*)?(?P<name>[A-Za-z0-9_]*"
+    r"(?im)^[ \t]*(?:[-*][ \t]*)?(?P<name>[A-Za-z0-9_]*"
     r"(?:signing_key|SESSION_SECRET|JWT_SIGNING_KEY[A-Za-z0-9_]*))"
     r"(?P<sep>[ \t]*[:=][ \t]*)(?P<rest>[^\n]*)"
 )
@@ -186,15 +200,26 @@ def scan_text(text: str, path_label: str) -> list[Finding]:
         value = _strip_value(match.group("rest"))
         if _is_placeholder(value):
             continue
-        if not _looks_random(value, min_len=8):
-            # Short values (e.g. "123456") are still worth flagging for names that
-            # must never be weak; allow them but keep the label explicit.
-            if len(value) < 6 or match.group("name") not in {"SMTP_PASSWORD"}:
-                continue
-        add(
-            text[: match.start()].count("\n") + 1,
-            f"hardcoded {match.group('name')} assignment",
-        )
+        name = match.group("name")
+        if len(value) >= 16:
+            # An explicitly sensitive variable name with a long literal is a
+            # hardcoded credential regardless of its character mix.
+            add(
+                text[: match.start()].count("\n") + 1,
+                f"hardcoded {name} assignment",
+            )
+            continue
+        # Short values (e.g. an app password) are still worth flagging for the
+        # names that must never be weak; keep the label explicit.
+        if len(value) >= 6 and name in {
+            "SMTP_PASSWORD",
+            "GMAIL_APP_PASSWORD",
+            "SMTP_APP_PASSWORD",
+        }:
+            add(
+                text[: match.start()].count("\n") + 1,
+                f"hardcoded {name} assignment",
+            )
 
     for match in _SIGNING_ASSIGNMENT_RE.finditer(text):
         value = _strip_value(match.group("rest"))
@@ -242,8 +267,69 @@ def tracked_files() -> list[Path]:
     return [ROOT / name for name in result.stdout.decode().split("\0") if name]
 
 
+# Tracked env files are allowed only when they are *examples* (placeholders only).
+# A tracked `.env` / `.env.production` is a committed secret file -> always fail.
+TRACKED_ENV_ALLOWLIST: frozenset[str] = frozenset(
+    {".env.example", ".env.production.example", ".env.sample", ".env.template"}
+)
+
+
+def _is_forbidden_tracked_env(relative: str) -> bool:
+    """True for a tracked file that must never carry real secrets."""
+    name = relative.rsplit("/", 1)[-1]
+    if name in TRACKED_ENV_ALLOWLIST:
+        return False
+    return name == ".env" or name.startswith(".env.")
+
+
+def scan_tracked_env_files() -> list[Finding]:
+    """Fail when a real environment file is committed to git."""
+    findings: list[Finding] = []
+    try:
+        names = [str(p.relative_to(ROOT)) for p in tracked_files()]
+    except ValueError:  # pragma: no cover - defensive
+        names = []
+    for relative in names:
+        if _is_forbidden_tracked_env(relative):
+            findings.append(
+                Finding(
+                    path=relative,
+                    line=1,
+                    label="tracked environment file (.env*) must not be committed",
+                    severity=SEVERITY_FAIL,
+                )
+            )
+    return findings
+
+
+def scan_paths(paths: list[Path]) -> list[Finding]:
+    """Scan arbitrary paths (used for fixtures / non-git trees)."""
+    findings: list[Finding] = []
+    files: list[Path] = []
+    for path in paths:
+        if path.is_dir():
+            for child in sorted(path.rglob("*")):
+                if child.is_file():
+                    files.append(child)
+        elif path.is_file():
+            files.append(path)
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        try:
+            relative = str(path.relative_to(ROOT))
+        except ValueError:
+            relative = str(path)
+        for finding in scan_text(text, relative):
+            findings.append(finding)
+    return findings
+
+
 def scan_tracked_files() -> list[Finding]:
     findings: list[Finding] = []
+    findings.extend(scan_tracked_env_files())
     for path, text in _iter_files(tracked_files()):
         if path.resolve() == SELF:
             continue
@@ -317,7 +403,31 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="list every heuristic warning instead of a summary count",
     )
+    parser.add_argument(
+        "--scan",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="scan an arbitrary file/directory instead of the tracked tree "
+             "(used to prove the guard fails on a fixture)",
+    )
     args = parser.parse_args(argv)
+
+    if args.scan:
+        findings = scan_paths([Path(p) for p in args.scan])
+        failing = [f for f in findings if f.severity == SEVERITY_FAIL]
+        warnings = [f for f in findings if f.severity == SEVERITY_WARN]
+        if warnings and args.verbose:
+            print("Heuristic secret warnings:", file=sys.stderr)
+            for finding in warnings:
+                print(finding.render(), file=sys.stderr)
+        if failing:
+            print("Potential secret detected:", file=sys.stderr)
+            for finding in failing:
+                print(finding.render(), file=sys.stderr)
+            return 1
+        print("Secret guard passed: no known credential patterns in scanned path(s).")
+        return 0
 
     findings = scan_tracked_files()
     failing = [f for f in findings if f.severity == SEVERITY_FAIL]

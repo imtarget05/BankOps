@@ -11,11 +11,32 @@ env:
 
 jobs:
   secret-guard:
+    name: Secret Guard (fails on any credential in tracked files)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Check for committed secrets
+        # Exit 1 on any `fail`-severity finding -> the job fails and blocks the
+        # pipeline. `warn`-severity findings (dev/demo Postgres URLs with an
+        # inline password) are advisory and are NOT blocking; see the allowlist
+        # in scripts/check_no_secrets.py.
         run: python3 scripts/check_no_secrets.py
+      - name: Assert no real .env file is tracked
+        # Belt-and-braces: a committed `.env` / `.env.production` is a leaked
+        # secret file even when the scanner happens to miss a value in it.
+        # Allowlist: `*.env.example` / `.env.sample` / `.env.template`
+        # (placeholder templates only).
+        run: |
+          tracked_envs="$(git ls-files | grep -E '(^|/)\.env($|\.)' \
+            | grep -Ev '\.env\.(example|sample|template)$' || true)"
+          if [ -n "$tracked_envs" ]; then
+            echo "::error::Tracked environment file(s) must not be committed:"
+            printf '%s\n' "$tracked_envs"
+            exit 1
+          fi
+          echo "No tracked .env files."
 
   lint:
     runs-on: ubuntu-latest

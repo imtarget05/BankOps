@@ -21,19 +21,16 @@ This migration adds the missing table:
   request is still in flight (claimed but not finished)
 * `expires_at` — retention window (mirrors `idempotency_key_retention_hours`)
 
-The ORM class is imported at module level so that `Base.metadata` already
-contains the table when Alembic compares the model with the live database
-(`alembic check` must not report drift for a table the application owns).
+`Base.metadata` **không** phụ thuộc import ở đây: `app/models/__init__.py`
+đăng ký sẵn module `idempotency` trong package `app.models`, và `alembic/env.py`
+import các model qua package đó -> `alembic check` không báo drift cho bảng
+này dù file migration không import ORM.
 """
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 from alembic import op
-
-# Import để đăng ký bảng vào `Base.metadata` khi Alembic so sánh model với DB
-# thật (`alembic check` không được báo drift cho bảng mà app sở hữu).
-from app.models.idempotency import IdempotencyKey  # noqa: F401
 
 revision = "027_idempotency_keys"
 down_revision = "026_schema_alignment"

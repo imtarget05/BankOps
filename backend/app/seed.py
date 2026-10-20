@@ -157,8 +157,16 @@ async def seed_demo():
             RoleCapability(role_code="admin", capability_code="admin:user_management"),
             RoleCapability(role_code="admin", capability_code="iam:admin"),
             RoleCapability(role_code="admin", capability_code="integration:manage"),
+            # D2 — `admin` / `system_admin` phải có đủ quyền quản lý két và
+            # ghi bút toán tài chính, nếu không user chỉ có role `admin` bị
+            # chặn ở CẢ UI lẫn backend (kể cả luồng tăng quỹ `receipt` vốn
+            # giờ yêu cầu `cash:post_adjustment`).
+            RoleCapability(role_code="admin", capability_code="cash:manage_box"),
+            RoleCapability(role_code="admin", capability_code="cash:post_adjustment"),
             RoleCapability(role_code="system_admin", capability_code="admin:user_management"),
             RoleCapability(role_code="system_admin", capability_code="iam:admin"),
+            RoleCapability(role_code="system_admin", capability_code="cash:manage_box"),
+            RoleCapability(role_code="system_admin", capability_code="cash:post_adjustment"),
         ]
         existing_pairs = set(
             (
