@@ -42,11 +42,11 @@ jobs:
             .
 
       - name: Push image to GHCR
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+        uses: docker/login-action@f054a8b5397f2a3be7f291d218625864b36e06e5
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install kind
         run: |
