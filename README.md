@@ -1,4 +1,4 @@
-# Kho-Trà-Sữa — Hệ Thống Vận Hành Kho & Quỹ Ngân Hàng Thông Minh (AI-Powered Core Banking Ops)
+# Kho Trà Sữa — Hệ Thống Vận Hành Tồn Kho & Quỹ Mô Phỏng
 
 [![CI](https://github.com/imtarget05/QuanLyKho/actions/workflows/ci.yml/badge.svg)](https://github.com/imtarget05/QuanLyKho/actions/workflows/ci.yml)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24+-02569B?logo=flutter)](https://flutter.dev)
@@ -7,7 +7,7 @@
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages%20%2F%20AI%20provider-F38020?logo=cloudflare)](https://developers.cloudflare.com)
 [![Quality Gate](https://img.shields.io/badge/Quality_Gate-Passed-success)](https://github.com/imtarget05/QuanLyKho)
 
-> **Lưu ý an toàn:** Tất cả số tiền, tồn quỹ, giao dịch, mã ấn chỉ và danh tính trong hệ thống là **mô phỏng nghiệp vụ** (`simulation: true`). Không kết nối trực tiếp core banking sản xuất và không sử dụng dữ liệu khách hàng thật.
+> **Product boundary:** Đây là ứng dụng vận hành **kho nguyên liệu trà sữa**. Các module quỹ, journal và đối soát chỉ là **financial-operations simulation** để minh hoạ maker-checker, audit và tính đúng đắn giao dịch. Đây không phải core-banking, không kết nối ngân hàng, không sử dụng dữ liệu khách hàng thật và không xử lý tiền thật.
 
 > **Thiết kế web/app nhân viên — khảo sát 14/10/2026:** Xem [bộ tài liệu hiện trạng, kiến trúc, luồng nghiệp vụ và backlog nghiệm thu](docs/employee-app/README.md). Tài liệu phân biệt phần đã có trong mã nguồn với phần đề xuất, đồng thời ghi nhận các khác biệt FastAPI/Worker và các vấn đề cần xử lý trước pilot. Các số liệu kiểm thử bên dưới là kết quả lịch sử, chưa chứng nhận working tree hiện tại.
 
@@ -33,7 +33,7 @@ flowchart TD
         AP --> AI["AI Copilot Thẩm Định Rủi Ro<br/>(Risk Score 0-100 · Rules Flagged · Recommendations)"]
         AI --> FlowDecision{"Đánh giá rủi ro"}
         FlowDecision -->|Rủi ro Thấp| QuickApp["Duyệt nhanh 1-chạm"]
-        FlowDecision -->|Rủi ro Cao ≥ 500M hoặc Phôi ≥ 50| SecDialog["Hộp thoại Bảo mật Kiểm soát kép<br/>Nhập PIN KSV (123456)"]
+        FlowDecision -->|Rủi ro cao theo policy demo| SecDialog["Hộp thoại kiểm soát kép<br/>Step-up verification"]
         QuickApp --> DBPost["Ghi sổ cái kép (Dual-entry ledger)"]
         SecDialog --> Stamp["Khóa con dấu kiểm toán SHA-256"]
         Stamp --> DBPost
@@ -50,8 +50,8 @@ flowchart TD
 - **Kiến nghị hành động & Con dấu kiểm toán:** Đề xuất kiểm đếm thực tế, đối chiếu chứng từ và sinh mã Audit Stamp Hash SHA-256:
   $$\text{Audit Stamp} = \text{SHA256}(\text{request\_id} : \text{maker} : \text{amount} : \text{risk\_score})$$
 
-### 1.3. Dual-Control Security Verification (PIN Supervisor)
-- **Cơ chế 4 mắt bắt buộc:** Với các lệnh rủi ro cao, hệ thống yêu cầu nhập mã PIN Kiểm soát viên (`123456`) tại cả Client và Server.
+### 1.3. Dual-Control Security Verification
+- **Cơ chế 4 mắt bắt buộc:** Với các lệnh mô phỏng rủi ro cao, hệ thống yêu cầu step-up verification tại Client và Server. Giá trị demo chỉ được seed trong demo profile, không phải credential triển khai.
 - **Kiểm soát dòng tiền chặt chẽ:** Tự động từ chối nếu số dư két không đủ (`INSUFFICIENT_SIM_CASH`) trước khi cấp quyền ghi sổ.
 
 ---
@@ -69,9 +69,9 @@ flowchart TD
 
 ---
 
-## 3. Tài Khoản Demo & Phân Quyền Bảo Mật
+## 3. Demo profile và phân quyền
 
-Mật khẩu đăng nhập mặc định: **`DemoPass123!`** | Mã PIN Kiểm soát viên: **`123456`**
+Demo profile chỉ phục vụ local/interview. Không công bố credential trong README, không seed tài khoản demo ngoài `APP_ENV=demo` và không dùng demo auth/Google mock trong pilot hoặc production.
 
 | Username | Vai trò (Role) | Quyền hạn chính |
 | :--- | :--- | :--- |
@@ -79,7 +79,7 @@ Mật khẩu đăng nhập mặc định: **`DemoPass123!`** | Mã PIN Kiểm so
 | **`demo_checker`** | Checker (Kiểm soát viên) | Hộp thư phê duyệt 4-mắt, xem phân tích AI Copilot, duyệt/từ chối phiếu (kèm xác thực PIN với lệnh rủi ro cao), chạy đối soát số liệu. |
 | **`demo_auditor`** | Auditor (Kiểm toán nội bộ) | Xem báo cáo tài chính, biến động dòng tiền, lịch sử nhật ký kiểm toán và chuỗi hàm băm toàn vẹn dữ liệu. |
 
-> Hỗ trợ đăng nhập nhanh bằng Google Sign-In SSO: Endpoint `POST /api/v1/auth/google` tự động cấp quyền nhân viên (`staff`) cho tài khoản Google tổ chức.
+> Google/demo auth chỉ được bật trong demo profile. Pilot/production cần IdP được phê duyệt và quyền được cấp qua quy trình provisioning.
 
 ---
 
@@ -94,7 +94,7 @@ docker compose up -d --build
 - **Giao diện Web App (Nginx Flutter Web):** [http://localhost:8080](http://localhost:8080)
 - **Tài liệu Backend Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **API Health Check:** [http://localhost:8000/health/live](http://localhost:8000/health/live)
-- **Cơ sở dữ liệu PostgreSQL:** `localhost:5432` (`kho-tra-sua` / `kho-tra-sua`)
+- **Cơ sở dữ liệu PostgreSQL:** local development only; cấu hình kết nối nằm trong file env bị ignore, không dùng credential README cho môi trường pilot/production.
 
 ---
 
@@ -105,7 +105,7 @@ Chạy script kiểm tra trực tiếp trên cụm Docker API và PostgreSQL th�
 ```bash
 python3 backend/tests/verify_live_e2e.py
 ```
-*Kết quả:* Tự động thực hiện luồng Maker đăng nhập $\to$ Tạo phiếu 600 triệu $\to$ Gửi duyệt $\to$ Checker xem thẩm định AI (Điểm 88/100, High Risk) $\to$ Thử sai PIN bị từ chối 403 $\to$ Nhập đúng PIN 123456 duyệt thành công $\to$ Xác nhận số dư két sắt tăng chính xác +600,000,000 VND.
+> Đây là kịch bản demo mô phỏng. Chỉ coi kết quả là bằng chứng khi chạy trên commit hiện tại, với database test cô lập; không suy diễn thành chứng nhận triển khai production.
 
 ### 5.2. Chạy Toàn Bộ Test Suite Backend & Frontend (1-Click)
 ```bash
@@ -152,12 +152,12 @@ Kho-Trà-Sữa/
 
 > **Domain hiện tại:** Nhập–Xuất–Tồn nguyên liệu theo 3 ca (Sáng 07:30–15:00,
 > Chiều 15:00–23:00, Lỡ ngày 07:30–18:00), theo `docs/SRS_QUAN_LY_KHO_TRA_SUA.md`.
-> Module Quỹ/Tích hợp/Đối soát (di sản core-banking) ẩn khỏi UI nhưng giữ backend
-> để rollback.
+> Module Quỹ/Tích hợp/Đối soát là simulation financial-operations phụ trợ; không
+> là core-banking và không là product boundary chính.
 >
-> Năng lực đã triển khai: danh mục 5 nhóm nguyên liệu + Min/Max, phiếu nhập(lô/HSD),
-> chốt ca + khóa ca + điều chỉnh, cảnh báo tồn thấp/cận date, báo cáo top tiêu hao,
-> AI trợ lý tài phòng, E2E API 253/254 test xanh.
+> Năng lực cần được xác minh trên exact commit: danh mục nguyên liệu + Min/Max,
+> phiếu nhập (lô/HSD), chốt ca, điều chỉnh, cảnh báo tồn thấp/cận date và báo cáo.
+> AI assistant là tính năng hỗ trợ, không thay thế kiểm soát nghiệp vụ.
 >
 > Chưa triển khai (cần consent của TEAM): offline chốt ca + outbox đồng bộ (Phase 6),
 > FCM/push real, tích hợp Google Sheets/APPs Script, deploy staging + UAT luồng ca.
