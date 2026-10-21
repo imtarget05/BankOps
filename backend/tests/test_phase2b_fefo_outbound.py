@@ -5,12 +5,12 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-from conftest import open_shift
 from sqlalchemy import select
 
 from app.models.inventory import (
     LotBalance,
 )
+from conftest import open_shift
 
 DEMO_PASSWORD = "DemoPass123!"
 MAKER = "demo_maker"

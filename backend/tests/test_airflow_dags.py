@@ -13,8 +13,24 @@ có thể rỗng mà test vẫn xanh.  Bản này assert có ý nghĩa:
 * cấu hình DAG hợp lệ: ``catchup=False``, ``max_active_runs=1``,
   ``schedule='@daily'``, ``default_args`` có ``owner``/``retries``/
   ``retry_delay``/``start_date``;
-* DAG serialize được bằng Airflow (``SerializedDAG``) — tức Airflow thật
-  chấp nhận DAG này, không chỉ import được trong pytest.
+* DAG serialize được bằng Airflow — tức Airflow thật chấp nhận DAG này, không
+  chỉ import được trong pytest.
+
+**Tương thích nhiều version Airflow** (2.10.x và 3.x):
+
+* Airflow 2.10 đặt lịch ở ``dag.schedule_interval`` và **không có**
+  ``dag.schedule``; Airflow 3.x ngược lại — bỏ ``schedule_interval``, chỉ có
+  ``schedule``.  Test đọc cả hai nên không phụ thuộc version.
+* Class serializer của Airflow bị đổi tên theo version
+  (``SerializedDAG`` ở 2.10.4, ``DagSerialization`` ở 3.x).  Test dò class
+  theo tên thay vì import thẳng một tên cụ thể.
+
+**Không còn skip im lặng.**  Airflow là *runtime bắt buộc* của module này:
+
+* nếu Airflow **thiếu** → test ``skip`` kèm lý do rõ ràng;
+* nếu job CI **bắt buộc** phải có Airflow (``QLK_REQUIRE_AIRFLOW=1``, đặt trong
+  workflow ``.github/workflows/s11-e2e-cloud-ci.yml``) → test **fail** với thông
+  báo lỗi, không được biến thành xanh vacuous.
 
 DAG covered:
 - ``inventory_ingestion``: read → parse → validate → load staging → train ML → promote
@@ -25,6 +41,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 import sys
 from pathlib import Path
 
@@ -37,7 +54,36 @@ for _candidate in (str(BACKEND_DIR), str(AIRFLOW_DAGS_DIR)):
     if _candidate not in sys.path:
         sys.path.insert(0, _candidate)
 
-pytest.importorskip("airflow", reason="Airflow not installed – DAG tests skipped")
+# --- Airflow là runtime bắt buộc: import thẳng để lỗi import được báo rõ ----
+def _airflow_runtime_unavailable() -> str | None:
+    """``None`` nếu Airflow dùng được; ngược lại trả lý do **không** dùng được.
+
+    "Không dùng được" gồm 2 trường hợp: chưa cài Airflow, hoặc cài rồi nhưng
+    thiếu provider (``airflow.providers.standard`` ở Airflow 3.x — đây chính là
+    lỗi làm CI xanh vacuous trước đây: Airflow cài ở *system python* còn pytest
+    chạy trong venv khác).
+    """
+    try:
+        importlib.import_module("airflow")
+    except Exception as exc:  # pragma: no cover - phụ thuộc môi trường
+        return f"import `airflow` lỗi: {exc}"
+
+    try:
+        importlib.import_module("inventory_ingestion")
+    except ModuleNotFoundError as exc:  # pragma: no cover - phụ thuộc môi trường
+        missing = exc.name or ""
+        if missing == "airflow" or missing.startswith("airflow."):
+            return f"import DAG lỗi vì thiếu `{missing}`: {exc}"
+        raise
+    return None
+
+#: Job CI bắt buộc phải có Airflow sẽ đặt ``QLK_REQUIRE_AIRFLOW=1``.
+#: Khi đó thiếu Airflow ⇒ **fail**, không phải skip (chống CI xanh vacuous).
+REQUIRE_AIRFLOW = os.environ.get("QLK_REQUIRE_AIRFLOW", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 INVENTORY_TASKS = [
     "read_source",
@@ -57,6 +103,40 @@ EXPECTED_DAGS = {
 
 DAG_MODULE_NAMES = sorted(EXPECTED_DAGS)
 
+EXPECTED_CALLABLES = {
+    "read_source",
+    "parse_rows",
+    "validate_rows",
+    "load_staging",
+    "train_demand_model",
+    "promote_demand_model",
+}
+
+
+@pytest.fixture(autouse=True)
+def airflow_runtime() -> None:
+    """Guard runtime: nếu Airflow biến mất giữa chừng thì phải báo, không im lặng."""
+    reason = _airflow_runtime_unavailable()
+    assert reason is None, f"Airflow không dùng được nữa: {reason}"
+
+
+_AIRFLOW_UNAVAILABLE = _airflow_runtime_unavailable()
+if _AIRFLOW_UNAVAILABLE is not None:
+    _MESSAGE = (
+        "Airflow chưa dùng được trong môi trường này nên không kiểm chứng được "
+        f"DAG: {_AIRFLOW_UNAVAILABLE}. Cài `apache-airflow` (kèm provider cần thiết) "
+        "vào ĐÚNG môi trường đang chạy pytest, hoặc đặt QLK_REQUIRE_AIRFLOW=1 để "
+        "biến thiếu Airflow thành lỗi CI. Xem "
+        "docs/mlops/airflow-ingest-evidence-2026-10-20.md."
+    )
+    if REQUIRE_AIRFLOW:
+        # Job CI bắt buộc có Airflow: thiếu là LỖI (collection error ⇒ job đỏ),
+        # tuyệt đối không được biến thành xanh vacuous.
+        raise RuntimeError(_MESSAGE)
+    # Job CI không cần Airflow: bỏ qua nhưng **có lý do rõ ràng** (không phải
+    # skip im lặng của `pytest.importorskip`).
+    pytest.skip(_MESSAGE, allow_module_level=True)
+
 
 def _dag(dag_id: str):
     module = importlib.import_module(dag_id)
@@ -65,9 +145,66 @@ def _dag(dag_id: str):
     return dag
 
 
+def _dag_schedule(dag) -> str:
+    """Lịch của DAG, tương thích Airflow 2.x (``schedule_interval``) và 3.x (``schedule``)."""
+    for attr in ("schedule", "schedule_interval"):
+        value = getattr(dag, attr, None)
+        if value is not None:
+            return str(value)
+    return ""
+
+
+def _is_daily(schedule: str) -> bool:
+    """``@daily`` (Airflow 2/3) hoặc biểu thức cron tương đương (``0 0 * * *``)."""
+    normalized = schedule.strip()
+    return normalized in {"@daily", "0 0 * * *", "0 0 * * ?", "0 0 * * * *"}
+
+
+def _serializer_class():
+    """Class serializer của Airflow: tên đổi theo version (2.10 vs 3.x)."""
+    from airflow.serialization import serialized_objects
+
+    for name in ("DagSerialization", "SerializedDAG"):
+        candidate = getattr(serialized_objects, name, None)
+        if candidate is not None and hasattr(candidate, "serialize_dag"):
+            return candidate
+    return None
+
+
+def _payload_task_ids(payload: dict) -> set[str]:
+    """Task id trong payload serialize (shape khác nhau giữa 2.x và 3.x)."""
+    task_ids: set[str] = set()
+    for entry in payload.get("tasks") or []:
+        if not isinstance(entry, dict):
+            continue
+        var = entry.get("__var")
+        if not isinstance(var, dict):
+            var = entry
+        task_id = var.get("task_id")
+        if task_id:
+            task_ids.add(str(task_id))
+    return task_ids
+
+
+def _payload_callable_names(payload: dict) -> list[str]:
+    """Tên ``python_callable`` trong payload (chỉ có ở một số version Airflow)."""
+    names: list[str] = []
+    for entry in payload.get("tasks") or []:
+        if not isinstance(entry, dict):
+            continue
+        var = entry.get("__var")
+        if not isinstance(var, dict):
+            var = entry
+        name = var.get("python_callable_name")
+        if name:
+            names.append(str(name))
+    return names
+
+
 # ---------------------------------------------------------------------------
 # 1. Import + cấu trúc task
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("dag_id", DAG_MODULE_NAMES)
 def test_dag_imports_and_has_expected_tasks(dag_id: str) -> None:
@@ -97,10 +234,9 @@ def test_task_callables_are_real_functions(dag_id: str) -> None:
     for task in dag.tasks:
         callable_ = getattr(task, "python_callable", None)
         assert callable_ is not None, f"Task {task.task_id} không có python_callable"
-        assert not inspect.isfunction(callable_) or callable_.__name__ != "<lambda>", (
+        assert getattr(callable_, "__name__", "") != "<lambda>", (
             f"Task {task.task_id} dùng lambda — không serialize được cho Airflow"
         )
-        assert getattr(callable_, "__name__", "") != "<lambda>"
         assert getattr(callable_, "__module__", "").startswith("qlk_ingest.tasks"), (
             f"Task {task.task_id} phải gọi hàm trong qlk_ingest.tasks, "
             f"thực tế: {getattr(callable_, '__module__', None)}"
@@ -135,11 +271,13 @@ def test_task_dependencies_form_a_single_chain(dag_id: str) -> None:
 
 @pytest.mark.parametrize("dag_id", DAG_MODULE_NAMES)
 def test_dag_configuration_is_production_sane(dag_id: str) -> None:
-    """catchup/schedule/max_active_runs/default_args hợp lệ."""
+    """catchup/schedule/max_active_runs/default_args hợp lệ (đọc được trên 2.x và 3.x)."""
     dag = _dag(dag_id)
     assert dag.catchup is False, "catchup phải là False"
     assert dag.max_active_runs == 1, "max_active_runs phải bằng 1"
-    assert dag.schedule is not None and str(dag.schedule) == "@daily"
+    schedule = _dag_schedule(dag)
+    assert schedule, "DAG không có lịch (schedule/schedule_interval rỗng)"
+    assert _is_daily(schedule), f"schedule={schedule!r} — DAG phải chạy @daily"
     assert dag.tags, "DAG phải có tags"
 
     default_args = dag.default_args or {}
@@ -159,33 +297,36 @@ def test_dag_has_no_placeholder_source(dag_id: str) -> None:
 
 @pytest.mark.parametrize("dag_id", DAG_MODULE_NAMES)
 def test_dag_is_serializable_by_airflow(dag_id: str) -> None:
-    """Airflow serialize được DAG (chứng minh DAG thật, không chỉ import được)."""
-    from airflow.serialization.serialized_objects import DagSerialization
+    """Airflow serialize được DAG (chứng minh DAG thật, không chỉ import được).
+
+    Tên class serializer khác nhau giữa Airflow 2.10 (``SerializedDAG``) và 3.x
+    (``DagSerialization``) nên test dò theo tên, không import cứng một tên.
+    """
+    serializer = _serializer_class()
+    assert serializer is not None, (
+        "Airflow không expose class serialize_dag — bản Airflow này không được hỗ trợ"
+    )
 
     dag = _dag(dag_id)
-    payload = DagSerialization.serialize_dag(dag)
-    assert payload["dag_id"] == dag_id
-    assert payload["catchup"] is False
+    payload = serializer.serialize_dag(dag)
+    assert isinstance(payload, dict)
 
-    serialized_tasks = []
-    for entry in payload["tasks"]:
-        var = entry.get("__var") or entry.get("value") or {}
-        serialized_tasks.append(var)
+    payload_dag_id = payload.get("dag_id") or payload.get("_dag_id")
+    assert payload_dag_id == dag_id
+    assert payload.get("catchup") is False
 
-    assert {t["task_id"] for t in serialized_tasks} == set(EXPECTED_DAGS[dag_id])
+    assert _payload_task_ids(payload) == set(EXPECTED_DAGS[dag_id])
+
+    # `python_callable_name` chỉ xuất hiện ở một số version Airflow; nếu có thì
+    # phải trỏ đúng hàm trong qlk_ingest.tasks.
+    for callable_name in _payload_callable_names(payload):
+        assert callable_name in EXPECTED_CALLABLES, (
+            f"Task serialize thành callable lạ: {callable_name}"
+        )
 
     from qlk_ingest import tasks as qlk_tasks
 
-    for task in serialized_tasks:
-        callable_name = task["python_callable_name"]
-        assert callable_name in {
-            "read_source",
-            "parse_rows",
-            "validate_rows",
-            "load_staging",
-            "train_demand_model",
-            "promote_demand_model",
-        }, f"Task {task['task_id']} serialize thành callable lạ: {callable_name}"
-        assert callable( getattr(qlk_tasks, callable_name) ), (
+    for callable_name in EXPECTED_CALLABLES:
+        assert callable(getattr(qlk_tasks, callable_name)), (
             f"Callable {callable_name} không import được từ qlk_ingest.tasks"
         )
