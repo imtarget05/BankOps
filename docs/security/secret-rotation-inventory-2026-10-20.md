@@ -28,7 +28,7 @@ Không có giá trị secret nào được ghi trong bảng này — chỉ finge
 |---|---|---|---|---|
 | `BANKOPS_SIGNING_KEY` | **ROTATED + VERIFIED** | `backend/.env:37` (`BANKOPS_dev_signing_key`), `infra/k8s/base/secret-production.yaml:19`, GH secret `BANKOPS_SIGNING_KEY` | `73b8…(len=64, sha256=b348ebd0)` | token ký bằng key cũ → `GET /api/v1/auth/me` = **401** (cả key dev cũ lẫn `SECRET_KEY` legacy cũ); `POST /api/v1/auth/login` = **200** với key mới |
 | `BANKOPS_SESSION_SECRET` | **ROTATED + VERIFIED** | `backend/.env:18`, `infra/k8s/base/secret-production.yaml:20`, GH secret `BANKOPS_SESSION_SECRET` | `7Qx3…(len=64, sha256=4f456353)` | `settings.session_secret` khớp fingerprint mới; app khởi động OK; login 200 (không có session server-side nên không có session nào bị invalidate) |
-| `SECRET_KEY` (legacy) | **ROTATED (giữ tên, giá trị mới)** — xem ghi chú bên dưới | `.env.production:4`, `infra/k8s/base/secret-production.yaml:11`, GH secret `SECRET_KEY` | `3c96…(len=64, sha256=dc5064b5)` | token ký bằng `SECRET_KEY` cũ → **401** |
+| `SECRET_KEY` (legacy) | **TÊN ĐÃ GỠ (2026-10-21)** — xem ghi chú bên dưới | **đã gỡ 2026-10-21**: GH secret `SECRET_KEY` (`gh secret delete SECRET_KEY`) + k8s `infra/k8s/base/secret-production.yaml` (dòng `SECRET_KEY` đã xoá) · **còn lại**: `.env.production:4` (chưa gỡ) | `3c96…(len=64, sha256=dc5064b5)` (giá trị đã rotate 2026-10-21; **tên** đã gỡ ở 2/3 vị trí) | token ký bằng `SECRET_KEY` cũ → **401** |
 | `SUPERVISOR_PIN` | **ROTATED** | `.env.production:5`, `infra/k8s/base/secret-production.yaml:12`, GH secret `SUPERVISOR_PIN` | `salted(len=6, sha256=4ab63689)` | PIN demo `123456` **chỉ** dùng khi `settings.is_demo_mode` (`backend/app/services/approval_controls.py:57`, `backend/app/seed.py:225`) |
 | `SMTP_PASSWORD` | **CẦN OWNER — app password cũ VẪN LOGIN ĐƯỢC** | giá trị cũ đã gỡ: `.env:21` + `backend/.env:26` → `CHANGE_ME_SMTP_PASSWORD` | — | Probe SMTP (`--check-provider`, `SMTP_OLD_PASSWORD`): **old app password STILL LOGS IN** ⇒ credential đã lộ công khai **vẫn còn hiệu lực** ở Google → owner phải xoá ở `https://myaccount.google.com/apppasswords` |
 | `CLOUDFLARE_API_TOKEN` | **CẦN OWNER** (token cũ **còn sống**) | giá trị cũ đã gỡ khỏi `.env:7`, `.env.production:10`, `backend/.env:31`, `infra/k8s/base/secret-production.yaml:14` | — | `GET /user/tokens/verify` (token cũ) = **200 / status `active`**; `GET /user/tokens` = **403**; `DELETE /user/tokens/{id}` = **403 (code 9109 Unauthorized)** ⇒ token **không tự revoke được** |
@@ -42,6 +42,20 @@ Không có giá trị secret nào được ghi trong bảng này — chỉ finge
 > (runbook mục 11 #17 / mục 12 #25). Vì vậy `end_state` của `legacy_secret_key`
 > trong khối JSON bên dưới đổi `remove` → `rotate`; **gỡ hẳn tên** vẫn là
 > hạng mục mở (xem §6 bảng "còn lại cần owner").
+> **⟵ ĐÃ ĐẢO NGƯỢC LẠI `remove` ngày 2026-10-21** (xem cập nhật ngay bên dưới).
+>
+> **Cập nhật 2026-10-21 (gỡ tên legacy).** Shim `backend/entrypoint.sh` **đã** được
+> gỡ ở wave code-hygiene (§0.1: production/staging → **FAIL-FAST** nếu thiếu
+> `BANKOPS_SIGNING_KEY`), nên rào chặn của DECISION 3 **không còn**. Vì vậy
+> `end_state` của `legacy_secret_key` trong khối JSON **đã đổi ngược lại `remove`**,
+> và **tên** `SECRET_KEY` đã bị gỡ ở **2/3** vị trí:
+> - **GitHub Actions secret** `SECRET_KEY` → **đã xoá** (`gh secret delete SECRET_KEY --repo imtarget05/QuanLyKho`, 2026-10-21; xác nhận bằng `gh secret list` — không còn tên này).
+> - **k8s Secret** `infra/k8s/base/secret-production.yaml` → **đã gỡ** dòng `SECRET_KEY` (2026-10-21; file gitignored, **không** commit). File này **đã** có `BANKOPS_SIGNING_KEY` ⇒ deploy mới không gãy.
+> - **Còn lại:** `.env.production:4` (file local gitignored — **ngoài phạm vi** thay đổi 2026-10-21) và **Secret đang chạy** trên cluster (`kubectl -n bankops-prod patch secret bankops-secrets …`), cần owner xử lý.
+>
+> Vì `end_state = remove`, `--check-env` giờ **FAIL** ở vị trí `.env.production`
+> (legacy var vẫn còn) — đây là **tín hiệu đúng** (tên legacy chưa gỡ xong),
+> không phải hồi quy. Chi tiết hạng mục còn mở: §6.1 #3.
 >
 > **Hazard cần lưu ý:** hiện có **hai** giá trị khác nhau cho cùng một vai trò
 > (`BANKOPS_SIGNING_KEY` ≠ `SECRET_KEY`). Ở production, `entrypoint.sh` ưu tiên
@@ -78,7 +92,7 @@ chỉ chủ tài khoản mới gỡ được: `SMTP_PASSWORD` (Gmail app passwor
 | # | Credential (tên chuẩn) | Fingerprint **hiện tại** | Nơi đang dùng (chính) | Lộ công khai? | Ưu tiên | End state |
 |---|---|---|---|---|---|---|
 | 1 | `BANKOPS_SIGNING_KEY` (JWT signing key) | ~~`iK6K…(len=64, sha256=96557a63)`~~ → **`73b8…(len=64, sha256=b348ebd0)`** (đã rotate 2026-10-21) | `backend/.env:37` (`BANKOPS_dev_signing_key`), `backend/app/config.py:213,218,237`, `backend/app/api/routes/auth_utils.py:71,380,389,445,609` | Không | **P0** | rotate |
-| 2 | `SECRET_KEY` (tên legacy của #1 ở tầng deploy) | ~~`9e7c…(len=64, sha256=e9649e5a)`~~ → **`3c96…(len=64, sha256=dc5064b5)`** (đã rotate 2026-10-21) | `.env.production:4`, `infra/k8s/base/secret-production.yaml:11`, `backend/entrypoint.sh:10-14` (shim) | Không | **P0** | **remove** |
+| 2 | `SECRET_KEY` (tên legacy của #1 ở tầng deploy) | ~~`9e7c…(len=64, sha256=e9649e5a)`~~ → **`3c96…(len=64, sha256=dc5064b5)`** (đã rotate 2026-10-21) — **tên đã gỡ 2026-10-21** ở GH secret + k8s Secret manifest | **đã gỡ**: GH secret `SECRET_KEY`, `infra/k8s/base/secret-production.yaml` · **còn**: `.env.production:4`, `backend/entrypoint.sh:10-14` (shim đã gỡ ở wave code-hygiene) | Không | **P0** | **remove** |
 | 3 | `BANKOPS_SESSION_SECRET` | ~~`rvK4…(len=64, sha256=f00d82ab)`~~ → **`7Qx3…(len=64, sha256=4f456353)`** (đã rotate 2026-10-21) | `backend/.env:18`, `backend/app/config.py:201-210` (**không có consumer thật**) | Không | **P0** | rotate |
 | 4 | `SMTP_PASSWORD` (Gmail app password) | ~~`qavo…(len=16, sha256=8e2b3b9b)`~~ — **CẦN OWNER**; giá trị cũ đã gỡ khỏi đĩa 2026-10-21 | `.env:21`, `backend/.env:26`, `backend/app/config.py:138`, `render.yaml:34` | **CÓ** — `docker-compose.yml` @ `53be143` (còn ở `origin/main`) | **P0** | rotate |
 | 5 | `SUPERVISOR_PIN` | ~~**giá trị đã công khai** (`len=6`, `sha256=8d969eef`)~~ → **`salted(len=6, sha256=4ab63689)`** (đã rotate 2026-10-21) | `.env.production:5`, `infra/k8s/base/secret-production.yaml:12`, `backend/app/config.py:162`, `backend/app/services/approval_controls.py:56-60` | **CÓ** — `infra/k8s/base/secret-template.yaml` @ `e76419b`,`bea0922`; `README.md` @ `5602ef0`,`310551a` | **P1** | rotate |
@@ -123,12 +137,12 @@ chỉ chủ tài khoản mới gỡ được: `SMTP_PASSWORD` (Gmail app passwor
 | Trường | Nội dung |
 |---|---|
 | Fingerprint hiện tại | `9e7c…(len=64, sha256=e9649e5a)` |
-| Nơi đang dùng | `.env.production:4`; `infra/k8s/base/secret-production.yaml:11`; `infra/k8s/base/secret-template.yaml:14` (placeholder `CHANGE_ME_…` — đúng); `scripts/setup_secrets_and_deploy.sh` (`JWT_SEC` → `SECRET_KEY`); `scripts/sync_github_secrets.sh:50` (`gh secret set SECRET_KEY`) |
+| Nơi đang dùng | `.env.production:4` (**còn** — ngoài phạm vi 2026-10-21); `infra/k8s/base/secret-template.yaml:14` (placeholder `CHANGE_ME_…` — đúng, giữ nguyên theo §6.1 #18); `scripts/setup_secrets_and_deploy.sh` (`JWT_SEC` → `SECRET_KEY`); `scripts/sync_github_secrets.sh:50` (`gh secret set SECRET_KEY` — **không** sync nữa từ wave code-hygiene) · **đã gỡ 2026-10-21**: k8s `infra/k8s/base/secret-production.yaml` (dòng `SECRET_KEY` xoá) + GitHub Actions secret `SECRET_KEY` (`gh secret delete`) |
 | Runtime consumer | **Không có code nào đọc `SECRET_KEY`** (`rg 'SECRET_KEY' backend/app/` → 0 kết quả). Nó chỉ được dùng **gián tiếp** qua shim `backend/entrypoint.sh:10-14` → `BANKOPS_SIGNING_KEY` |
 | Hardcoded default? | **KHÔNG** (giá trị thật chỉ ở file local gitignored) |
-| Trạng thái | Chưa rotate, chưa lộ công khai |
+| Trạng thái | Đã rotate 2026-10-21; **tên biến đã gỡ 2026-10-21** ở GH secret + k8s Secret manifest; còn `.env.production` + Secret đang chạy trên cluster |
 | **Cách tạo mới** | Không tạo mới — biến này phải **bị gỡ**. (Nếu owner muốn giữ tên, giá trị mới = giá trị của `BANKOPS_SIGNING_KEY` mới, tuyệt đối khác giá trị cũ) |
-| **Cách cập nhật** | 1) Xoá key `SECRET_KEY` khỏi k8s Secret: `kubectl -n bankops-prod patch secret bankops-secrets --type=json -p '[{"op":"remove","path":"/data/SECRET_KEY"}]'`<br>2) Xoá dòng `SECRET_KEY=` khỏi `.env.production`<br>3) `gh secret delete SECRET_KEY --repo imtarget05/QuanLyKho`<br>4) Gỡ shim ở `backend/entrypoint.sh:10-14` và dòng `set_secret "SECRET_KEY"` ở `scripts/sync_github_secrets.sh` (**file của worker khác — chỉ đề xuất, không sửa**) |
+| **Cách cập nhật** | 1) Xoá key `SECRET_KEY` khỏi k8s Secret: `kubectl -n bankops-prod patch secret bankops-secrets --type=json -p '[{"op":"remove","path":"/data/SECRET_KEY"}]'` — **MỞ** (cần owner; agent không có cluster)<br>1b) Xoá dòng `SECRET_KEY` khỏi manifest `infra/k8s/base/secret-production.yaml` — **ĐÃ XONG 2026-10-21** (file gitignored, **không** commit)<br>2) Xoá dòng `SECRET_KEY=` khỏi `.env.production` — **MỞ** (ngoài phạm vi thay đổi 2026-10-21)<br>3) `gh secret delete SECRET_KEY --repo imtarget05/QuanLyKho` — **ĐÃ XONG 2026-10-21** (xác nhận: `gh secret list` không còn tên này)<br>4) Gỡ shim ở `backend/entrypoint.sh:10-14` và dòng `set_secret "SECRET_KEY"` ở `scripts/sync_github_secrets.sh` — **ĐÃ XONG** (wave code-hygiene 2026-10-21: fallback âm thầm đã gỡ, script không sync `SECRET_KEY` nữa) |
 | **Cách xác minh cũ đã chết** | Sau khi deploy lại với `BANKOPS_SIGNING_KEY` mới: token ký bằng `SECRET_KEY` cũ → `GET /api/v1/auth/me` → **401** |
 | **Cách xác minh mới hoạt động** | Pod mới start không còn log `[Entrypoint] BANKOPS_SIGNING_KEY chưa set -> dùng SECRET_KEY …`; `/api/v1/health/live` → 200 |
 | Rollback | Cần `SECRET_KEY` cũ để rollback deploy (nếu deploy cũ dùng shim). **Giữ lại giá trị cũ ở password manager cho tới khi deploy mới ổn định**, nhưng **không** đặt lại vào GitHub/k8s sau khi xác nhận |
@@ -159,7 +173,7 @@ chỉ chủ tài khoản mới gỡ được: `SMTP_PASSWORD` (Gmail app passwor
 | Fingerprint hiện tại | `qavo…(len=16, sha256=8e2b3b9b)` — ⚠️ 4 ký tự đầu đã bị công bố trong `docs/security/credential-rotation-runbook.md` (commit `bea0922`) → giảm entropy còn ~60 bit |
 | Nơi đang dùng | `.env:21`, `backend/.env:26`; `backend/app/config.py:138-142`; `backend/app/services/email_service.py` (đọc `settings.smtp_password`); `render.yaml:34` (`sync: false` — dán tay trong Render dashboard) |
 | CI secret | `SMTP_PASSWORD` — **THIẾU** (không có trong `sync_github_secrets.sh`) |
-| k8s secret ref | **THIẾU** — `secret-template.yaml` không có `SMTP_PASSWORD` → `envFrom: bankops-secrets` không cấp được → gửi mail lỗi |
+| k8s secret ref | **ĐÃ CÓ PLACEHOLDER (2026-10-21)** — `infra/k8s/base/secret-template.yaml` (tracked) có `SMTP_USER` + `SMTP_PASSWORD` (`CHANGE_ME_*`); manifest local `infra/k8s/base/secret-production.yaml` (gitignored) **đã bổ sung** `SMTP_USER: "CHANGE_ME_SMTP_USER"` + `SMTP_PASSWORD: "CHANGE_ME_SMTP_PASSWORD"` → `envFrom: bankops-secrets` **cấp được** key ⇒ không còn "thiếu key ⇒ mail hỏng". ⚠️ **Owner phải thay cả 2 giá trị** (Gmail app password mới) trước khi deploy — placeholder không gửi được mail |
 | Hardcoded default? | **KHÔNG** ở code; **CÓ trong git history** — `docker-compose.yml` @ `53be143` (reachable từ `origin/main`), đã gỡ ở `90a6327` (xác minh bằng `git log -S`) |
 | Trạng thái | **ĐÃ LỘ CÔNG KHAI** → coi như credential bị xâm nhập |
 | **Cách tạo mới** | Google Account → **Security → 2-Step Verification → App passwords** → app name `bankops-mail-2026-10` → loại **Mail** → sinh **16 ký tự** (4 nhóm 4, bỏ khoảng trắng). Entropy ≈ 80 bit. **Không** dùng lại app password cũ dù nó còn "chạy" |
@@ -351,9 +365,9 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "legacy_vars": ["SECRET_KEY"],
       "old_fingerprint": "9e7c…(len=64, sha256=e9649e5a)",
       "new_fingerprint": "3c96…(len=64, sha256=dc5064b5)",
-      "end_state": "rotate",
-      "status": "ROTATED+VERIFIED",
-      "evidence": "2026-10-21: end_state đổi remove -> rotate (xem §0); token ký bằng SECRET_KEY cũ -> GET /api/v1/auth/me = 401. Gỡ hẳn tên biến vẫn là hạng mục mở (PR gỡ shim entrypoint.sh).",
+      "end_state": "remove",
+      "status": "NAME-REMOVED (2026-10-21) — value ROTATED+VERIFIED",
+      "evidence": "2026-10-21: end_state rotate -> remove (shim entrypoint.sh đã gỡ ở wave code-hygiene nên rào chặn của DECISION 3 không còn). Giá trị: token ký bằng SECRET_KEY cũ -> GET /api/v1/auth/me = 401. TÊN ĐÃ GỠ ở 2/3 vị trí: GitHub Actions secret (gh secret delete SECRET_KEY, xác nhận bằng gh secret list) + k8s manifest infra/k8s/base/secret-production.yaml. Còn lại (cần owner): .env.production + Secret đang chạy trên cluster.",
       "priority": "P0",
       "locations": [
         {"kind": "env_file", "path": ".env.production", "key": "SECRET_KEY", "required": false},
@@ -385,7 +399,7 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "old_fingerprint": "qavo…(len=16, sha256=8e2b3b9b)",
       "new_fingerprint": null,
       "status": "OWNER-REQUIRED",
-      "evidence": "2026-10-21: giá trị cũ đã gỡ khỏi .env + backend/.env (placeholder CHANGE_ME_SMTP_PASSWORD). Probe SMTP cho thấy app password CŨ VẪN LOGIN ĐƯỢC (chưa bị xoá ở Google) -> CẦN OWNER xoá + tạo app password mới (probe giá trị MỚI chỉ chạy được sau khi owner tạo).",
+      "evidence": "2026-10-21: giá trị cũ đã gỡ khỏi .env + backend/.env (placeholder CHANGE_ME_SMTP_PASSWORD). Probe SMTP cho thấy app password CŨ VẪN LOGIN ĐƯỢC (chưa bị xoá ở Google) -> CẦN OWNER xoá + tạo app password mới (probe giá trị MỚI chỉ chạy được sau khi owner tạo). 2026-10-21: k8s manifest infra/k8s/base/secret-production.yaml đã bổ sung CẶP placeholder SMTP_USER/SMTP_PASSWORD (CHANGE_ME_*) -> envFrom cấp được key, nhưng owner PHẢI thay cả 2 giá trị trước khi deploy (placeholder không gửi được mail).",
       "end_state": "rotate",
       "priority": "P0",
       "locations": [
@@ -500,7 +514,7 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
 | # | Hạng mục | Trạng thái 2026-10-21 |
 |---|---|---|
 | 1, 2, 6, 8 | Sinh + cấp key/PIN mới (GitHub + file local) | **ĐÃ XONG** (key mới đã set trong GH, file local, k8s manifest) |
-| 3 | Cấp key mới cho k8s Secret + gỡ `SECRET_KEY` | **MỞ** — `BANKOPS_SIGNING_KEY` đã thêm vào `secret-production.yaml`, nhưng `SECRET_KEY` **chưa gỡ** (xem §0 ghi chú) |
+| 3 | Cấp key mới cho k8s Secret + gỡ `SECRET_KEY` | **MỞ (giảm)** — 2026-10-21: `BANKOPS_SIGNING_KEY` đã có trong `secret-production.yaml`; **tên legacy `SECRET_KEY` đã gỡ** ở **GitHub Actions secret** (`gh secret delete SECRET_KEY`) và **k8s Secret manifest** (`infra/k8s/base/secret-production.yaml`, file gitignored — không commit). **Còn lại (cần owner):** (a) xoá dòng `SECRET_KEY=` trong `.env.production:4`; (b) patch Secret **đang chạy** trên cluster: `kubectl -n bankops-prod patch secret bankops-secrets --type=json -p '[{"op":"remove","path":"/data/SECRET_KEY"}]'` |
 | 4, 5, 7, 9, 10 | Cấp SMTP/CF/GPG mới + revoke/thu hồi cái cũ | **CẦN OWNER** — không làm được từ máy agent |
 | 11, 12 | Bật secret scanning + push protection | **ĐÃ XONG** (2026-10-21, wave code-hygiene): `imtarget05/QuanLyKho` → `security_and_analysis.secret_scanning.status=enabled` + `secret_scanning_push_protection.status=enabled` (xác minh bằng `gh api repos/imtarget05/QuanLyKho --jq .security_and_analysis`); `imtarget05/AKS-SRE-Platform` → cũng enabled; `imtarget05/OpsBridge` → **404** (repo không tồn tại trong account ⇒ **CẦN OWNER xác nhận tên repo**). Endpoint `.../secret-scanning/secret-scanning` trả 404 vì repo public (endpoint đó dành cho GH Advanced Security) |
 | 13 | Rewrite history | **CHƯA** — cần phê duyệt riêng (rotate xong mới nên rewrite) |
