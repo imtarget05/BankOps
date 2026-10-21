@@ -159,9 +159,19 @@ jobs:
           echo "Total container restarts: $TOTAL_RESTARTS"
           [ "$TOTAL_RESTARTS" -eq 0 ]
 
-          echo "=== 5. Assert /health Healthy Across All Running Pods ==="
+          echo "=== 5. Assert /health Healthy Across Active Pods ==="
+          for i in $(seq 1 15); do
+            TERMINATING=$(kubectl -n ml-serving get pods -l app=model-serving -o json | jq '[.items[] | select(.metadata.deletionTimestamp != null)] | length')
+            if [ "$TERMINATING" -eq 0 ]; then
+              break
+            fi
+            echo "Waiting for $TERMINATING terminating pod(s) to exit ($i/15)..."
+            sleep 2
+          done
+
+          ACTIVE_PODS=$(kubectl -n ml-serving get pods -l app=model-serving -o json | jq -r '.items[] | select(.metadata.deletionTimestamp == null) | .metadata.name')
           PORT=8080
-          for POD_NAME in $(kubectl -n ml-serving get pods -l app=model-serving --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}'); do
+          for POD_NAME in $ACTIVE_PODS; do
             echo "Checking health for $POD_NAME on local port $PORT..."
             kubectl -n ml-serving port-forward "pod/$POD_NAME" "$PORT:8000" &
             PF_PID=$!
