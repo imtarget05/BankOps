@@ -718,6 +718,7 @@ List<ReconciliationRun> _seedReconciliations() => [
       ReconciliationRun(
           id: 'rr-0001',
           status: 'completed',
+          scope: 'inventory',
           startedAt: DateTime.utc(2026, 10, 8, 7, 0),
           exceptions: const ['CHENH-LECH-CA-01']),
     ];

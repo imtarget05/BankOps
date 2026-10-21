@@ -50,6 +50,7 @@ void main() {
           ReconciliationRun(
             id: 'rc-01',
             status: 'matched',
+            scope: 'cash',
             startedAt: DateTime.now(),
             exceptions: const [],
           ),
@@ -106,6 +107,7 @@ void main() {
           ReconciliationRun(
             id: 'rc-02',
             status: 'matched',
+            scope: 'cash',
             startedAt: DateTime.now(),
             exceptions: const [],
           ),

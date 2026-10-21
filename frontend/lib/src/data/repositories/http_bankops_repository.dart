@@ -1693,8 +1693,12 @@ class HttpBankOpsRepository implements BankOpsRepository {
     return ReconciliationRun(
       id: _str(m, 'id'),
       status: _str(m, 'status'),
+      scope: _str(m, 'scope'),
       startedAt: _date(m, 'created_at'),
       exceptions: rawEx.map((e) => e.toString()).toList(),
+      exceptionCount: int.tryParse(_str(m, 'exception_count')) ?? 0,
+      openExceptionCount: int.tryParse(_str(m, 'open_exception_count')) ?? 0,
+      autoFixed: _str(m, 'auto_fixed') == 'true',
     );
   }
 

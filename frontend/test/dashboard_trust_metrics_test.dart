@@ -53,6 +53,7 @@ void main() {
         ReconciliationRun(
             id: 'gl-1',
             status: 'completed',
+            scope: 'cash',
             startedAt: DateTime(2026, 10, 14),
             exceptions: ['Sai lệch quỹ']),
       ],

@@ -1859,6 +1859,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
         ReconciliationRun(
           id: 'rc-$scope-001',
           status: 'matched',
+          scope: scope,
           startedAt: DateTime.now().toUtc(),
           exceptions: const [],
         ),

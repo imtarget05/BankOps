@@ -9,6 +9,10 @@ class DashboardTrustMetrics {
     required this.cashState,
     required this.stockState,
     required this.ledgerState,
+    required this.totalExceptions,
+    required this.openExceptions,
+    required this.cashExceptions,
+    required this.inventoryExceptions,
   });
 
   factory DashboardTrustMetrics.fromData({
@@ -48,6 +52,19 @@ class DashboardTrustMetrics {
                     : current,
           );
 
+    final totalExceptions = reconciliations.fold<int>(
+      0, (sum, r) => sum + r.exceptionCount,
+    );
+    final openExceptions = reconciliations.fold<int>(
+      0, (sum, r) => sum + r.openExceptionCount,
+    );
+    final cashExceptions = reconciliations
+        .where((r) => r.scope == 'cash')
+        .fold<int>(0, (sum, r) => sum + r.exceptionCount);
+    final inventoryExceptions = reconciliations
+        .where((r) => r.scope == 'inventory')
+        .fold<int>(0, (sum, r) => sum + r.exceptionCount);
+
     return DashboardTrustMetrics._(
       cashCoverage: cashCoverage,
       stockCoverage: stockCoverage,
@@ -62,6 +79,10 @@ class DashboardTrustMetrics {
                   ? const DashboardDataState('Đã khớp', DashboardDataTone.good)
                   : const DashboardDataState(
                       'Đang đối soát', DashboardDataTone.neutral),
+      totalExceptions: totalExceptions,
+      openExceptions: openExceptions,
+      cashExceptions: cashExceptions,
+      inventoryExceptions: inventoryExceptions,
     );
   }
 
@@ -70,6 +91,10 @@ class DashboardTrustMetrics {
   final DashboardDataState cashState;
   final DashboardDataState stockState;
   final DashboardDataState ledgerState;
+  final int totalExceptions;
+  final int openExceptions;
+  final int cashExceptions;
+  final int inventoryExceptions;
 
   static DashboardDataState _coverageState(double? coverage) {
     if (coverage == null) {
