@@ -130,5 +130,5 @@ jobs:
           DATABASE_URL: "postgresql+psycopg2://neondb_owner:npg_m7FjSus1GzBq@ep-mute-snow-b7lawsws-pooler.c-13.us-east-1.aws.neon.tech/neondb_test?channel_binding=require&sslmode=require"
         run: |
           # Check PostgreSQL connectivity
-          bash scripts/check_db_connectivity.sh
+          bash ../scripts/check_db_connectivity.sh
           poetry run alembic upgrade head
