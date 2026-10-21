@@ -25,17 +25,27 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 @pytest.fixture(autouse=True)
 def clean_mlflow_state():
     """Reset MLflow tracking URI to SQLite store between tests."""
+    previous_uri = mlflow.get_tracking_uri()
+    previous_env = os.environ.get("MLFLOW_TRACKING_URI")
     # Use a temp SQLite DB that's writable; clean between tests
-    db_path = Path(tempfile.mkdtemp()) / "mlflow.db"
+    tmp_dir = tempfile.mkdtemp()
+    db_path = Path(tmp_dir) / "mlflow.db"
     db_uri = f"sqlite:///{db_path}"
     os.environ["MLFLOW_TRACKING_URI"] = db_uri
     mlflow.set_tracking_uri(db_uri)
-    yield
-    # Cleanup DB file after test
     try:
-        db_path.unlink(missing_ok=True)
-    except Exception:
-        pass
+        yield
+    finally:
+        # Restore prior tracking URI first so unlinking does not break later tests
+        mlflow.set_tracking_uri(previous_uri)
+        if previous_env is None:
+            os.environ.pop("MLFLOW_TRACKING_URI", None)
+        else:
+            os.environ["MLFLOW_TRACKING_URI"] = previous_env
+        try:
+            db_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def test_list_experiments():

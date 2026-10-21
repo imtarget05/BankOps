@@ -9,6 +9,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import AppError
+from app.api.pagination import (
+    KeysetSpec,
+    apply_keyset,
+    build_cursor_payload,
+    clamp_limit,
+    coerce_timestamp,
+    decode_cursor,
+    encode_cursor,
+)
 from app.api.routes.auth_utils import require_any_capability
 from app.config import settings
 from app.database import get_db
@@ -198,6 +208,13 @@ async def event_stream_alias(
     )
 
 
+def _uuid(value: str, field: str = "id") -> uuid.UUID:
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise AppError(400, "INVALID_CURSOR", f"Invalid UUID for {field}") from exc
+
+
 @router.get("/audit-events")
 async def list_audit_events(
     current_user=Depends(require_any_capability("audit:view", "admin:user_management")),
@@ -205,13 +222,21 @@ async def list_audit_events(
     limit: int = 50,
     cursor: str | None = None,
 ):
-    """Danh sách audit events append-only (docs/06: GET /audit-events)."""
-    limit = max(1, min(limit, 100))
-    rows = (
-        await db.execute(
-            select(AuditEvent).order_by(AuditEvent.occurred_at.desc()).limit(limit)
-        )
-    ).scalars().all()
+    """Danh sách audit events append-only (docs/06: GET /audit-events) có keyset pagination."""
+    limit = clamp_limit(limit, default=50)
+    spec = KeysetSpec(
+        columns=(AuditEvent.occurred_at, AuditEvent.id),
+        descending=(True, False),
+        keys=("occurred_at", "id"),
+        attrs=("occurred_at", "id"),
+        coerce=(coerce_timestamp, lambda raw: _uuid(raw, "cursor.id")),
+    )
+    stmt = select(AuditEvent).order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.asc())
+    stmt = apply_keyset(stmt, spec, decode_cursor(cursor))
+    rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
+    page, next_cursor = rows[:limit], None
+    if len(rows) > limit:
+        next_cursor = encode_cursor(build_cursor_payload(spec, page[-1]))
     return {
         "audit_events": [
             {
@@ -225,8 +250,8 @@ async def list_audit_events(
                 "occurred_at": a.occurred_at.isoformat() if a.occurred_at else None,
                 "metadata": a.metadata_json or {},
             }
-            for a in rows
+            for a in page
         ],
         "limit": limit,
-        "next_cursor": None,
+        "next_cursor": next_cursor,
     }

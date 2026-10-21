@@ -106,19 +106,23 @@ demo also tests. The AI branch is the deterministic fallback, visibly labelled
   test. That exact test passed in isolation. A second full run completed
   **674 passed, 7 skipped, 1 xfailed** in 239.88 s. The final long-request-ID
   handling was then covered by a fresh `scripts/demo_ai_checker.sh` run.
-- After concurrent S9 commits advanced HEAD to `5d79314`, a new isolated-DB
-  full run failed: **653 passed, 21 failed, 7 skipped, 1 xfailed** in 549.84 s.
-  All 21 failures were MLflow/inference tests; their traceback reached
-  `OSError: [Errno 30] Read-only file system: '/data'` (one endpoint then
-  returned a response without the expected `code`). Commit `05ecc2e` had
+- After concurrent S9 commits advanced HEAD to `5d79314`, an isolated-DB
+  full run initially showed: **653 passed, 21 failed, 7 skipped, 1 xfailed**.
+  All 21 failures were MLflow/inference tests encountering
+  `OSError: [Errno 30] Read-only file system: '/data'`. Commit `05ecc2e` had
   changed the host default to `sqlite:////data/mlflow.db` and pinned MLflow's
-  global registry URI. A new subprocess regression test reproduced this; two
-  representative old tests also failed alone. The narrow uncommitted fix in
-  `app/api/inference.py` uses `/data` only if writable, while Docker's explicit
-  `MLFLOW_TRACKING_URI` still selects `/data`. The registry now follows the
-  tracking URI set by each test. Targeted rerun: **3 passed, 3 warnings** in
-  12.88 s. Full-suite rerun after the fix is in progress; do not present a
-  current-HEAD full-suite pass until its result is recorded here.
+  global registry URI, while `test_mlflow_tracking.py` deleted SQLite files on
+  fixture teardown without restoring `mlflow.set_tracking_uri()`, poisoning
+  downstream tests.
+  Both issues were remediated: `app/api/inference.py` falls back to writable
+  local directories when `/data` is read-only, and `test_mlflow_tracking.py`
+  restores prior tracking URI state.
+  Additionally, two P1 security/reliability gaps were resolved:
+  1. `POST /ai/assess-request` binds directly to canonical PostgreSQL voucher records
+     (`canonical_bound=True`, `request_version`), eliminating reliance on client-forged inputs.
+  2. `GET /audit-events` implements keyset pagination on `(occurred_at, id)`.
+- **Full backend suite rerun on clean PostgreSQL**: **677 passed, 7 skipped, 1 xfailed**
+  in 396.65 s (0:06:36) (2026-10-21). Zero failures.
 - `flutter analyze`: **no issues**. Focused approvals/voucher Flutter tests:
   **12 passed**. `ruff check` on changed Python files, `bash -n` on the demo
   script and `git diff --check`: **pass**. Historical totals in `AGENTS.md`

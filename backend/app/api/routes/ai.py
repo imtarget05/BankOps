@@ -1,16 +1,22 @@
 """Authenticated advisory AI. Limits are per process (demo deployment)."""
 import json
 import time
+import uuid
 from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.auth_utils import get_current_user
 from app.config import settings
+from app.database import get_db
+from app.models.cash_sim import CashRequest
 from app.models.iam import User
+from app.models.inventory import InventoryRequest, InventoryRequestLine
 from app.services.ai import assess_request, generate, stream_ollama
 from app.services.ai_retrieval import grounded_prompt, retrieve
 
@@ -36,12 +42,89 @@ class RequestAssessmentInput(BaseModel):
 
 
 @router.post('/assess-request')
-async def assess(body: RequestAssessmentInput, user: User = Depends(get_current_user)):
+async def assess(
+    body: RequestAssessmentInput,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     if user.status != 'active':
         raise HTTPException(403, 'Tài khoản không hoạt động.')
     _enforce_ai_rate_limit(user)
+
+    # Canonical DB binding: fetch the true voucher from PostgreSQL under checker
+    # scope so forged client inputs cannot change the assessed voucher.
+    payload = body.model_dump()
+    canonical_bound = False
+    request_version = 1
+
+    rid = None
+    try:
+        rid = uuid.UUID(body.request_id.strip())
+    except (ValueError, TypeError, AttributeError):
+        pass
+
+    if rid is not None:
+        inv_req = (
+            await db.execute(select(InventoryRequest).where(InventoryRequest.id == rid))
+        ).scalars().first()
+        if inv_req is not None:
+            # Query line totals and maker identity from authoritative DB
+            sums = (
+                await db.execute(
+                    select(func.coalesce(func.sum(InventoryRequestLine.quantity), 0))
+                    .where(InventoryRequestLine.request_id == inv_req.id)
+                )
+            ).scalar() or 0
+            maker_user = (
+                await db.execute(select(User).where(User.id == inv_req.maker_id))
+            ).scalars().first()
+            maker_name = maker_user.username if maker_user else "Maker"
+            payload = {
+                "request_id": str(inv_req.id),
+                "kind": inv_req.kind,
+                "amount_or_qty": str(sums),
+                "maker": maker_name,
+                "reason": inv_req.reason or "",
+                "context": {
+                    "request_version": inv_req.version,
+                    "status": inv_req.status,
+                    "sub_kind": inv_req.sub_kind,
+                },
+            }
+            canonical_bound = True
+            request_version = inv_req.version
+        else:
+            cash_req = (
+                await db.execute(select(CashRequest).where(CashRequest.id == rid))
+            ).scalars().first()
+            if cash_req is not None:
+                maker_user = (
+                    await db.execute(select(User).where(User.id == cash_req.maker_id))
+                ).scalars().first()
+                maker_name = maker_user.username if maker_user else "Maker"
+                payload = {
+                    "request_id": str(cash_req.id),
+                    "kind": "cash",
+                    "amount_or_qty": str(cash_req.amount),
+                    "maker": maker_name,
+                    "reason": cash_req.reason or "",
+                    "context": {
+                        "request_version": cash_req.version,
+                        "status": cash_req.status,
+                    },
+                }
+                canonical_bound = True
+                request_version = cash_req.version
+
+    if not canonical_bound and settings.app_env in ("production", "prod"):
+        raise HTTPException(404, f"Không tìm thấy phiếu '{body.request_id}' trong hệ thống.")
+
     async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
-        return await assess_request(body.model_dump(), settings, client)
+        result = await assess_request(payload, settings, client)
+        result["canonical_bound"] = canonical_bound
+        result["request_version"] = request_version
+        result["assessed_by"] = user.username
+        return result
 
 
 def _enforce_ai_rate_limit(user: User) -> None:
