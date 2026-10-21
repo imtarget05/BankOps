@@ -116,19 +116,6 @@ jobs:
           out = Path(os.environ["RUNNER_TEMP"]) / "s11-evidence" / "dag-run.json"
           out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
           print(out.read_text(encoding="utf-8"))
-          dag = dag_module.dag
-          payload = {
-              "dag_id": dag.dag_id,
-              "tasks": sorted(dag.task_ids),
-              "task_count": len(dag.task_ids),
-              "catchup": dag.catchup,
-              "max_active_runs": dag.max_active_runs,
-              "schedule": str(dag.schedule),
-              "sha": os.environ.get("GITHUB_SHA", ""),
-          }
-          out = Path(os.environ["RUNNER_TEMP"]) / "s11-evidence" / "dag-run.json"
-          out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          print(out.read_text(encoding="utf-8"))
           PY
 
       - name: Install dependencies
