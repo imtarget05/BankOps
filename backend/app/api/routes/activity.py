@@ -9,7 +9,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.auth import get_current_user
 from app.api.routes.auth_utils import require_any_capability
 from app.config import settings
 from app.database import get_db
@@ -137,7 +136,7 @@ async def _serialize_activity(db: AsyncSession, cursor: str | None = None) -> di
 
 @router.get("/activity")
 async def get_activity_root(
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_any_capability("activity:view", "audit:view")),
     db: AsyncSession = Depends(get_db),
     cursor: str | None = Query(default=None),
 ):
@@ -147,7 +146,7 @@ async def get_activity_root(
 
 @router.get("/activity/")
 async def get_activity_feed(
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_any_capability("activity:view", "audit:view")),
     db: AsyncSession = Depends(get_db),
     cursor: str | None = Query(default=None),
 ):
@@ -181,7 +180,7 @@ async def events_stream(
 
 @router.get("/activity/stream")
 async def event_stream_alias(
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_any_capability("activity:view", "audit:view")),
     db: AsyncSession = Depends(get_db),
     cursor: str | None = Query(default=None),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),

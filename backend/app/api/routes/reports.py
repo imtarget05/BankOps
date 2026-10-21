@@ -9,9 +9,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.auth_utils import require_any_capability
+from app.api.routes.auth_utils import (
+    get_accessible_cashbox_ids,
+    get_accessible_location_ids,
+    require_any_capability,
+)
 from app.database import get_db
-from app.models.cash_sim import CashEntry, CashJournal
+from app.models.cash_sim import CashEntry, CashJournal, CashRequest
 from app.models.inventory import Balance, InventoryRequest, Item, Movement
 
 router = APIRouter()
@@ -72,6 +76,9 @@ async def inventory_daily(
         stmt = stmt.where(Movement.posted_at >= df)
     if dt:
         stmt = stmt.where(Movement.posted_at <= dt)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Movement.location_id.in_(allowed_location_ids))
     moves = (await db.execute(stmt)).scalars().all()
     buckets: dict[str, dict] = {}
     for m in moves:
@@ -270,8 +277,11 @@ async def inventory_summary(
     items = {str(i.id): i for i in (await db.execute(select(Item).where(Item.active.is_(True)))).scalars().all()}
 
     stmt = select(Movement)
-    if location_id:
-        stmt = stmt.where(Movement.location_id == location_id)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if location_id is not None:
+        allowed_location_ids = {str(location_id)}
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Movement.location_id.in_(allowed_location_ids))
     if df:
         stmt = stmt.where(Movement.posted_at >= df)
     if dt:
@@ -323,8 +333,10 @@ async def inventory_summary(
                 st["sale_cost"] += cost
 
     bal_stmt = select(Balance)
-    if location_id:
-        bal_stmt = bal_stmt.where(Balance.location_id == location_id)
+    if location_id is not None:
+        allowed_location_ids = {str(location_id)}
+    if allowed_location_ids is not None:
+        bal_stmt = bal_stmt.where(Balance.location_id.in_(allowed_location_ids))
     bals = (await db.execute(bal_stmt)).scalars().all()
     closing_map = defaultdict(lambda: Decimal("0"))
     for b in bals:
@@ -389,6 +401,9 @@ async def consumption_top(
     df, dt = _parse_date(date_from, "date_from"), _parse_date(date_to, "date_to")
     used: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     st_stmt = select(Stocktake)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        st_stmt = st_stmt.where(Stocktake.location_id.in_(allowed_location_ids))
     if df:
         st_stmt = st_stmt.where(Stocktake.created_at >= df)
     if dt:
@@ -407,6 +422,9 @@ async def consumption_top(
         for item_id, total in lines:
             used[str(item_id)] += Decimal(str(total or 0))
     move_stmt = select(Movement).where(Movement.quantity_signed < 0)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        move_stmt = move_stmt.where(Movement.location_id.in_(allowed_location_ids))
     if df:
         move_stmt = move_stmt.where(Movement.posted_at >= df)
     if dt:
@@ -451,6 +469,9 @@ async def shift_history(
         stmt = stmt.where(Stocktake.created_at >= df)
     if dt:
         stmt = stmt.where(Stocktake.created_at <= dt)
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(Stocktake.location_id.in_(allowed_location_ids))
     if shift_code:
         stmt = stmt.where(Stocktake.shift_code == shift_code)
     shifts = (await db.execute(stmt.order_by(Stocktake.business_date.desc(), Stocktake.created_at.desc()))).scalars().all()
@@ -496,6 +517,14 @@ async def cashflow_daily(
         stmt = stmt.where(CashJournal.posted_at >= df)
     if dt:
         stmt = stmt.where(CashJournal.posted_at <= dt)
+    allowed_cashbox_ids = await get_accessible_cashbox_ids(db, current_user)
+    if allowed_cashbox_ids is not None:
+        allowed_requests = (
+            await db.execute(
+                select(CashRequest.id).where(CashRequest.cashbox_id.in_(allowed_cashbox_ids))
+            )
+        ).scalars().all()
+        stmt = stmt.where(CashJournal.request_id.in_(allowed_requests))
     journals = (await db.execute(stmt)).scalars().all()
     buckets: dict[str, dict] = {}
     for j in journals:
@@ -575,17 +604,19 @@ async def stagnation(
     from datetime import date
     from decimal import Decimal
 
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
     balances = (await db.execute(select(Balance))).scalars().all()
+    if allowed_location_ids is not None:
+        balances = [b for b in balances if b.location_id in allowed_location_ids]
     items = {
         str(i.id): i for i in (await db.execute(select(Item))).scalars().all()
     }
     # Lần issue gần nhất theo (item): max posted_at của movement âm.
     last_issue: dict[str, date] = {}
-    moves = (
-        await db.execute(
-            select(Movement).where(Movement.quantity_signed < 0)
-        )
-    ).scalars().all()
+    moves_stmt = select(Movement).where(Movement.quantity_signed < 0)
+    if allowed_location_ids is not None:
+        moves_stmt = moves_stmt.where(Movement.location_id.in_(allowed_location_ids))
+    moves = (await db.execute(moves_stmt)).scalars().all()
     for m in moves:
         if not m.posted_at:
             continue

@@ -229,7 +229,7 @@ def _module_bound_names(tree: ast.AST) -> set[str]:
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     names.add(target.id)
-        elif isinstance(node, (ast.With, ast.AsyncWith)):
+        elif isinstance(node, ast.With | ast.AsyncWith):
             for item in node.items:
                 optional_vars = item.optional_vars
                 if isinstance(optional_vars, ast.Name):

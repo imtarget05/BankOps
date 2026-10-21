@@ -20,7 +20,10 @@ from app.api.pagination import (
     decode_cursor,
     encode_cursor,
 )
-from app.api.routes.auth_utils import require_any_capability
+from app.api.routes.auth_utils import (
+    get_accessible_location_ids,
+    require_any_capability,
+)
 from app.database import get_db
 from app.models.cash_sim import CashEntry, CashJournal
 from app.models.inventory import Balance, Movement
@@ -83,12 +86,19 @@ async def run_reconciliation(
                     }
                 )
     else:
-        moves = (await db.execute(select(Movement))).scalars().all()
+        allowed_location_ids = await get_accessible_location_ids(db, user)
+        moves_stmt = select(Movement)
+        if allowed_location_ids is not None:
+            moves_stmt = moves_stmt.where(Movement.location_id.in_(allowed_location_ids))
+        moves = (await db.execute(moves_stmt)).scalars().all()
         sums: dict[tuple, float] = {}
         for m in moves:
             k = (str(m.location_id), str(m.item_id))
             sums[k] = sums.get(k, 0.0) + float(m.quantity_signed)
-        bals = (await db.execute(select(Balance))).scalars().all()
+        bals_stmt = select(Balance)
+        if allowed_location_ids is not None:
+            bals_stmt = bals_stmt.where(Balance.location_id.in_(allowed_location_ids))
+        bals = (await db.execute(bals_stmt)).scalars().all()
         bal_map = {(str(b.location_id), str(b.item_id)): float(b.quantity) for b in bals}
         for k in sums.keys() | bal_map.keys():
             expected = sums.get(k, 0.0)
