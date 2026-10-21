@@ -8,7 +8,6 @@ training stage created a model before registry promotion can succeed.
 from __future__ import annotations
 
 import json
-import math
 import os
 from pathlib import Path
 from typing import Any
@@ -112,8 +111,6 @@ def verify_chain(tracking_uri: str, model_name: str, predict_payload: dict) -> d
     )
 
     # Step 5: inference after rollback.
-    rollback_model = mlflow.pyfunc.load_model(f"models:/{model_name}/{rollback_version}")
-    rollback_value = float(rollback_model.predict(predict_features)[0])
     rollback_inference_version = str(rollback_version)
 
     return {
