@@ -108,6 +108,11 @@ class Settings(BaseSettings):
     server_reload: bool = Field(default=True)
 
     connector_secret_ref: str = Field(default="")
+    redis_url: str = Field(
+        default_factory=lambda: os.environ.get("REDIS_URL")
+        or _env_vals.get("REDIS_URL")
+        or ""
+    )
     sse_retention_days: int = Field(default=7)
     staging_ttl_hours: int = Field(default=24)
     sheets_timeout_seconds: int = Field(default=15)

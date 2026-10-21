@@ -350,8 +350,12 @@ async def get_dashboard_summary(
                 "detail": r.reason or f"Phiếu quỹ {r.kind}",
             })
 
-    # 10. Reconciliations (if user can view)
+    # 10. Reconciliations (if user can view) — B2 scoped exception counters.
     reconciliations_out = []
+    total_exceptions = 0
+    open_exceptions = 0
+    cash_exceptions = 0
+    inventory_exceptions = 0
     if can_reconcile:
         runs = (
             await db.execute(
@@ -361,24 +365,47 @@ async def get_dashboard_summary(
             )
         ).scalars().all()
         for r in runs:
-            excs = (
-                await db.execute(
-                    select(ReconciliationException).where(ReconciliationException.run_id == r.id)
+            # B2 — filter exceptions by the caller's accessible scope so a
+            # branch-limited user never sees exception counts outside their
+            # cashboxes / locations.  Admin (allowed_*_ids is None) sees all.
+            exc_stmt = select(ReconciliationException).where(
+                ReconciliationException.run_id == r.id
+            )
+            if r.scope == "cash" and allowed_cashbox_ids is not None:
+                exc_stmt = exc_stmt.where(
+                    ReconciliationException.cashbox_id.in_(allowed_cashbox_ids)
                 )
-            ).scalars().all()
+            elif r.scope == "inventory" and allowed_location_ids is not None:
+                exc_stmt = exc_stmt.where(
+                    ReconciliationException.location_id.in_(allowed_location_ids)
+                )
+            excs = (await db.execute(exc_stmt)).scalars().all()
+
+            run_exceptions = [
+                {
+                    "subject": e.subject,
+                    "expected": e.expected_json,
+                    "actual": e.actual_json,
+                }
+                for e in excs
+            ]
+            run_exc_count = len(run_exceptions)
+            run_open = sum(1 for e in excs if not e.resolved)
+            total_exceptions += run_exc_count
+            open_exceptions += run_open
+            if r.scope == "cash":
+                cash_exceptions += run_exc_count
+            else:
+                inventory_exceptions += run_exc_count
+
             reconciliations_out.append({
                 "id": str(r.id),
                 "scope": r.scope,
                 "status": r.status,
                 "auto_fixed": r.auto_fixed,
-                "exceptions": [
-                    {
-                        "subject": e.subject,
-                        "expected": e.expected_json,
-                        "actual": e.actual_json,
-                    }
-                    for e in excs
-                ],
+                "exception_count": run_exc_count,
+                "open_exception_count": run_open,
+                "exceptions": run_exceptions,
             })
 
     return {
@@ -392,4 +419,10 @@ async def get_dashboard_summary(
         "cashboxes": cashboxes_out,
         "low_stock_alerts": low_stock_out,
         "reconciliations": reconciliations_out,
+        "reconciliation_counters": {
+            "total_exceptions": total_exceptions,
+            "open_exceptions": open_exceptions,
+            "cash_exceptions": cash_exceptions,
+            "inventory_exceptions": inventory_exceptions,
+        },
     }

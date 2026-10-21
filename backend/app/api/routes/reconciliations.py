@@ -85,6 +85,18 @@ async def run_reconciliation(
                 )
             )
         journals = (await db.execute(journals_stmt)).scalars().all()
+        # Look up cashbox_id per journal (request -> cashbox).
+        cashbox_by_journal: dict[str, uuid.UUID] = {}
+        if journals:
+            journal_ids = [str(j.id) for j in journals]
+            req_rows = (
+                await db.execute(
+                    select(CashJournal.id, CashRequest.cashbox_id).join(
+                        CashRequest, CashJournal.request_id == CashRequest.id
+                    ).where(CashJournal.id.in_(journal_ids))
+                )
+            ).all()
+            cashbox_by_journal = {str(jid): cbid for jid, cbid in req_rows}
         for j in journals:
             entries = (
                 await db.execute(select(CashEntry).where(CashEntry.journal_id == j.id))
@@ -97,6 +109,7 @@ async def run_reconciliation(
                         "subject": f"journal:{j.id}",
                         "expected": {"debit": dr, "credit": dr},
                         "actual": {"debit": dr, "credit": cr},
+                        "_cashbox_id": cashbox_by_journal.get(str(j.id)),
                     }
                 )
     else:
@@ -123,14 +136,20 @@ async def run_reconciliation(
                         "subject": f"balance:{k[0]}:{k[1]}",
                         "expected": {"quantity": expected},
                         "actual": {"quantity": actual},
+                        "_location_id": k[0],
                     }
                 )
 
     for e in exceptions:
         db.add(
             ReconciliationException(
-                id=uuid.uuid4(), run_id=run.id, subject=e["subject"],
-                expected_json=e["expected"], actual_json=e["actual"],
+                id=uuid.uuid4(),
+                run_id=run.id,
+                subject=e["subject"],
+                expected_json=e["expected"],
+                actual_json=e["actual"],
+                cashbox_id=e.get("_cashbox_id"),
+                location_id=e.get("_location_id"),
             )
         )
     run.status = "exception" if exceptions else "matched"

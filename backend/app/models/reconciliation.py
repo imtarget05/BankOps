@@ -30,3 +30,16 @@ class ReconciliationException(Base):
     actual_json: dict = Column(JSON, nullable=False)
     expected_amount = Column(Numeric(20, 3), nullable=True)
     actual_amount = Column(Numeric(20, 3), nullable=True)
+    # B2 follow-up — authorization scope columns so the dashboard can filter
+    # exception counters by the caller's accessible cashboxes / locations.
+    cashbox_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("cash_boxes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    location_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("inv_locations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved: bool = Column(Boolean, nullable=False, default=False)
