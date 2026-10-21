@@ -47,10 +47,8 @@ COPY --from=builder /usr/local /usr/local
 COPY app/ app/
 COPY Dockerfile.serving .
 
-# Create writable data directories and symlink mlruns and artifacts to writable volumes
-RUN mkdir -p /data/mlruns /tmp /home/appuser \
-    && ln -sf /data/mlruns /app/mlruns \
-    && ln -sf /tmp /app/artifacts \
+# Create writable data directories owned by non-root user
+RUN mkdir -p /data /tmp /home/appuser \
     && chown -R 1000:1000 /app /data /home/appuser
 
 # Switch to non-root user

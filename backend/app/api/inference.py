@@ -25,6 +25,22 @@ logger = logging.getLogger("model-serving")
 
 # MLflow configuration
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///./mlflow.db")
+MLFLOW_ARTIFACT_ROOT = os.getenv(
+    "MLFLOW_ARTIFACT_ROOT",
+    "/data/mlruns" if os.path.exists("/data") else "./mlruns",
+)
+
+# Ensure writable directories exist for container runtime
+for d in (MLFLOW_ARTIFACT_ROOT, "/data", "/tmp/artifacts"):
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+
+os.environ["_MLFLOW_SERVER_ARTIFACT_ROOT"] = MLFLOW_ARTIFACT_ROOT
+os.environ["MLFLOW_REGISTRY_DIR"] = MLFLOW_ARTIFACT_ROOT
+os.environ["MLFLOW_ARTIFACT_ROOT"] = MLFLOW_ARTIFACT_ROOT
+
 MODEL_NAME = "DemandForecastModel"
 # When the registry holds no Production model the service can train, register
 # and promote a baseline model itself (a real MLflow run, no mock). Set
