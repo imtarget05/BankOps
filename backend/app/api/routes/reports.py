@@ -3,6 +3,7 @@
 Mọi endpoint là read-only trên ledger/movement đã post: không tạo write,
 không đổi số dư. Decimal giữ dạng string tới client để không mất chính xác.
 """
+import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
@@ -46,6 +47,27 @@ def _parse_date(raw: str | None, field: str) -> datetime | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt
+
+
+def _narrow_to_location(
+    allowed_location_ids: set[uuid.UUID] | None, location_id: str
+) -> set[uuid.UUID] | None:
+    """Thu hẹp phạm vi location theo tham số truy vấn, KHÔNG bao giờ mở rộng.
+
+    - Admin (``allowed_location_ids is None``) xem được mọi location, nên
+      tham số ``location_id`` chỉ lọc kết quả.
+    - User thường bị giới hạn bởi scope: ``location_id`` phải nằm trong scope,
+      nếu không thì phạm vi rỗng => không thấy dữ liệu nào.
+    """
+    try:
+        requested = uuid.UUID(str(location_id))
+    except (ValueError, AttributeError, TypeError):
+        # `location_id` sai định dạng: coi như không khớp location nào.
+        return set()
+
+    if allowed_location_ids is None:
+        return {requested}
+    return allowed_location_ids & {requested}
 
 
 def _severity(days: int | None, watch: int, stagnant: int, critical: int) -> str:
@@ -279,7 +301,9 @@ async def inventory_summary(
     stmt = select(Movement)
     allowed_location_ids = await get_accessible_location_ids(db, current_user)
     if location_id is not None:
-        allowed_location_ids = {str(location_id)}
+        # `location_id` chỉ THU HẸP phạm vi, không được MỞ RỘNG quyền: user
+        # chỉ xem được location nằm trong scope của mình.
+        allowed_location_ids = _narrow_to_location(allowed_location_ids, location_id)
     if allowed_location_ids is not None:
         stmt = stmt.where(Movement.location_id.in_(allowed_location_ids))
     if df:
@@ -334,7 +358,7 @@ async def inventory_summary(
 
     bal_stmt = select(Balance)
     if location_id is not None:
-        allowed_location_ids = {str(location_id)}
+        allowed_location_ids = _narrow_to_location(allowed_location_ids, location_id)
     if allowed_location_ids is not None:
         bal_stmt = bal_stmt.where(Balance.location_id.in_(allowed_location_ids))
     bals = (await db.execute(bal_stmt)).scalars().all()
