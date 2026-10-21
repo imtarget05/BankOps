@@ -20,7 +20,10 @@ metadata:
 type: Opaque
 stringData:
   # These would be populated from external secret store in production
-  MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
+  # Root filesystem của container là read-only → tracking URI + artifact root
+  # phải trỏ vào emptyDir /data (mỗi pod có DB riêng, tránh SQLite lock contention).
+  MLFLOW_TRACKING_URI: "sqlite:////data/mlflow.db"
+  MLFLOW_ARTIFACT_ROOT: "/data/mlruns"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -40,18 +43,31 @@ metadata:
     app: model-serving
     version: "1.0.0"
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: model-serving
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: model-serving
     spec:
       restartPolicy: Always
+      # Pod-level security context — numeric UID:GID khớp với image (USER 1000:1000)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Để pod tắt graceful trong rolling update (drain traffic rồi mới kill)
+      terminationGracePeriodSeconds: 30
       containers:
         - name: inference
           image: ghcr.io/imtarget05/quanlykho/model-serving:latest
@@ -63,6 +79,15 @@ spec:
                 name: mlflow-credentials
             - configMapRef:
                 name: model-serving-config
+          # Root filesystem là read-only → các path ghi được (MLflow DB, artifact, tmp, home)
+          # nằm trên emptyDir mount riêng cho từng pod.
+          volumeMounts:
+            - name: model-artifact
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: home
+              mountPath: /home/appuser
           resources:
             limits:
               cpu: "500m"
@@ -75,9 +100,9 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 20
+            initialDelaySeconds: 30
             periodSeconds: 30
-            timeoutSeconds: 3
+            timeoutSeconds: 10
             failureThreshold: 3
           # Readiness probe - kiểm tra sẵn sàng phục vụ traffic
           # Thiết kế: delay moderate, tolerance cao để tránh đánh đánh nhầm pod mới
@@ -85,20 +110,21 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 8
+            timeoutSeconds: 10
+            failureThreshold: 6
           # Startup probe - chờ app khởi động xong (tránh premature readiness)
-          # Cấu hình nhẹ: cho phép app khởi động trong 30s
+          # /health lazy train + register model MLflow ở lần gọi đầu (10-60s)
+          # → budget rộng để không kill container giữa lúc bootstrap
           startupProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 2
-            timeoutSeconds: 3
-            failureThreshold: 15
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 60
+            failureThreshold: 30
           # Security context
           securityContext:
             runAsNonRoot: true
@@ -108,8 +134,13 @@ spec:
               drop:
                 - ALL
       # Volumes - model artifact được volume temporary
+      # Mỗi pod có emptyDir riêng → mỗi pod một mlflow.db, không lock contention.
       volumes:
         - name: model-artifact
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: home
           emptyDir: {}
 ---
 apiVersion: v1

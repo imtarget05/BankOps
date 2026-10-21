@@ -48,7 +48,9 @@ COPY app/ app/
 COPY Dockerfile.serving .
 
 # Switch to non-root user
-USER appuser
+# Dùng numeric UID:GID (1000:1000) — kubelet chỉ verify được non-root khi
+# image khai báo user dạng số, không verify được user name ("appuser").
+USER 1000:1000
 
 # Environment variables
 ENV MLFLOW_TRACKING_URI="sqlite:///./mlflow.db"
@@ -57,8 +59,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Runtime stage không cài curl → dùng Python stdlib (urllib) để không cần package thêm.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)" || exit 1
 
 # Expose port
 EXPOSE 8000

@@ -42,6 +42,7 @@ jobs:
         run: |
           docker build \
             -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            -t "${{ env.IMAGE_NAME }}:latest" \
             -f Dockerfile.serving \
             .
           docker inspect --format='image_id={{.Id}} digest={{.RepoDigests}}' "${{ env.IMAGE_NAME }}:${{ github.sha }}" | tee "$RUNNER_TEMP/s11-evidence/image-digest.txt"
@@ -52,6 +53,7 @@ jobs:
         run: |
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker push "${{ env.IMAGE_NAME }}:latest"
           docker inspect --format='{{json .RepoDigests}}' "${{ env.IMAGE_NAME }}:${{ github.sha }}" | tee -a "$RUNNER_TEMP/s11-evidence/image-digest.txt"
 
       - name: Install kind
@@ -68,6 +70,7 @@ jobs:
       - name: Load image into kind
         run: |
           kind load docker-image "${{ env.IMAGE_NAME }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER_NAME }}"
+          kind load docker-image "${{ env.IMAGE_NAME }}:latest" --name "${{ env.KIND_CLUSTER_NAME }}"
 
       - name: Apply K8s manifests
         working-directory: backend
@@ -125,31 +128,52 @@ jobs:
         run: |
           kubectl get pods -n ml-serving -l app=model-serving -o wide
 
-      - name: Test Readiness Probe
+      - name: Assert 2/2 Rollout, Zero Restarts, and Scaled Old RS
         working-directory: backend
         run: |
-          kubectl wait --for=condition=ready pod -l app=model-serving -n ml-serving --timeout=60s
+          set -euo pipefail
+          echo "=== 1. Assert Updated Replicas (2/2) ==="
+          UPDATED=$(kubectl -n ml-serving get deployment model-serving -o jsonpath='{.status.updatedReplicas}')
+          echo "Updated replicas: $UPDATED"
+          [ "$UPDATED" -eq 2 ]
+
+          echo "=== 2. Assert Available Replicas (2/2) ==="
+          AVAILABLE=$(kubectl -n ml-serving get deployment model-serving -o jsonpath='{.status.availableReplicas}')
+          echo "Available replicas: $AVAILABLE"
+          [ "$AVAILABLE" -eq 2 ]
+
+          echo "=== 3. Assert Old ReplicaSets Scaled to 0 ==="
+          CURRENT_REV=$(kubectl -n ml-serving get deployment model-serving -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
+          echo "Current deployment revision: $CURRENT_REV"
+          OLD_RS_REPLICAS=$(kubectl -n ml-serving get rs -l app=model-serving -o json | jq '[.items[] | select(.metadata.annotations["deployment.kubernetes.io/revision"] != "'"$CURRENT_REV"'") | .status.replicas // 0] | add // 0')
+          echo "Replicas in old ReplicaSets: $OLD_RS_REPLICAS"
+          [ "$OLD_RS_REPLICAS" -eq 0 ]
+
+          echo "=== 4. Assert 0 Container Restarts ==="
+          RESTARTS=$(kubectl -n ml-serving get pods -l app=model-serving -o jsonpath='{range .items[*].status.containerStatuses[*]}{.restartCount}{" "}{end}')
+          echo "Pod restart counts: $RESTARTS"
+          TOTAL_RESTARTS=$(kubectl -n ml-serving get pods -l app=model-serving -o jsonpath='{range .items[*].status.containerStatuses[*]}{.restartCount}{"+"}{end}0' | bc)
+          echo "Total container restarts: $TOTAL_RESTARTS"
+          [ "$TOTAL_RESTARTS" -eq 0 ]
+
+          echo "=== 5. Assert /health Healthy Across All Pods ==="
+          for POD_NAME in $(kubectl -n ml-serving get pods -l app=model-serving -o jsonpath='{.items[*].metadata.name}'); do
+            echo "Checking health for $POD_NAME..."
+            kubectl -n ml-serving port-forward "pod/$POD_NAME" 8080:8000 &
+            PF_PID=$!
+            sleep 4
+            RESP=$(curl -sf http://localhost:8080/health || echo '{"status":"failed"}')
+            kill $PF_PID 2>/dev/null || true
+            echo "$POD_NAME response: $RESP"
+            echo "$RESP" | grep -q '"status":"healthy"'
+          done
+          echo "=== S9 GATE CRITERIA FULLY VERIFIED ==="
+
+      - name: Verify Service ClusterIP Connectivity
+        working-directory: backend
+        run: |
           SERVICE_IP=$(kubectl get svc model-serving -n ml-serving -o jsonpath='{.spec.clusterIP}')
           echo "Service ClusterIP: $SERVICE_IP"
-          for i in $(seq 1 12); do
-            STATUS=$(kubectl get pod -l app=model-serving -n ml-serving -o jsonpath='{.items[0].status.phase}')
-            if [ "$STATUS" = "Running" ]; then
-              echo "Pod is Running after $i seconds"
-              break
-            fi
-            echo "Waiting... ($i/12)"
-            sleep 5
-          done
-
-      - name: Test Liveness Probe
-        working-directory: backend
-        run: |
-          POD_NAME=$(kubectl get pods -n ml-serving -l app=model-serving -o jsonpath='{.items[0].metadata.name}')
-          kubectl port-forward pod/$POD_NAME 8000:8000 -n ml-serving &
-          PORT_FORWARD_PID=$!
-          sleep 3
-          curl -f http://localhost:8000/health && echo "Liveness probe PASSED" || echo "Liveness probe FAILED"
-          kill $PORT_FORWARD_PID 2>/dev/null
 
       - name: Verify HPA configuration
         working-directory: backend
@@ -192,10 +216,22 @@ jobs:
           retention-days: 7
 
       - name: Announce CLOUD_CI_KIND_VERIFIED
-        if: always()
+        if: success()
         run: |
           echo "========================================"
-          echo "S9 KIND CLOUD CI COMPLETED"
+          echo "S9 KIND CLOUD CI VERIFIED"
+          echo "Job: ${{ github.run_id }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "Cluster: ${{ env.KIND_CLUSTER_NAME }}"
+          echo "Status: ${{ job.status }}"
+          echo "========================================"
+
+      - name: Announce CLOUD_CI_KIND_FAILED
+        if: failure()
+        run: |
+          echo "========================================"
+          echo "S9 KIND CLOUD CI FAILED"
           echo "Job: ${{ github.run_id }}"
           echo "SHA: ${{ github.sha }}"
           echo "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
@@ -205,5 +241,6 @@ jobs:
 
       - name: Export gate result
         id: gate-result
+        if: success()
         run: |
           echo "gate=cloud_ci_kind_verified" >> $GITHUB_OUTPUT
