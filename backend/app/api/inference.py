@@ -24,14 +24,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("model-serving")
 
 # MLflow configuration
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///./mlflow.db")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:////data/mlflow.db")
 MLFLOW_ARTIFACT_ROOT = os.getenv(
     "MLFLOW_ARTIFACT_ROOT",
     "/data/mlruns" if os.path.exists("/data") else "./mlruns",
 )
 
 # Ensure writable directories exist for container runtime
-for d in (MLFLOW_ARTIFACT_ROOT, "/data", "/tmp/artifacts"):
+for d in (MLFLOW_ARTIFACT_ROOT, "/data", "/app/mlruns", "/tmp/artifacts"):
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:
@@ -40,6 +40,11 @@ for d in (MLFLOW_ARTIFACT_ROOT, "/data", "/tmp/artifacts"):
 os.environ["_MLFLOW_SERVER_ARTIFACT_ROOT"] = MLFLOW_ARTIFACT_ROOT
 os.environ["MLFLOW_REGISTRY_DIR"] = MLFLOW_ARTIFACT_ROOT
 os.environ["MLFLOW_ARTIFACT_ROOT"] = MLFLOW_ARTIFACT_ROOT
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+try:
+    mlflow.set_registry_uri(MLFLOW_TRACKING_URI)
+except Exception:
+    pass
 
 MODEL_NAME = "DemandForecastModel"
 # When the registry holds no Production model the service can train, register

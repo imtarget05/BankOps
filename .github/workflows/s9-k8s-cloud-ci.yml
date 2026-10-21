@@ -180,7 +180,11 @@ jobs:
             kill -9 $PF_PID 2>/dev/null || true
             sleep 1
             echo "$POD_NAME response: $RESP"
-            echo "$RESP" | grep -q '"status":"healthy"'
+            if ! echo "$RESP" | grep -q '"status":"healthy"'; then
+              echo "=== HEALTH CHECK FAILED FOR $POD_NAME — LOG DUMP ==="
+              kubectl -n ml-serving logs "$POD_NAME" --tail=100 || true
+              exit 1
+            fi
             PORT=$((PORT + 1))
           done
           echo "=== S9 GATE CRITERIA FULLY VERIFIED ==="

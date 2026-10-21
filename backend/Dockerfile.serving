@@ -57,7 +57,10 @@ RUN mkdir -p /data /tmp /home/appuser \
 USER 1000:1000
 
 # Environment variables
-ENV MLFLOW_TRACKING_URI="sqlite:///./mlflow.db"
+ENV MLFLOW_TRACKING_URI="sqlite:////data/mlflow.db"
+ENV MLFLOW_ARTIFACT_ROOT="/data/mlruns"
+ENV _MLFLOW_SERVER_ARTIFACT_ROOT="/data/mlruns"
+ENV MLFLOW_REGISTRY_DIR="/data/mlruns"
 ENV MODEL_NAME="DemandForecastModel"
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000

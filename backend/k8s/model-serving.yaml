@@ -24,7 +24,6 @@ stringData:
   # phải trỏ vào emptyDir /data (mỗi pod có DB riêng, tránh SQLite lock contention).
   MLFLOW_TRACKING_URI: "sqlite:////data/mlflow.db"
   MLFLOW_ARTIFACT_ROOT: "/data/mlruns"
-  _MLFLOW_SERVER_ARTIFACT_ROOT: "/data/mlruns"
   MLFLOW_REGISTRY_DIR: "/data/mlruns"
 ---
 apiVersion: v1
@@ -90,6 +89,8 @@ spec:
               mountPath: /tmp
             - name: home
               mountPath: /home/appuser
+            - name: mlruns
+              mountPath: /app/mlruns
           resources:
             limits:
               cpu: "500m"
@@ -143,6 +144,8 @@ spec:
         - name: tmp
           emptyDir: {}
         - name: home
+          emptyDir: {}
+        - name: mlruns
           emptyDir: {}
 ---
 apiVersion: v1
