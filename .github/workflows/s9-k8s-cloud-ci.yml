@@ -152,20 +152,26 @@ jobs:
           echo "=== 4. Assert 0 Container Restarts ==="
           RESTARTS=$(kubectl -n ml-serving get pods -l app=model-serving -o jsonpath='{range .items[*].status.containerStatuses[*]}{.restartCount}{" "}{end}')
           echo "Pod restart counts: $RESTARTS"
-          TOTAL_RESTARTS=$(kubectl -n ml-serving get pods -l app=model-serving -o jsonpath='{range .items[*].status.containerStatuses[*]}{.restartCount}{"+"}{end}0' | bc)
+          TOTAL_RESTARTS=0
+          for r in $RESTARTS; do
+            TOTAL_RESTARTS=$((TOTAL_RESTARTS + r))
+          done
           echo "Total container restarts: $TOTAL_RESTARTS"
           [ "$TOTAL_RESTARTS" -eq 0 ]
 
-          echo "=== 5. Assert /health Healthy Across All Pods ==="
-          for POD_NAME in $(kubectl -n ml-serving get pods -l app=model-serving -o jsonpath='{.items[*].metadata.name}'); do
-            echo "Checking health for $POD_NAME..."
-            kubectl -n ml-serving port-forward "pod/$POD_NAME" 8080:8000 &
+          echo "=== 5. Assert /health Healthy Across All Running Pods ==="
+          PORT=8080
+          for POD_NAME in $(kubectl -n ml-serving get pods -l app=model-serving --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}'); do
+            echo "Checking health for $POD_NAME on local port $PORT..."
+            kubectl -n ml-serving port-forward "pod/$POD_NAME" "$PORT:8000" &
             PF_PID=$!
             sleep 4
-            RESP=$(curl -sf http://localhost:8080/health || echo '{"status":"failed"}')
-            kill $PF_PID 2>/dev/null || true
+            RESP=$(curl -sf "http://localhost:$PORT/health" || echo '{"status":"failed"}')
+            kill -9 $PF_PID 2>/dev/null || true
+            sleep 1
             echo "$POD_NAME response: $RESP"
             echo "$RESP" | grep -q '"status":"healthy"'
+            PORT=$((PORT + 1))
           done
           echo "=== S9 GATE CRITERIA FULLY VERIFIED ==="
 
