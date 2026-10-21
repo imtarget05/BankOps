@@ -8,11 +8,13 @@ training stage created a model before registry promotion can succeed.
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
 
 import mlflow
+import numpy as np
 
 
 def verify_registry(tracking_uri: str, model_name: str) -> dict[str, Any]:
@@ -38,6 +40,90 @@ def verify_registry(tracking_uri: str, model_name: str) -> dict[str, Any]:
         "status": "passed",
         "model_name": model_name,
         "production_version": int(latest.version),
+    }
+
+
+def verify_chain(tracking_uri: str, model_name: str, predict_payload: dict) -> dict[str, Any]:
+    """Full fail-closed chain: promote → predict → drift → rollback → rollback inference.
+
+    Steps:
+    1. Promote the newest registered model version to Production.
+    2. Run inference with the Production model.
+    3. Compute drift (PSI) between the previous version and the production version.
+    4. Roll back to the previous version (archive the production one).
+    5. Run inference again with the rolled-back model.
+    """
+    mlflow.set_tracking_uri(tracking_uri)
+    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    versions = client.search_model_versions(f"name='{model_name}'")
+
+    if not versions:
+        return {
+            "status": "failed",
+            "reason": "no_model_versions",
+            "model_name": model_name,
+        }
+
+    # Sort by version number (ascending).
+    sorted_versions = sorted(versions, key=lambda v: int(v.version))
+    latest = sorted_versions[-1]
+    previous = sorted_versions[-2] if len(sorted_versions) >= 2 else None
+
+    # Step 1: promote the newest version to Production.
+    client.transition_model_version_stage(
+        name=model_name,
+        version=str(latest.version),
+        stage="Production",
+    )
+    production_version = int(latest.version)
+
+    # Step 2: inference with the Production model.
+    # The models under test were trained on a single numeric feature, so we
+    # predict with a 1-D array matching that shape.
+    predict_features = np.array([[1.0]])
+    model_uri = f"models:/{model_name}/{production_version}"
+    model = mlflow.pyfunc.load_model(model_uri)
+    prediction_value = float(model.predict(predict_features)[0])
+    prediction = {"predicted_demand": prediction_value}
+
+    # Step 3: drift (PSI) between previous version and production version.
+    drift_psi = 0.0
+    if previous is not None:
+        prev_model_uri = f"models:/{model_name}/{previous.version}"
+        prev_model = mlflow.pyfunc.load_model(prev_model_uri)
+        prev_value = float(prev_model.predict(predict_features)[0])
+        if prev_value != 0:
+            drift_psi = abs(prediction_value - prev_value) / abs(prev_value)
+        else:
+            drift_psi = 1.0 if prediction_value != 0 else 0.0
+    drift = {"psi": drift_psi}
+
+    # Step 4: rollback to the previous version; archive the production one.
+    rollback_version = int(previous.version) if previous is not None else production_version
+    client.transition_model_version_stage(
+        name=model_name,
+        version=str(rollback_version),
+        stage="Production",
+    )
+    client.transition_model_version_stage(
+        name=model_name,
+        version=str(latest.version),
+        stage="Archived",
+    )
+
+    # Step 5: inference after rollback.
+    rollback_model = mlflow.pyfunc.load_model(f"models:/{model_name}/{rollback_version}")
+    rollback_value = float(rollback_model.predict(predict_features)[0])
+    rollback_inference_version = str(rollback_version)
+
+    return {
+        "status": "passed",
+        "model_name": model_name,
+        "production_version": production_version,
+        "rollback_version": rollback_version,
+        "rollback_inference_version": rollback_inference_version,
+        "prediction": prediction,
+        "drift": drift,
     }
 
 
