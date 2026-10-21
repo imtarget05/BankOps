@@ -45,10 +45,7 @@ spec:
     matchLabels:
       app: model-serving
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   template:
     metadata:
       labels:
