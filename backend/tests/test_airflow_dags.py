@@ -1,10 +1,11 @@
 """S9/S11: Validate Airflow DAG Python syntax and structure.
 
 Tests verify that BankOps Airflow DAG Python files are syntactically valid
-and contain a `dag` object with tasks. These tests avoid Airflow runtime
-import issues by using compile() instead of importlib.
+and contain a `dag` assignment. These tests use ast.parse() to avoid
+Airflow runtime import issues.
 """
 
+import ast
 import pytest
 from pathlib import Path
 
@@ -13,16 +14,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DAGS_DIR = REPO_ROOT / "infra" / "airflow" / "dags"
 
 
-def _validate_dag_file(dag_file: Path) -> bool:
-    """Return True if the DAG file is valid Python with a `dag` object."""
+def _has_dag_assignment(dag_file: Path) -> bool:
+    """Return True if the DAG file has a `dag = ...` assignment."""
     try:
         source = dag_file.read_text(encoding="utf-8")
-        compile(source, str(dag_file), "exec")
-        # Check that 'dag' is defined in the module namespace
-        namespace = {}
-        exec(source, namespace)
-        return "dag" in namespace and namespace["dag"] is not None
-    except Exception:
+        tree = ast.parse(source)
+        # Look for: dag = DAG(...) or dag = ... assignments
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "dag":
+                        return True
+        return False
+    except SyntaxError:
         return False
 
 
@@ -33,7 +37,7 @@ for dag_file in sorted(DAGS_DIR.glob("*.py")):
     name = dag_file.stem
     exec(
         f"def test_{name}():\n"
-        "    \"\"\"Validate {dag_file.name}.\"\"\"\n"
-        "    valid = _validate_dag_file(dag_file)\n"
-        "    assert valid, f\"DAG file {dag_file.name} failed validation\"\n",
+        "    \"\"\"Validate {dag_file.name} has `dag` assignment.\"\"\"\n"
+        "    valid = _has_dag_assignment(dag_file)\n"
+        "    assert valid, f\"DAG file {dag_file.name} missing `dag` assignment\"\n",
     )
