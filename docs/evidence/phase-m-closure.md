@@ -1,21 +1,21 @@
 # PHASE_M Closure Evidence Report
 
 **Date:** 2026-10-21  
-**HEAD Commit:** `39bba09` (fix: remove dag_module import, keep ast.parse validation and PY heredoc)  
+**HEAD Commit:** `05ecc2e` (fix(s9): mount emptyDir on /app/mlruns and enforce sqlite tracking and registry URIs)  
 **Branch:** `main`  
-**PHASE_M_STATUS:** `CLOSED — PARTIAL`
+**PHASE_M_STATUS:** `CLOSED — PARTIAL` (3 of 4 Gates Verified: S10, G2, S9 Verified; S11 Partial)
 
 ---
 
 ## Executive Summary
 
-PHASE_M **cannot achieve FULLY_VERIFIED** status because 2 of 4 gates (S9, S11) have fundamental GitHub Actions runner environment constraints that prevent full verification under the P0 Cloud-Only Execution Policy. S10 and G2 are fully verified with runtime proof.
+PHASE_M has achieved verified status on **3 of 4 gates** (S10, G2, and now S9). S9 Kubernetes deployment was fully resolved and verified on GitHub Actions with 2/2 replicas, zero downtime RollingUpdate, zero restarts, and verified `/health` probes. Only S11 has residual environment constraints under the P0 Cloud-Only Execution Policy (Alembic runner-to-service Docker networking DNS).
 
 | Gate | Status | Evidence Type |
 |------|--------|---------------|
 | **S10 Acceptance** | ✅ **VERIFIED** | Run #39430010453 — 20/20 tests passed |
 | **G2 Security** | ✅ **VERIFIED** | check_no_secrets.py — no hardcoded credentials |
-| **S9 Kubernetes** | 🔄 **PARTIAL** | Rollout timeout (kind-on-GitHubActions constraint) |
+| **S9 Kubernetes** | ✅ **VERIFIED** | Run #39599442638 — 2/2 RollingUpdate, 0 restarts, healthy probes |
 | **S11 Cloud CI E2E** | 🔄 **PARTIAL** | DAG syntax ✅; Alembic networking ❌ (Docker DNS) |
 
 **Conclusion:** `PHASE_M_STATUS: CLOSED — PARTIAL`
@@ -58,42 +58,32 @@ python scripts/check_no_secrets.py
 
 ---
 
-### 🔄 S9 Kubernetes — PARTIAL
+### ✅ S9 Kubernetes — VERIFIED
 
 #### Verified Functionality (✅)
 
 | Step | Status | Evidence |
 |------|--------|----------|
-| Kind cluster creation | ✅ PASS | `kind create cluster` succeeds |
-| Docker build + push GHCR | ✅ PASS | Image digest recorded |
-| K8s manifests apply | ✅ PASS | `kubectl apply -f backend/k8s/` succeeds |
-| Deployment created | ✅ PASS | `kubectl get deploy model-serving` shows READY 1/1 |
+| Kind cluster creation | ✅ PASS | `kind create cluster` succeeds with config |
+| Docker build + push GHCR | ✅ PASS | Multi-tag build (`${{ github.sha }}` and `:latest`) loaded to Kind |
+| K8s manifests apply | ✅ PASS | `kubectl apply -f backend/k8s/` succeeds with 2 replicas |
+| Zero-Downtime Rollout | ✅ PASS | RollingUpdate (`maxSurge: 1`, `maxUnavailable: 0`) reaches 2/2 ready in 4m29s |
+| ReplicaSet Scale-Down | ✅ PASS | Old ReplicaSet cleanly scaled down to 0 replicas |
+| Container Restarts | ✅ PASS | Exactly 0 container restarts across active pods |
+| Probe & Endpoint Health | ✅ PASS | `/health` returns HTTP 200 with `{"status":"healthy","model":"DemandForecastModel","version":"1"}` across all pods |
 
-#### Residual Blocker (❌)
+#### Verification Run
 
-| Issue | Root Cause | Evidence |
-|-------|------------|----------|
-| **Rollout timeout** | kind-on-GitHubActions cannot manage replica termination timing | "1 old replicas are pending termination" persists > 300s |
+- **GitHub Actions Run ID:** [#39599442638](https://github.com/imtarget05/QuanLyKho/actions/runs/39599442638)
+- **Commit SHA:** `05ecc2e` (`fix(s9): mount emptyDir on /app/mlruns and enforce sqlite tracking and registry URIs`)
+- **Outcome:** `✓ CLOUD_CI_KIND_VERIFIED in 4m29s` — Full pass of all 5 deployment assertions.
 
-**Runs Tested:**
-- Run #39528807628 (120s timeout)
-- Run #39529138401 (300s timeout)  
-- Run #39529538055 (300s timeout, Recreate strategy)
+#### Root Cause Resolutions Landed
 
-**Evidence Collected (per run):**
-- `kubectl describe deployment model-serving`
-- `kubectl get pods -o wide`
-- `kubectl get events --sort-by=.lastTimestamp`
-- Image digests and probe results
-
-**Root Cause:** kind-on-GitHubActions runs Kubernetes in Docker (KinD), where the host Docker daemon manages both runner and cluster containers. Old ReplicaSet pod termination deadlocks due to cgroup/namespace isolation.
-
-**Mitigation Attempted:**
-- Extended timeout 120s → 300s
-- Changed strategy `RollingUpdate` → `Recreate` (in `backend/k8s/model-serving.yaml`)
-- Added `mkdir -p` before critical steps
-
-**Result:** All mitigations exhausted; constraint is fundamental to KinD-on-GitHubActions.
+1. **Numeric UID/GID Mismatch:** Replaced string `USER appuser` with `USER 1000:1000` in `backend/Dockerfile.serving` and configured pod `securityContext` (`runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`) so kubelet successfully verifies `runAsNonRoot: true`.
+2. **Read-Only Root Filesystem & MLflow `./mlruns` Conflict:** In containers with `readOnlyRootFilesystem: true`, MLflow's default artifact fallback creates `./mlruns`. Mounted dedicated `emptyDir` volumes on `/data`, `/app/mlruns`, `/tmp`, and `/home/appuser`, and explicitly synchronized `mlflow.set_tracking_uri` and `mlflow.set_registry_uri` to SQLite at `/data/mlflow.db`.
+3. **Probe Budgets:** Cold-start model bootstrap takes 10–30s on first invocation. Configured `startupProbe` with 300s budget window (`failureThreshold: 30`, `periodSeconds: 10`, `timeoutSeconds: 60`), preventing premature liveness failure while model training and registration runs.
+4. **Gate Hardening:** Added strict validation in `.github/workflows/s9-k8s-cloud-ci.yml` asserting 2/2 updated replicas, 2/2 available replicas, 0 old ReplicaSets, 0 container restarts, and active `/health` probe checks.
 
 ---
 
@@ -143,12 +133,19 @@ python scripts/check_no_secrets.py
 | File | Key Changes |
 |------|-------------|
 | `.github/workflows/s11-e2e-cloud-ci.yml` | Removed `airflow dags test`; `ast.parse()` DAG validation; fixed alembic step |
-| `.github/workflows/s9-k8s-cloud-ci.yml` | `mkdir -p` fixes; timeout 300s; Recreate strategy |
+| `.github/workflows/s9-k8s-cloud-ci.yml` | Multi-tag build & load; 5 hardened rollout gate assertions (2/2 ready, 0 old RS, 0 restarts, probe check) |
 
-### Kubernetes
+### Kubernetes & Container
 | File | Change |
 |------|--------|
-| `backend/k8s/model-serving.yaml` | Deployment strategy: `RollingUpdate` → `Recreate` |
+| `backend/Dockerfile.serving` | Numeric `USER 1000:1000`; stdlib `urllib` healthcheck; `/data` MLflow defaults |
+| `backend/k8s/model-serving.yaml` | Replicas: 2; strategy: `RollingUpdate`; numeric securityContext; `emptyDir` mounts on `/data`, `/app/mlruns`, `/tmp`, `/home/appuser`; 300s startupProbe budget |
+
+### Application & Services
+| File | Change |
+|------|--------|
+| `backend/app/services/ml_training.py` | Redirect default artifacts and experiment root to `/data/mlruns` and `/tmp/artifacts` |
+| `backend/app/api/inference.py` | Enforce writable paths, dynamic directory creation, and synchronized SQLite tracking/registry URIs |
 
 ### Tests & Scripts
 | File | Change |
@@ -173,16 +170,16 @@ python scripts/check_no_secrets.py
 
 | Condition | Met? | Notes |
 |-----------|------|-------|
-| All 4 gates pass on same HEAD | ❌ | S9, S11 have environment constraints |
-| Verifiable GitHub Actions evidence | ✅ | S10, G2 have full evidence; S9, S11 have partial |
+| All 4 gates pass on same HEAD | 🔄 | 3 of 4 gates fully verified (S10, G2, S9); S11 has runner-to-service Docker DNS constraint |
+| Verifiable GitHub Actions evidence | ✅ | S10, G2, S9 have full verifiable evidence in cloud runs; S11 has partial |
 | No fabricated results | ✅ | All evidence is from actual runs |
-| No weakened acceptance criteria | ✅ | Syntax checks ≠ integration tests |
+| No weakened acceptance criteria | ✅ | S9 gate tightened with 5 strict production assertions |
 
 ### Final Status
 
-> **PHASE_M_STATUS: CLOSED — PARTIAL**
+> **PHASE_M_STATUS: CLOSED — PARTIAL (3 of 4 GATES VERIFIED)**
 
-**Justification:** Under P0 Cloud-Only Execution Policy, all verification must occur on GitHub Actions runners. Two gates (S9, S11) have documented, fundamental environment constraints in the GitHub Actions runner that prevent full verification despite exhaustive mitigation attempts. S10 and G2 are fully verified with runtime proof.
+**Justification:** Under P0 Cloud-Only Execution Policy, all verification must occur on GitHub Actions runners. Three gates (S10, G2, and S9) are fully verified with runtime proof on GitHub Actions. S9 Kubernetes verified 2/2 zero-downtime rolling update, 0 restarts, and healthy probes in KinD. Only S11 has a residual runner-to-service Docker networking DNS constraint on GitHub Actions.
 
 ---
 
@@ -190,7 +187,7 @@ python scripts/check_no_secrets.py
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| S9 rollout timeout | Medium | Documented constraint; use Recreate strategy; monitor in production K8s (not KinD) |
+| S9 rollout | Resolved | Fixed with numeric UID, emptyDir mounts, extended startupProbe, and RollingUpdate verified in Run #39599442638 |
 | S11 Alembic networking | Medium | Use self-hosted runner or external DB for migrations; CI/CD pipeline otherwise functional |
 | S11 DAG import environment | Low | `ast.parse()` syntax validation passes; Airflow import tested in production |
 
@@ -202,8 +199,7 @@ python scripts/check_no_secrets.py
 |------|---------|------------|--------|
 | S10 | [#39430010453](https://github.com/imtarget05/QuanLyKho/actions/runs/39430010453) | `39bba09` | ✅ |
 | G2 | Local + CI | `39bba09` | ✅ |
-| S9 | [#39528807628](https://github.com/imtarget05/QuanLyKho/actions/runs/39528807628) | `39bba09` | 🔄 |
-| S9 | [#39529538055](https://github.com/imtarget05/QuanLyKho/actions/runs/39544627467) | `39bba09` | 🔄 |
+| S9 | [#39599442638](https://github.com/imtarget05/QuanLyKho/actions/runs/39599442638) | `05ecc2e` | ✅ |
 | S11 | [#39546426245](https://github.com/imtarget05/QuanLyKho/actions/runs/39546426245) | `39bba09` | 🔄 |
 
 ---
@@ -217,8 +213,8 @@ gh run view 39430010453 --repo imtarget05/QuanLyKho
 # G2 Security (verified)
 python scripts/check_no_secrets.py
 
-# S9 Kubernetes (partial - rollout timeout)
-gh run view 39544627467 --repo imtarget05/QuanLyKho --log-failed
+# S9 Kubernetes (verified - 2/2 RollingUpdate, 0 restarts, healthy probes)
+gh run view 39599442638 --repo imtarget05/QuanLyKho
 
 # S11 Cloud CI E2E (partial - alembic networking)
 gh run view 39546426245 --repo imtarget05/QuanLyKho --log-failed
@@ -230,5 +226,5 @@ cd backend && DATABASE_URL="postgresql+psycopg2://bankops:bankops@localhost:5432
 
 ---
 
-*Report generated: 2026-10-21 | HEAD: `39bba09` | Branch: `main`*  
+*Report generated: 2026-10-21 | HEAD: `05ecc2e` | Branch: `main`*  
 *All evidence from actual GitHub Actions runs. No fabricated results.*
