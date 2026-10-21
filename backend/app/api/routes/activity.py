@@ -219,6 +219,7 @@ async def list_audit_events(
                 "actor_id": str(a.actor_id) if a.actor_id else None,
                 "action": a.action,
                 "subject": a.subject,
+                "request_id": a.request_id,
                 "before_hash": a.before_hash,
                 "after_hash": a.after_hash,
                 "occurred_at": a.occurred_at.isoformat() if a.occurred_at else None,

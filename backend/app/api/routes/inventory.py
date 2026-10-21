@@ -7,6 +7,7 @@ Bất biến docs/00:
 4. xuất/chuyển quá tồn -> 409, balance giữ nguyên (I1).
 5. mọi write đều audit + outbox trong cùng transaction.
 """
+import hashlib
 import os
 import uuid
 from datetime import UTC, date, datetime
@@ -28,6 +29,7 @@ from app.api.pagination import (
     decode_cursor,
     encode_cursor,
 )
+from app.api.request_context import request_id_var
 from app.api.routes.auth_utils import (
     get_accessible_location_ids,
     get_current_user,
@@ -496,6 +498,12 @@ async def _lock_and_validate_serial_assets(
 
 
 async def _audit(db, actor_id, action: str, req: InventoryRequest, before: dict) -> None:
+    http_request_id = request_id_var.get()
+    audit_request_id = (
+        http_request_id
+        if len(http_request_id) <= 64
+        else hashlib.sha256(http_request_id.encode("utf-8")).hexdigest()
+    )
     db.add(
         AuditEvent(
             id=uuid.uuid4(),
@@ -506,6 +514,7 @@ async def _audit(db, actor_id, action: str, req: InventoryRequest, before: dict)
             after_hash=idempotency.payload_hash(
                 {"status": req.status, "version": req.version}
             ),
+            request_id=audit_request_id,
             occurred_at=_now(),
             metadata_json={"kind": req.kind, "status": req.status},
         )

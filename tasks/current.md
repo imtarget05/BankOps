@@ -1,5 +1,20 @@
 # Current Tasks — QuanLyKho (Kho Trà Sữa / BankOps)
 
+> **Portfolio audit checkpoint, 2026-10-21:** work started at HEAD `c9b6935`
+> and concurrent local commits advanced HEAD through `d53c092` to
+> `5d79314364739e48cd589604d56764583d963286` during the audit.
+> At start there were pre-existing edits in `backend/app/api/routes/reconciliations.py`,
+> `backend/docs/17-b2-authorization-scope-audit.md` and
+> `backend/tests/test_b2_authorization_scope.py`. The historical clean-tree
+> baseline below is **not** the current working-tree state. See
+> `docs/PORTFOLIO_AUDIT_2026-10-21.md` for the current claim matrix, gaps and
+> reproducible AI → checker demo. The focused demo passed against a disposable
+> PostgreSQL database. A full run passed 674 tests at the earlier revision;
+> after concurrent S9 commits, HEAD `5d79314` produced 21 MLflow failures on
+> the host's read-only `/data` path. An uncommitted narrow fix and regression
+> test passed three targeted checks; a fresh full-suite rerun is pending.
+> Exact commands and results are recorded in the audit.
+
 > **Updated 2026-10-20** after a full local re-verification. Earlier revisions of
 > this board recorded a dirty worktree, a "missing AGENTS.md", and an
 > unresolved Alembic gap. All three are now resolved; the claims below were

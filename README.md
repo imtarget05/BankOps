@@ -31,8 +31,8 @@ flowchart TD
     subgraph CheckerSection ["3. Checker (Kiểm soát viên)"]
         AS --> AP["Hộp thư duyệt 4-mắt (Auto-Refresh)"]
         AP --> AI["AI Copilot Thẩm Định Rủi Ro<br/>(Risk Score 0-100 · Rules Flagged · Recommendations)"]
-        AI --> FlowDecision{"Đánh giá rủi ro"}
-        FlowDecision -->|Rủi ro Thấp| QuickApp["Duyệt nhanh 1-chạm"]
+        AI --> FlowDecision{"Checker quyết định<br/>server kiểm tra policy"}
+        FlowDecision -->|Phiếu hợp lệ theo policy| QuickApp["Checker xác nhận duyệt"]
         FlowDecision -->|Rủi ro cao theo policy demo| SecDialog["Hộp thoại kiểm soát kép<br/>Step-up verification"]
         QuickApp --> DBPost["Ghi sổ cái kép (Dual-entry ledger)"]
         SecDialog --> Stamp["Khóa con dấu kiểm toán SHA-256"]
@@ -63,9 +63,9 @@ flowchart TD
    - Cloudflare Workers AI có thể là provider từ xa khi FastAPI được cấu hình phù hợp; Worker trong repository không phục vụ API chat production.
 2. **Small LLM Pipeline Cho Máy Không Có GPU & Google Colab T4**:
    - Mô hình nền tảng: `Qwen2.5-1.5B-Instruct` (GGUF Quantized 4-bit `q4_k_m`, tiêu thụ < 1.4 GB RAM trên CPU).
-   - Notebook huấn luyện 1-click: [`ai/colab_finetune_kho-tra-sua_t4.ipynb`](file:///Users/mainguyenbinhtan/Downloads/Kho-Trà-Sữa/ai/colab_finetune_kho-tra-sua_t4.ipynb) (Fine-tune ~12 phút trên Colab T4 miễn phí).
-   - Tập dữ liệu ngân hàng chuẩn hóa: [`ai/dataset/train.jsonl`](file:///Users/mainguyenbinhtan/Downloads/Kho-Trà-Sữa/ai/dataset/train.jsonl) (hơn 120 mẫu hội thoại chuẩn hóa quy trình).
-   - Máy chủ suy luận CPU độc lập: [`ai/serve_cpu.py`](file:///Users/mainguyenbinhtan/Downloads/Kho-Trà-Sữa/ai/serve_cpu.py) tương thích OpenAI API và Ollama.
+   - Notebook huấn luyện mẫu: [`ai/colab_finetune_kho-tra-sua_t4.ipynb`](ai/colab_finetune_kho-tra-sua_t4.ipynb). Thời gian huấn luyện phụ thuộc máy và chưa là SLA.
+   - Tập dữ liệu huấn luyện: [`ai/dataset/train.jsonl`](ai/dataset/train.jsonl); đây là dữ liệu demo, không phải dữ liệu giao dịch thật.
+   - Máy chủ suy luận CPU độc lập: [`ai/serve_cpu.py`](ai/serve_cpu.py) tương thích OpenAI API và Ollama.
 
 ---
 
@@ -158,6 +158,8 @@ Kho-Trà-Sữa/
 > Năng lực cần được xác minh trên exact commit: danh mục nguyên liệu + Min/Max,
 > phiếu nhập (lô/HSD), chốt ca, điều chỉnh, cảnh báo tồn thấp/cận date và báo cáo.
 > AI assistant là tính năng hỗ trợ, không thay thế kiểm soát nghiệp vụ.
+
+> **Kiểm chứng phỏng vấn:** [audit nghiệp vụ, ma trận bằng chứng và demo AI → checker](docs/PORTFOLIO_AUDIT_2026-10-21.md). AI assessment nhận dữ liệu do client gửi, nên đánh giá chỉ là tư vấn; quyết định ghi tồn kho luôn đi qua phiếu canonical, RBAC và giao dịch FastAPI.
 >
 > Chưa triển khai (cần consent của TEAM): offline chốt ca + outbox đồng bộ (Phase 6),
 > FCM/push real, tích hợp Google Sheets/APPs Script, deploy staging + UAT luồng ca.

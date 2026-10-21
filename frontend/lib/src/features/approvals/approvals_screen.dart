@@ -347,8 +347,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       }
     } else {
       if (mounted) {
-        AppToast.success(context,
-            'AI kiểm tra: Chứng từ hợp lệ 100%, không phát hiện sai sót.');
+        AppToast.info(context,
+            'Chưa phát hiện cảnh báo từ kiểm tra hiện có. Hãy đối chiếu chứng từ gốc trước khi dùng.');
       }
     }
 

@@ -23,11 +23,14 @@ Base `/api/v1`; JSON UTF-8; UTC ISO-8601; UUID string; money decimal as string (
 | POST `/integrations/uploads`, POST `/integrations/google-sheets/fetch`, POST `/integrations/webhooks/{id}` | integration.admin | ingest CSV/JSON/Sheets/webhook -> staging |
 | POST `/integration-runs/{id}/confirm` | integration.admin | tạo draft từ staging, không post |
 | POST `/reconciliations`, GET `/reconciliations/{id}` | operator/auditor | chạy/xem |
-| GET `/audit-events` | audit.read | lọc; không edit |
+| GET `/audit-events` | audit.read | append-only; trả `request_id` để đối chiếu HTTP; `limit` 1..100, `cursor` hiện chưa phân trang thật |
 | GET `/health/live`, `/health/ready` | infra | readiness DB/worker tùy ngữ cảnh |
 | POST `/ai/reorder-point`, POST `/ai/anomaly` | inventory.read | tối ưu điểm đặt hàng + phát hiện bất thường nhu cầu (Phase 2) |
 
 Pagination `limit` 1..100 + opaque `cursor`; filter có whitelist; sort ổn định `created_at,id`. Không trả raw secret, password hash hoặc raw exception.
+
+Ngoại lệ hiện tại: `/audit-events` nhận `cursor` nhưng chưa áp dụng vào truy vấn;
+không dùng endpoint này để khẳng định đã đọc đủ lịch sử khi có hơn 100 sự kiện.
 
 ## Request/response mẫu
 

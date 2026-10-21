@@ -24,7 +24,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("model-serving")
 
 # MLflow configuration
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:////data/mlflow.db")
+def _default_tracking_uri() -> str:
+    """Use the image data mount when writable, otherwise a local SQLite store."""
+    if os.path.isdir("/data") and os.access("/data", os.W_OK):
+        return "sqlite:////data/mlflow.db"
+    return "sqlite:///./mlflow.db"
+
+
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI") or _default_tracking_uri()
 MLFLOW_ARTIFACT_ROOT = os.getenv(
     "MLFLOW_ARTIFACT_ROOT",
     "/data/mlruns" if os.path.exists("/data") else "./mlruns",
@@ -41,10 +48,8 @@ os.environ["_MLFLOW_SERVER_ARTIFACT_ROOT"] = MLFLOW_ARTIFACT_ROOT
 os.environ["MLFLOW_REGISTRY_DIR"] = MLFLOW_ARTIFACT_ROOT
 os.environ["MLFLOW_ARTIFACT_ROOT"] = MLFLOW_ARTIFACT_ROOT
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-try:
-    mlflow.set_registry_uri(MLFLOW_TRACKING_URI)
-except Exception:
-    pass
+# With no explicit registry URI, MLflow follows the current tracking URI. This
+# matters for local tests that replace the tracking URI with a temporary store.
 
 MODEL_NAME = "DemandForecastModel"
 # When the registry holds no Production model the service can train, register
