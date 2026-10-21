@@ -21,11 +21,12 @@ from app.api.pagination import (
     encode_cursor,
 )
 from app.api.routes.auth_utils import (
+    get_accessible_cashbox_ids,
     get_accessible_location_ids,
     require_any_capability,
 )
 from app.database import get_db
-from app.models.cash_sim import CashEntry, CashJournal
+from app.models.cash_sim import CashEntry, CashJournal, CashRequest
 from app.models.inventory import Balance, Movement
 from app.models.reconciliation import ReconciliationException, ReconciliationRun
 from app.services import idempotency
@@ -70,7 +71,20 @@ async def run_reconciliation(
 
     exceptions: list[dict] = []
     if scope == "cash":
-        journals = (await db.execute(select(CashJournal))).scalars().all()
+        # S6/B2 — sổ quỹ theo két: chỉ đối soát các journal thuộc két user
+        # được phép, nếu không user giới hạn sẽ thấy exception của chi
+        # nhánh khác (rò dữ liệu tài chính ngoài scope).
+        allowed_cashbox_ids = await get_accessible_cashbox_ids(db, user)
+        journals_stmt = select(CashJournal)
+        if allowed_cashbox_ids is not None:
+            journals_stmt = journals_stmt.where(
+                CashJournal.request_id.in_(
+                    select(CashRequest.id).where(
+                        CashRequest.cashbox_id.in_(allowed_cashbox_ids)
+                    )
+                )
+            )
+        journals = (await db.execute(journals_stmt)).scalars().all()
         for j in journals:
             entries = (
                 await db.execute(select(CashEntry).where(CashEntry.journal_id == j.id))
