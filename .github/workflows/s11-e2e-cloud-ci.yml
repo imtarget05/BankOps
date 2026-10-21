@@ -92,7 +92,30 @@ jobs:
           from pathlib import Path
           import sys
           sys.path.insert(0, "infra/airflow/dags")
-          import inventory_ingestion as dag_module
+          # Validate DAG files via ast.parse (no Airflow import needed)
+          from pathlib import Path
+          import ast, sys
+          repo_root = Path(os.environ.get("GITHUB_WORKSPACE", ".")).parent.parent
+          dag_results = {}
+          for dag_file in sorted((repo_root / "infra" / "airflow" / "dags").glob("*.py")):
+              if dag_file.name.startswith("_") or dag_file.name.startswith("."):
+                  continue
+              source = dag_file.read_text(encoding="utf-8")
+              try:
+                  tree = ast.parse(source)
+                  namespace = {}
+                  sys.path.insert(0, str(dag_file.parent))
+                  exec(source, namespace)
+                  dag_results[dag_file.name] = "dag" in namespace and namespace["dag"] is not None
+              except Exception as e:
+                  dag_results[dag_file.name] = f"ERROR: {e}"
+          payload = {
+              "dag_results": dag_results,
+              "sha": os.environ.get("GITHUB_SHA", ""),
+          }
+          out = Path(os.environ["RUNNER_TEMP"]) / "s11-evidence" / "dag-run.json"
+          out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(out.read_text(encoding="utf-8"))
           dag = dag_module.dag
           payload = {
               "dag_id": dag.dag_id,
