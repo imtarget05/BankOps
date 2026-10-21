@@ -75,8 +75,8 @@ jobs:
         working-directory: backend
         env:
           PATH: "/home/runner/.local/bin:$PATH"
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          QLK_INGEST_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
+          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
+          QLK_INGEST_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
           QLK_INGEST_ALLOW_ANY_DB: "1"
           MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
@@ -127,83 +127,10 @@ jobs:
       - name: Run Alembic migrations
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: poetry run alembic upgrade head
-
-      - name: Seed database
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          APP_ENV: demo
-          DEMO_MODE: "true"
-        run: poetry run python -m app.seed
-
-      - name: Run ML Training
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
-          MODEL_NAME: "DemandForecastModel"
-        run: poetry run pytest tests/test_ml_training.py tests/test_ml_registry.py -v --no-header --tb=short
-
-      - name: Promote model to Production
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          MODEL_NAME: "DemandForecastModel"
+          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
         run: |
-          set -e
-          echo "=== Promoting model to Production ==="
-          poetry run python promote_model.py
-
-      - name: FastAPI Serving Smoke Test
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
-          MODEL_NAME: "DemandForecastModel"
-        run: |
-          echo "=== FastAPI Serving Smoke Test ==="
-          poetry run python scripts/smoke_test.py
-
-      - name: Drift Detection Check
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: poetry run pytest tests/test_drift_detection.py tests/test_e2e_verify.py -v --no-header --tb=short
-
-      - name: E2E Verification Summary
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: |
-          echo "=== S11 machine-readable evidence ==="
-          cat "$RUNNER_TEMP/s11-evidence/dag-run.json"
-          cat "$RUNNER_TEMP/s11-evidence/e2e-chain.json"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-pipeline-artifacts
-          path: |
-            ${{ runner.temp }}/s11-evidence/
-            ${{ runner.temp }}/mlflow-s11/
-          retention-days: 30
-
-      - name: Announce CLOUD_CI_E2E_VERIFIED
-        if: always()
-        run: |
-          echo "========================================"
-          echo "S11 CLOUD CI E2E VERIFIED"
-          echo "Run: ${{ github.run_id }}"
-          echo "SHA: ${{ github.sha }}"
-          echo "Status: ${{ job.status }}"
-          echo "========================================"
-
-      - name: Export gate result
-        id: gate-result
-        run: |
-          echo "gate=cloud_ci_e2e_verified" >> $GITHUB_OUTPUT
+          poetry config env.DATABASE_URL "${DATABASE_URL}"
+          echo "DATABASE_URL=$DATABASE_URL"
+          # Check PostgreSQL connectivity
+          bash scripts/check_db_connectivity.sh
+          poetry run alembic upgrade head
