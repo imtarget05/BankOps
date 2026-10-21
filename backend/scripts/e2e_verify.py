@@ -8,7 +8,6 @@ training stage created a model before registry promotion can succeed.
 from __future__ import annotations
 
 import json
-import math
 import os
 from pathlib import Path
 from typing import Any
@@ -123,6 +122,7 @@ def verify_chain(tracking_uri: str, model_name: str, predict_payload: dict) -> d
         "rollback_version": rollback_version,
         "rollback_inference_version": rollback_inference_version,
         "prediction": prediction,
+        "rollback_prediction": {"predicted_demand": rollback_value},
         "drift": drift,
     }
 
