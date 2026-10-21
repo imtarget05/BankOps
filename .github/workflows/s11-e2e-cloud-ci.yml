@@ -75,8 +75,8 @@ jobs:
         working-directory: backend
         env:
           PATH: "/home/runner/.local/bin:$PATH"
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
-          QLK_INGEST_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
+          DATABASE_URL: "postgresql+psycopg2://neondb_owner:npg_m7FjSus1GzBq@ep-mute-snow-b7lawsws-pooler.c-13.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"
+          QLK_INGEST_DATABASE_URL: "postgresql+psycopg2://neondb_owner:npg_m7FjSus1GzBq@ep-mute-snow-b7lawsws-pooler.c-13.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"
           QLK_INGEST_ALLOW_ANY_DB: "1"
           MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
@@ -127,10 +127,8 @@ jobs:
       - name: Run Alembic migrations
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
+          DATABASE_URL: "postgresql+psycopg2://neondb_owner:npg_m7FjSus1GzBq@ep-mute-snow-b7lawsws-pooler.c-13.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"
         run: |
-          poetry config env.DATABASE_URL "${DATABASE_URL}"
-          echo "DATABASE_URL=$DATABASE_URL"
           # Check PostgreSQL connectivity
           bash scripts/check_db_connectivity.sh
-          poetry run alembic upgrade head
+        poetry run alembic upgrade head

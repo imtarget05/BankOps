@@ -6,7 +6,6 @@ Airflow runtime import issues.
 """
 
 import ast
-import pytest
 from pathlib import Path
 
 # Base directory for DAG files: infra/airflow/dags relative to repo root.

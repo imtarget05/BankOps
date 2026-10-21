@@ -40,11 +40,15 @@ if ! command -v gh >/dev/null 2>&1; then
     echo ""
     echo "To set secrets manually in GitHub:"
     echo "1. Go to: https://github.com/imtarget05/BankOps/settings/secrets/actions"
-    echo "2. Add the following Repository Secrets:"
-    echo "   - CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}"
-    echo "   - CLOUDFLARE_API_TOKEN:  ${CLOUDFLARE_API_TOKEN:-}"
-    echo "   - DATABASE_URL:          ${DATABASE_URL:-}"
-    echo "   - SECRET_KEY:            ${SECRET_KEY:-}"
+    echo "2. Add the following Repository Secrets (paste each value BY HAND —"
+    echo "   never echo the value into a terminal, a log or a commit):"
+    # CHỈ in TÊN biến. TUYỆT ĐỐI không in giá trị: terminal/log/CI là nơi
+    # secret bị lộ (xem docs/security/secret-rotation-inventory-2026-10-20.md §4).
+    for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_TUNNEL_TOKEN \
+                DATABASE_URL SECRET_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
+                BANKOPS_SIGNING_KEY BANKOPS_SESSION_SECRET SMTP_PASSWORD SUPERVISOR_PIN; do
+        echo "   - ${name}"
+    done
     echo "   - API_BASE_URL:          https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
     exit 0
 fi
@@ -75,6 +79,12 @@ set_secret "SECRET_KEY" "${SECRET_KEY:-}"
 set_secret "AWS_ACCESS_KEY_ID" "${AWS_ACCESS_KEY_ID:-}"
 set_secret "AWS_SECRET_ACCESS_KEY" "${AWS_SECRET_ACCESS_KEY:-}"
 set_secret "API_BASE_URL" "https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
+# Tên chuẩn (2026-10-21 rotation wave). Chỉ được sync khi biến có mặt trong
+# env file; nếu không có -> "Skipped (empty value)" (không in giá trị).
+set_secret "BANKOPS_SIGNING_KEY" "${BANKOPS_SIGNING_KEY:-}"
+set_secret "BANKOPS_SESSION_SECRET" "${BANKOPS_SESSION_SECRET:-}"
+set_secret "SMTP_PASSWORD" "${SMTP_PASSWORD:-}"
+set_secret "SUPERVISOR_PIN" "${SUPERVISOR_PIN:-}"
 
 echo ""
 success "All available secrets successfully synchronized to GitHub Actions!"

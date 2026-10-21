@@ -2,9 +2,11 @@
 
 **Owner:** chủ tài khoản (Cloudflare / Gmail / GitHub) + SRE/ops
 **Scope:** 5 credential P0/P1 bắt buộc rotate + 3 credential P1/P3 đi kèm
-**Trạng thái:** `PRE-ROTATION` — **chưa** có credential nào được rotate.
-Wave này chỉ chuẩn bị: audit references, inventory, cơ chế xác minh, secret scanning trong CI.
-Agent **không** rotate/revoke được (cần chủ tài khoản).
+**Trạng thái:** `ROTATED-PARTIAL` — **2026-10-21 (DECISION 3)**: 4 credential đã
+rotate + đã có bằng chứng token cũ chết; 3 credential **cần chủ tài khoản**
+(Gmail app password, Cloudflare API token, GPG passphrase) — giá trị cũ đã được
+**gỡ khỏi đĩa** (placeholder), nhưng **credential cũ ở provider chưa chết**.
+Xem §0 (bảng trạng thái) và §5 (bằng chứng).
 
 > **Quy tắc bắt buộc**
 > - File này **không** chứa giá trị secret. Chỉ chứa *fingerprint*.
@@ -18,17 +20,48 @@ Agent **không** rotate/revoke được (cần chủ tài khoản).
 
 ---
 
+## 0. Trạng thái sau wave rotation 2026-10-21 (DECISION 3)
+
+Không có giá trị secret nào được ghi trong bảng này — chỉ fingerprint.
+
+| Credential | Trạng thái | Nơi đã cập nhật | Fingerprint mới | Bằng chứng |
+|---|---|---|---|---|
+| `BANKOPS_SIGNING_KEY` | **ROTATED + VERIFIED** | `backend/.env:37` (`BANKOPS_dev_signing_key`), `infra/k8s/base/secret-production.yaml:19`, GH secret `BANKOPS_SIGNING_KEY` | `73b8…(len=64, sha256=b348ebd0)` | token ký bằng key cũ → `GET /api/v1/auth/me` = **401** (cả key dev cũ lẫn `SECRET_KEY` legacy cũ); `POST /api/v1/auth/login` = **200** với key mới |
+| `BANKOPS_SESSION_SECRET` | **ROTATED + VERIFIED** | `backend/.env:18`, `infra/k8s/base/secret-production.yaml:20`, GH secret `BANKOPS_SESSION_SECRET` | `7Qx3…(len=64, sha256=4f456353)` | `settings.session_secret` khớp fingerprint mới; app khởi động OK; login 200 (không có session server-side nên không có session nào bị invalidate) |
+| `SECRET_KEY` (legacy) | **ROTATED (giữ tên, giá trị mới)** — xem ghi chú bên dưới | `.env.production:4`, `infra/k8s/base/secret-production.yaml:11`, GH secret `SECRET_KEY` | `3c96…(len=64, sha256=dc5064b5)` | token ký bằng `SECRET_KEY` cũ → **401** |
+| `SUPERVISOR_PIN` | **ROTATED** | `.env.production:5`, `infra/k8s/base/secret-production.yaml:12`, GH secret `SUPERVISOR_PIN` | `salted(len=6, sha256=4ab63689)` | PIN demo `123456` **chỉ** dùng khi `settings.is_demo_mode` (`backend/app/services/approval_controls.py:57`, `backend/app/seed.py:225`) |
+| `SMTP_PASSWORD` | **CẦN OWNER — app password cũ VẪN LOGIN ĐƯỢC** | giá trị cũ đã gỡ: `.env:21` + `backend/.env:26` → `CHANGE_ME_SMTP_PASSWORD` | — | Probe SMTP (`--check-provider`, `SMTP_OLD_PASSWORD`): **old app password STILL LOGS IN** ⇒ credential đã lộ công khai **vẫn còn hiệu lực** ở Google → owner phải xoá ở `https://myaccount.google.com/apppasswords` |
+| `CLOUDFLARE_API_TOKEN` | **CẦN OWNER** (token cũ **còn sống**) | giá trị cũ đã gỡ khỏi `.env:7`, `.env.production:10`, `backend/.env:31`, `infra/k8s/base/secret-production.yaml:14` | — | `GET /user/tokens/verify` (token cũ) = **200 / status `active`**; `GET /user/tokens` = **403**; `DELETE /user/tokens/{id}` = **403 (code 9109 Unauthorized)** ⇒ token **không tự revoke được** |
+| `BACKUP_GPG_PASSPHRASE` | **CẦN OWNER** | giá trị cũ đã gỡ: `.env.production:20`, `infra/k8s/base/secret-production.yaml:18` | — | không thể verify tự động (cần keyring + backup cũ để re-encrypt) |
+| `DATABASE_URL` (dev) | **CHƯA ROTATE** (P3, ngoài scope wave này) | — | — | quyết định owner: chỉ rotate khi DB dev có dữ liệu thật |
+
+> **Ghi chú `SECRET_KEY` (legacy).** Kế hoạch ban đầu (2026-10-20) đặt end state là
+> **remove** (gỡ hẳn tên biến). DECISION 3 (2026-10-21) chọn phương án **giữ tên
+> nhưng đổi giá trị** ở wave này, vì shim `backend/entrypoint.sh:10-14` vẫn còn
+> (`SECRET_KEY` → `BANKOPS_SIGNING_KEY`) và việc gỡ tên phải đi kèm PR gỡ shim
+> (runbook mục 11 #17 / mục 12 #25). Vì vậy `end_state` của `legacy_secret_key`
+> trong khối JSON bên dưới đổi `remove` → `rotate`; **gỡ hẳn tên** vẫn là
+> hạng mục mở (xem §6 bảng "còn lại cần owner").
+>
+> **Hazard cần lưu ý:** hiện có **hai** giá trị khác nhau cho cùng một vai trò
+> (`BANKOPS_SIGNING_KEY` ≠ `SECRET_KEY`). Ở production, `entrypoint.sh` ưu tiên
+> `BANKOPS_SIGNING_KEY`; nếu một môi trường chỉ set `SECRET_KEY` thì key ký JWT
+> sẽ **khác** ⇒ token ký bằng key canonical bị từ chối. Sửa dứt điểm: gỡ shim
+> + gỡ tên `SECRET_KEY` (PR riêng) hoặc đặt `SECRET_KEY` = `BANKOPS_SIGNING_KEY`.
+
+---
+
 ## 1. Bảng tổng hợp
 
 | # | Credential (tên chuẩn) | Fingerprint **hiện tại** | Nơi đang dùng (chính) | Lộ công khai? | Ưu tiên | End state |
 |---|---|---|---|---|---|---|
-| 1 | `BANKOPS_SIGNING_KEY` (JWT signing key) | `iK6K…(len=64, sha256=96557a63)` | `backend/.env:37` (`BANKOPS_dev_signing_key`), `backend/app/config.py:213,218,237`, `backend/app/api/routes/auth_utils.py:71,380,389,445,609` | Không | **P0** | rotate |
-| 2 | `SECRET_KEY` (tên legacy của #1 ở tầng deploy) | `9e7c…(len=64, sha256=e9649e5a)` | `.env.production:4`, `infra/k8s/base/secret-production.yaml:11`, `backend/entrypoint.sh:10-14` (shim) | Không | **P0** | **remove** |
-| 3 | `BANKOPS_SESSION_SECRET` | `rvK4…(len=64, sha256=f00d82ab)` | `backend/.env:18`, `backend/app/config.py:201-210` (**không có consumer thật**) | Không | **P0** | rotate |
-| 4 | `SMTP_PASSWORD` (Gmail app password) | `qavo…(len=16, sha256=8e2b3b9b)` | `.env:21`, `backend/.env:26`, `backend/app/config.py:138`, `render.yaml:34` | **CÓ** — `docker-compose.yml` @ `53be143` (còn ở `origin/main`) | **P0** | rotate |
-| 5 | `SUPERVISOR_PIN` | **giá trị đã công khai** (`len=6`, `sha256=8d969eef`; trùng PIN demo trong code) | `.env.production:5`, `infra/k8s/base/secret-production.yaml:12`, `backend/app/config.py:162`, `backend/app/services/approval_controls.py:56-60` | **CÓ** — `infra/k8s/base/secret-template.yaml` @ `e76419b`,`bea0922`; `README.md` @ `5602ef0`,`310551a` | **P1** | rotate |
-| 6 | `CLOUDFLARE_API_TOKEN` | `cfut…(len=53, sha256=a9d3b0e0)` | `.env:7`, `.env.production:10`, `backend/.env:31`, `infra/k8s/base/secret-production.yaml:14`, `.github/workflows/deploy.yml:82,134`, `deploy-pages.yml:32` | Không (chỉ mẫu `cfut_…` trong docs) | **P1** | rotate |
-| 7 | `BACKUP_GPG_PASSPHRASE` | `qwfb…(len=32, sha256=6a2bee79)` | `.env.production:20`, `infra/k8s/base/secret-production.yaml:18`, `infra/k8s/base/cronjob-backup.yaml:27-31` | Không | **P1** | rotate |
+| 1 | `BANKOPS_SIGNING_KEY` (JWT signing key) | ~~`iK6K…(len=64, sha256=96557a63)`~~ → **`73b8…(len=64, sha256=b348ebd0)`** (đã rotate 2026-10-21) | `backend/.env:37` (`BANKOPS_dev_signing_key`), `backend/app/config.py:213,218,237`, `backend/app/api/routes/auth_utils.py:71,380,389,445,609` | Không | **P0** | rotate |
+| 2 | `SECRET_KEY` (tên legacy của #1 ở tầng deploy) | ~~`9e7c…(len=64, sha256=e9649e5a)`~~ → **`3c96…(len=64, sha256=dc5064b5)`** (đã rotate 2026-10-21) | `.env.production:4`, `infra/k8s/base/secret-production.yaml:11`, `backend/entrypoint.sh:10-14` (shim) | Không | **P0** | **remove** |
+| 3 | `BANKOPS_SESSION_SECRET` | ~~`rvK4…(len=64, sha256=f00d82ab)`~~ → **`7Qx3…(len=64, sha256=4f456353)`** (đã rotate 2026-10-21) | `backend/.env:18`, `backend/app/config.py:201-210` (**không có consumer thật**) | Không | **P0** | rotate |
+| 4 | `SMTP_PASSWORD` (Gmail app password) | ~~`qavo…(len=16, sha256=8e2b3b9b)`~~ — **CẦN OWNER**; giá trị cũ đã gỡ khỏi đĩa 2026-10-21 | `.env:21`, `backend/.env:26`, `backend/app/config.py:138`, `render.yaml:34` | **CÓ** — `docker-compose.yml` @ `53be143` (còn ở `origin/main`) | **P0** | rotate |
+| 5 | `SUPERVISOR_PIN` | ~~**giá trị đã công khai** (`len=6`, `sha256=8d969eef`)~~ → **`salted(len=6, sha256=4ab63689)`** (đã rotate 2026-10-21) | `.env.production:5`, `infra/k8s/base/secret-production.yaml:12`, `backend/app/config.py:162`, `backend/app/services/approval_controls.py:56-60` | **CÓ** — `infra/k8s/base/secret-template.yaml` @ `e76419b`,`bea0922`; `README.md` @ `5602ef0`,`310551a` | **P1** | rotate |
+| 6 | `CLOUDFLARE_API_TOKEN` | ~~`cfut…(len=53, sha256=a9d3b0e0)`~~ — **CẦN OWNER** (token cũ còn active); giá trị cũ đã gỡ khỏi đĩa 2026-10-21 | `.env:7`, `.env.production:10`, `backend/.env:31`, `infra/k8s/base/secret-production.yaml:14`, `.github/workflows/deploy.yml:82,134`, `deploy-pages.yml:32` | Không (chỉ mẫu `cfut_…` trong docs) | **P1** | rotate |
+| 7 | `BACKUP_GPG_PASSPHRASE` | ~~`qwfb…(len=32, sha256=6a2bee79)`~~ — **CẦN OWNER**; giá trị cũ đã gỡ khỏi đĩa 2026-10-21 | `.env.production:20`, `infra/k8s/base/secret-production.yaml:18`, `infra/k8s/base/cronjob-backup.yaml:27-31` | Không | **P1** | rotate |
 | 8 | `DATABASE_URL` (dev Postgres) | `post…(len=59, sha256=3d4d0275)` | `.env:3`, `.env.production:3`, `backend/.env:3`, `scripts/setup_secrets_and_deploy.sh:108,110` | Có (dev credential, 29 commit) | P3 | rotate |
 
 **Định danh chuẩn (sau rotation chỉ được dùng tên cột "canonical"):**
@@ -250,6 +283,21 @@ python3 scripts/verify_secret_rotation.py --check-provider   # exit 0 = token c�
 python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact sạch
 ```
 
+### 5.1 Ghi chú wave 2026-10-21 (DECISION 3)
+
+- Fingerprint mới đã được điền trong khối JSON (mục trên) cho
+  `jwt_signing_key`, `legacy_secret_key`, `session_secret`, `supervisor_pin`.
+- Fingerprint của `supervisor_pin` là **salted**: salt nằm ở file local
+  **gitignored** `.rotation-salt.local` (`.gitignore:32-34`) — **owner phải chuyển
+  salt này vào password manager**, nếu không thì không thể tái tạo fingerprint
+  salted để verify lần sau. Không bao giờ commit salt (salt + hash của PIN 6
+  chữ số = lộ PIN).
+- Ba credential **CẦN OWNER** (`smtp_password`, `cloudflare_api_token`,
+  `backup_gpg_passphrase`) có `new_fingerprint = null` — `--check-env` sẽ báo
+  **FAIL** cho chúng cho tới khi owner cấp giá trị mới (đây là trạng thái
+  **đúng**, không phải lỗi của script).
+- `database_url` (P3) không nằm trong scope wave này ⇒ vẫn **FAIL** "NOT ROTATED".
+
 ---
 
 <!-- BEGIN INVENTORY-JSON -->
@@ -263,7 +311,9 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "canonical_var": "BANKOPS_SIGNING_KEY",
       "legacy_vars": ["BANKOPS_dev_signing_key", "SECRET_KEY"],
       "old_fingerprint": "iK6K…(len=64, sha256=96557a63)",
-      "new_fingerprint": null,
+      "new_fingerprint": "73b8…(len=64, sha256=b348ebd0)",
+      "status": "ROTATED+VERIFIED",
+      "evidence": "2026-10-21: token ký bằng key cũ (dev cũ + SECRET_KEY legacy cũ) -> GET /api/v1/auth/me = 401; POST /api/v1/auth/login = 200 (key mới).",
       "end_state": "rotate",
       "priority": "P0",
       "locations": [
@@ -278,8 +328,10 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "canonical_var": "SECRET_KEY",
       "legacy_vars": ["SECRET_KEY"],
       "old_fingerprint": "9e7c…(len=64, sha256=e9649e5a)",
-      "new_fingerprint": null,
-      "end_state": "remove",
+      "new_fingerprint": "3c96…(len=64, sha256=dc5064b5)",
+      "end_state": "rotate",
+      "status": "ROTATED+VERIFIED",
+      "evidence": "2026-10-21: end_state đổi remove -> rotate (xem §0); token ký bằng SECRET_KEY cũ -> GET /api/v1/auth/me = 401. Gỡ hẳn tên biến vẫn là hạng mục mở (PR gỡ shim entrypoint.sh).",
       "priority": "P0",
       "locations": [
         {"kind": "env_file", "path": ".env.production", "key": "SECRET_KEY", "required": false},
@@ -292,7 +344,9 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "canonical_var": "BANKOPS_SESSION_SECRET",
       "legacy_vars": ["BANKOPS_SESSION_SECRET"],
       "old_fingerprint": "rvK4…(len=64, sha256=f00d82ab)",
-      "new_fingerprint": null,
+      "new_fingerprint": "7Qx3…(len=64, sha256=4f456353)",
+      "status": "ROTATED+VERIFIED",
+      "evidence": "2026-10-21: settings.session_secret khớp fingerprint mới; app khởi động OK + login 200 (không có session server-side nên không mất session nào).",
       "end_state": "rotate",
       "priority": "P0",
       "locations": [
@@ -308,6 +362,8 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "legacy_vars": ["SMTP_PASSWORD", "GMAIL_APP_PASSWORD"],
       "old_fingerprint": "qavo…(len=16, sha256=8e2b3b9b)",
       "new_fingerprint": null,
+      "status": "OWNER-REQUIRED",
+      "evidence": "2026-10-21: giá trị cũ đã gỡ khỏi .env + backend/.env (placeholder CHANGE_ME_SMTP_PASSWORD). Probe SMTP cho thấy app password CŨ VẪN LOGIN ĐƯỢC (chưa bị xoá ở Google) -> CẦN OWNER xoá + tạo app password mới (probe giá trị MỚI chỉ chạy được sau khi owner tạo).",
       "end_state": "rotate",
       "priority": "P0",
       "locations": [
@@ -323,7 +379,9 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "canonical_var": "SUPERVISOR_PIN",
       "legacy_vars": ["SUPERVISOR_PIN"],
       "old_fingerprint": "1234…(len=6, sha256=8d969eef)",
-      "new_fingerprint": null,
+      "new_fingerprint": "salted(len=6, sha256=4ab63689)",
+      "status": "ROTATED",
+      "evidence": "2026-10-21: PIN mới 6 chữ số ≠ PIN demo 123456, lưu .env.production + secret-production.yaml + GH secret. Salt của fingerprint salted nằm ở file local gitignored .rotation-salt.local (owner phải chuyển vào password manager). PIN demo 123456 chỉ dùng khi settings.is_demo_mode.",
       "end_state": "rotate",
       "fingerprint_mode": "salted",
       "priority": "P1",
@@ -340,6 +398,8 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "legacy_vars": ["CLOUDFLARE_API_TOKEN"],
       "old_fingerprint": "cfut…(len=53, sha256=a9d3b0e0)",
       "new_fingerprint": null,
+      "status": "OWNER-REQUIRED",
+      "evidence": "2026-10-21: giá trị cũ đã gỡ khỏi .env/.env.production/backend/.env/secret-production.yaml (placeholder). Token cũ id=047a0f925794d270641de780673aef42 vẫn ACTIVE: GET /user/tokens/verify=200, GET /user/tokens=403, DELETE /user/tokens/{id}=403 (code 9109) -> phải owner revoke ở Cloudflare Dashboard.",
       "end_state": "rotate",
       "priority": "P1",
       "locations": [
@@ -356,6 +416,8 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "legacy_vars": ["BACKUP_GPG_PASSPHRASE"],
       "old_fingerprint": "qwfb…(len=32, sha256=6a2bee79)",
       "new_fingerprint": null,
+      "status": "OWNER-REQUIRED",
+      "evidence": "2026-10-21: giá trị cũ đã gỡ khỏi .env.production + secret-production.yaml (placeholder). Passphrase MỚI phải do người giữ keyring GPG tạo; không verify tự động được (cần backup cũ để re-encrypt).",
       "end_state": "rotate",
       "priority": "P1",
       "locations": [
@@ -370,6 +432,8 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
       "legacy_vars": ["DATABASE_URL"],
       "old_fingerprint": "post…(len=59, sha256=3d4d0275)",
       "new_fingerprint": null,
+      "status": "NOT-ROTATED (P3, out of scope wave 2026-10-21)",
+      "evidence": "2026-10-21: giữ nguyên theo kế hoạch (chỉ rotate khi DB dev có dữ liệu thật). Lưu ý: 3 vị trí có 3 URL KHÁC NHAU (dev docker host vs localhost) nên old_fingerprint của credential này chỉ khớp đúng .env.production — độ chính xác của inventory, không phải lỗi rotation.",
       "end_state": "rotate",
       "priority": "P3",
       "locations": [
@@ -408,3 +472,18 @@ python3 scripts/verify_secret_rotation.py --check-artifacts  # exit 0 = artifact
 | 16 | Bổ sung `BANKOPS_SIGNING_KEY`/`BANKOPS_SESSION_SECRET` vào `backend/.env.example` | PR riêng | `rg 'BANKOPS_' backend/.env.example` |
 | 17 | Gỡ shim `SECRET_KEY` ở `backend/entrypoint.sh:10-14` | PR riêng (sau khi #3 xong) | Log entrypoint không còn nhánh "dùng SECRET_KEY" |
 | 18 | Thêm `SMTP_PASSWORD`, `BANKOPS_SESSION_SECRET`, `BANKOPS_SIGNING_KEY` vào `infra/k8s/base/secret-template.yaml` | PR riêng (file của worker khác → đã báo cáo, **không** sửa) | `rg 'BANKOPS_SIGNING_KEY' infra/k8s/base/secret-template.yaml` |
+
+### 6.1 Trạng thái các hạng mục trên sau wave 2026-10-21
+
+| # | Hạng mục | Trạng thái 2026-10-21 |
+|---|---|---|
+| 1, 2, 6, 8 | Sinh + cấp key/PIN mới (GitHub + file local) | **ĐÃ XONG** (key mới đã set trong GH, file local, k8s manifest) |
+| 3 | Cấp key mới cho k8s Secret + gỡ `SECRET_KEY` | **MỞ** — `BANKOPS_SIGNING_KEY` đã thêm vào `secret-production.yaml`, nhưng `SECRET_KEY` **chưa gỡ** (xem §0 ghi chú) |
+| 4, 5, 7, 9, 10 | Cấp SMTP/CF/GPG mới + revoke/thu hồi cái cũ | **CẦN OWNER** — không làm được từ máy agent |
+| 11, 12 | Bật secret scanning + push protection | **CẦN OWNER** (repo settings) |
+| 13 | Rewrite history | **CHƯA** — cần phê duyệt riêng (rotate xong mới nên rewrite) |
+| 14 | Fix `admin_users.py:351` (default PIN không gate demo) | **CHƯA** — file của worker khác (đã báo cáo) |
+| 15 | Fix `scripts/sync_github_secrets.sh` | **ĐÃ XONG** (2026-10-21): nhánh fallback không còn in giá trị secret; đã thêm 4 biến chuẩn vào danh sách sync |
+| 16 | `backend/.env.example` | **CHƯA** — file của worker khác |
+| 17 | Gỡ shim `SECRET_KEY` ở `backend/entrypoint.sh` | **CHƯA** — cần sau khi `SECRET_KEY` được gỡ khỏi mọi store |
+| 18 | `secret-template.yaml` | **CHƯA** — file của worker khác |

@@ -29,6 +29,9 @@ frontend/.flutter-plugins-dependencies
 !.env.example
 !.env.production.example
 .dev.vars
+# Salt dùng để tính fingerprint "salted" của credential entropy thấp
+# (SUPERVISOR_PIN) — TUYỆT ĐỐI không commit (nếu lộ salt + hash thì PIN bị lộ).
+.rotation-salt.local
 # Local Compose overrides and secret-store exports.
 compose.override.yml
 secrets/
