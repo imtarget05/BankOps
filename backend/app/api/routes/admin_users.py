@@ -38,6 +38,7 @@ from app.models.iam import (
     UserRole,
     UserStatus,
 )
+from app.services.approval_controls import DEMO_SUPERVISOR_PIN
 from app.services.email_service import (
     check_smtp_health,
     is_valid_email,
@@ -348,7 +349,16 @@ async def create_user(
         id=new_user_id,
         username=clean_username,
         password_hash=pwd_hash,
-        pin_hash=get_password_hash("123456"),
+        # D4 — PIN mặc định demo (`123456`) CHỈ được gán khi demo mode bật
+        # tường minh (APP_ENV=demo + DEMO_MODE=true), giống `seed.py` và
+        # `auth.py`. Ngoài demo mode user mới KHÔNG có PIN sẵn: PIN demo đã
+        # công khai trong repo (xem docs/security/secret-rotation-inventory-
+        # 2026-10-20.md §2.5) nên gán sẵn ở production là lỗ hổng; admin phải
+        # tự đặt PIN, cổng duyệt dùng PIN cấu hình `SUPERVISOR_PIN`
+        # (fail-closed).
+        pin_hash=(
+            get_password_hash(DEMO_SUPERVISOR_PIN) if settings.is_demo_mode else None
+        ),
         status=user_status,
         display_name_demo=body.display_name.strip(),
         email=clean_email,

@@ -214,7 +214,7 @@ void main() {
       repo.dispose();
     });
 
-    test('Tăng quỹ -> dùng kind=receipt (backend chỉ có receipt cho dòng vào quỹ)',
+    test('Tăng quỹ -> dùng kind=adjustment_in (KHÔNG phải receipt)',
         () async {
       Map<String, dynamic>? posted;
       final mockClient = MockClient((request) async {
@@ -223,7 +223,7 @@ void main() {
           posted = json.decode(request.body) as Map<String, dynamic>;
           return _jsonResp({
             'id': 'cr-adj-2',
-            'kind': 'receipt',
+            'kind': 'adjustment_in',
             'status': 'draft',
             'version': 1,
             'maker_id': 'u-maker',
@@ -236,7 +236,7 @@ void main() {
         if (request.url.path == '/api/v1/cash-sim/requests/cr-adj-2/submit') {
           return _jsonResp({
             'id': 'cr-adj-2',
-            'kind': 'receipt',
+            'kind': 'adjustment_in',
             'status': 'submitted',
             'version': 2,
             'maker_id': 'u-maker',
@@ -263,10 +263,114 @@ void main() {
       );
 
       expect(posted, isNotNull);
-      expect(posted!['kind'], 'receipt',
-          reason: 'backend coi `adjustment` là bút toán RA quỹ; dòng tiền VÀO '
-              'quỹ chỉ có `receipt` — xem backend/app/api/routes/cash_sim.py');
+      expect(posted!['kind'], 'adjustment_in',
+          reason: 'chiều TĂNG của phiếu điều chỉnh phải là `adjustment_in` '
+              '(bút toán điều chỉnh tăng quỹ) — không được dùng `receipt` '
+              '(nghiệp vụ thu tiền thường) vì sẽ mất ý nghĩa phân quyền '
+              '`cash:post_adjustment`; xem '
+              'backend/app/api/routes/cash_sim.py::_ADJUSTMENT_IN_KINDS');
+      expect(posted!['kind'], isNot('receipt'),
+          reason: 'gửi `receipt` làm phiếu điều chỉnh bị ghi nhận thành '
+              'phiếu thu tiền thường (sai nghiệp vụ)');
       expect(posted!['reason'], contains(kCashAdjustmentReasonPrefix));
+      repo.dispose();
+    });
+
+    test('Chiều tăng/giảm dùng đúng 2 kind backend chấp nhận', () async {
+      final kinds = <String>[];
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/cash-sim/requests' &&
+            request.method == 'POST') {
+          final body = json.decode(request.body) as Map<String, dynamic>;
+          kinds.add(body['kind'] as String);
+          return _jsonResp({
+            'id': 'cr-adj-${kinds.length}',
+            'kind': body['kind'],
+            'status': 'draft',
+            'version': 1,
+            'maker_id': 'u-maker',
+            'cashbox_id': 'cb-1',
+            'amount': '1000.00',
+            'currency': 'VND',
+            'reason': 'kiểm đếm',
+          }, 201);
+        }
+        if (request.url.path.startsWith('/api/v1/cash-sim/requests/') &&
+            request.url.path.endsWith('/submit')) {
+          return _jsonResp({
+            'id': 'cr-adj-x',
+            'kind': 'adjustment',
+            'status': 'submitted',
+            'version': 2,
+            'maker_id': 'u-maker',
+            'cashbox_id': 'cb-1',
+            'amount': '1000.00',
+            'currency': 'VND',
+          });
+        }
+        return _jsonResp({}, 404);
+      });
+
+      final repo = HttpBankOpsRepository(
+        baseUrl: 'http://localhost:8000',
+        client: mockClient,
+        tokenProvider: () async => 'test-jwt-token',
+      );
+
+      await repo.createCashAdjustmentRequest(
+        cashboxId: 'cb-1',
+        amount: '1000.00',
+        increase: false,
+        reason: 'giảm',
+      );
+      await repo.createCashAdjustmentRequest(
+        cashboxId: 'cb-1',
+        amount: '1000.00',
+        increase: true,
+        reason: 'tăng',
+      );
+
+      expect(kinds, ['adjustment', 'adjustment_in'],
+          reason: 'chiều giảm -> `adjustment`, chiều tăng -> `adjustment_in`');
+      repo.dispose();
+    });
+
+    test('Phiếu `adjustment_in` từ server được hiển thị là phiếu điều chỉnh',
+        () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/cash-sim/requests' &&
+            request.method == 'GET') {
+          return _jsonResp({
+            'requests': [
+              {
+                'id': 'cr-adj-3',
+                'kind': 'adjustment_in',
+                'status': 'submitted',
+                'version': 2,
+                'maker_id': 'u-maker',
+                'cashbox_id': 'cb-1',
+                'amount': '250000.00',
+                'currency': 'VND',
+              },
+            ],
+          });
+        }
+        return _jsonResp({}, 404);
+      });
+
+      final repo = HttpBankOpsRepository(
+        baseUrl: 'http://localhost:8000',
+        client: mockClient,
+        tokenProvider: () async => 'test-jwt-token',
+      );
+
+      final requests = await repo.getCashRequests();
+
+      expect(requests, hasLength(1));
+      expect(requests.single.kind, RequestKind.adjustment,
+          reason: '`adjustment_in` KHÔNG được parse thành `receipt` '
+              '(phiếu thu) — UI phải hiển thị là phiếu điều chỉnh');
+      expect(isCashAdjustmentRequest(requests.single), isTrue);
       repo.dispose();
     });
   });
@@ -469,6 +573,43 @@ void main() {
       expect(src.contains('payload.get("kind"'), isTrue);
       expect(src.contains('is_receipt = req.kind == "receipt"'), isTrue,
           reason: 'backend coi receipt là dòng tiền VÀO quỹ, adjustment là RA quỹ');
+    });
+
+    test('Backend CHẤP NHẬN kind=adjustment_in (chiều tăng của phiếu điều chỉnh)',
+        () {
+      const path = '../backend/app/api/routes/cash_sim.py';
+      final file = File(path);
+      expect(file.existsSync(), isTrue,
+          reason: 'không tìm thấy file backend: $path');
+      final src = file.readAsStringSync();
+
+      expect(src.contains('_ADJUSTMENT_IN_KINDS = ("adjustment_in",)'), isTrue,
+          reason: 'backend phải có kind điều chỉnh chiều TĂNG');
+      expect(src.contains('_MONEY_IN_KINDS = ("receipt",) + _ADJUSTMENT_IN_KINDS'),
+          isTrue,
+          reason: 'chiều tăng quỹ gồm receipt + adjustment_in');
+      expect(
+        src.contains(
+            '_FINANCIAL_ADJUSTMENT_KINDS = _ADJUSTMENT_KINDS + _ADJUSTMENT_IN_KINDS'),
+        isTrue,
+        reason: 'cả 2 chiều đều là bút toán điều chỉnh -> cần '
+            '`cash:post_adjustment` ngay từ lúc tạo phiếu',
+      );
+      expect(src.contains('_ADJUSTMENT_CAPS'), isTrue);
+    });
+
+    test('Frontend KHÔNG được gửi `receipt` cho chiều tăng của phiếu điều chỉnh',
+        () {
+      final src =
+          File('lib/src/data/repositories/http_bankops_repository.dart')
+              .readAsStringSync();
+      expect(
+        src.contains("increase ? 'receipt'"),
+        isFalse,
+        reason: 'chiều tăng của phiếu điều chỉnh phải là `adjustment_in`; '
+            'gửi `receipt` làm mất ý nghĩa phân quyền `cash:post_adjustment`',
+      );
+      expect(src.contains("increase ? 'adjustment_in' : 'adjustment'"), isTrue);
     });
   });
 }

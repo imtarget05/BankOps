@@ -39,17 +39,27 @@ if ! command -v gh >/dev/null 2>&1; then
     warn "GitHub CLI (gh) is not installed on this machine."
     echo ""
     echo "To set secrets manually in GitHub:"
-    echo "1. Go to: https://github.com/imtarget05/BankOps/settings/secrets/actions"
+    echo "1. Go to: https://github.com/imtarget05/QuanLyKho/settings/secrets/actions"
     echo "2. Add the following Repository Secrets (paste each value BY HAND —"
     echo "   never echo the value into a terminal, a log or a commit):"
     # CHỈ in TÊN biến. TUYỆT ĐỐI không in giá trị: terminal/log/CI là nơi
     # secret bị lộ (xem docs/security/secret-rotation-inventory-2026-10-20.md §4).
-    for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_TUNNEL_TOKEN \
-                DATABASE_URL SECRET_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
-                BANKOPS_SIGNING_KEY BANKOPS_SESSION_SECRET SMTP_PASSWORD SUPERVISOR_PIN; do
-        echo "   - ${name}"
-    done
+    # Tên được ghi LITERAL (không nội suy biến) để không có đường nào in
+    # giá trị secret ra stdout.
+    echo "   - CLOUDFLARE_ACCOUNT_ID"
+    echo "   - CLOUDFLARE_API_TOKEN"
+    echo "   - CLOUDFLARE_TUNNEL_TOKEN"
+    echo "   - DATABASE_URL"
+    echo "   - AWS_ACCESS_KEY_ID"
+    echo "   - AWS_SECRET_ACCESS_KEY"
+    echo "   - BANKOPS_SIGNING_KEY"
+    echo "   - BANKOPS_SESSION_SECRET"
+    echo "   - SMTP_PASSWORD"
+    echo "   - SUPERVISOR_PIN"
     echo "   - API_BASE_URL:          https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
+    echo ""
+    echo "   Legacy (DEPRECATED) — xoá, KHÔNG set lại:"
+    echo "   - SECRET_KEY"
     exit 0
 fi
 
@@ -75,7 +85,6 @@ set_secret "CLOUDFLARE_ACCOUNT_ID" "${CLOUDFLARE_ACCOUNT_ID:-}"
 set_secret "CLOUDFLARE_API_TOKEN" "${CLOUDFLARE_API_TOKEN:-}"
 set_secret "CLOUDFLARE_TUNNEL_TOKEN" "${CLOUDFLARE_TUNNEL_TOKEN:-}"
 set_secret "DATABASE_URL" "${DATABASE_URL:-}"
-set_secret "SECRET_KEY" "${SECRET_KEY:-}"
 set_secret "AWS_ACCESS_KEY_ID" "${AWS_ACCESS_KEY_ID:-}"
 set_secret "AWS_SECRET_ACCESS_KEY" "${AWS_SECRET_ACCESS_KEY:-}"
 set_secret "API_BASE_URL" "https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
@@ -85,6 +94,10 @@ set_secret "BANKOPS_SIGNING_KEY" "${BANKOPS_SIGNING_KEY:-}"
 set_secret "BANKOPS_SESSION_SECRET" "${BANKOPS_SESSION_SECRET:-}"
 set_secret "SMTP_PASSWORD" "${SMTP_PASSWORD:-}"
 set_secret "SUPERVISOR_PIN" "${SUPERVISOR_PIN:-}"
+# `SECRET_KEY` (tên LEGACY/DEPRECATED) KHÔNG được sync nữa: 2 tên / 1 giá trị
+# khiến rotate bị lệch, và `backend/entrypoint.sh` đã fail-fast ở production
+# khi thiếu `BANKOPS_SIGNING_KEY`. Xoá secret cũ ở GitHub:
+#   gh secret delete SECRET_KEY --repo imtarget05/QuanLyKho
 
 echo ""
 success "All available secrets successfully synchronized to GitHub Actions!"

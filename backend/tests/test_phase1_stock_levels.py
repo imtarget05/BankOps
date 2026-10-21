@@ -14,8 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
 
-from conftest import open_shift
 from sqlalchemy import select
+
+from conftest import open_shift
 
 DEMO_PASSWORD = "DemoPass123!"
 

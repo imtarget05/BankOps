@@ -111,6 +111,8 @@ def verify_chain(tracking_uri: str, model_name: str, predict_payload: dict) -> d
     )
 
     # Step 5: inference after rollback.
+    rollback_model = mlflow.pyfunc.load_model(f"models:/{model_name}/{rollback_version}")
+    rollback_value = float(rollback_model.predict(predict_features)[0])
     rollback_inference_version = str(rollback_version)
 
     return {
@@ -120,6 +122,7 @@ def verify_chain(tracking_uri: str, model_name: str, predict_payload: dict) -> d
         "rollback_version": rollback_version,
         "rollback_inference_version": rollback_inference_version,
         "prediction": prediction,
+        "rollback_prediction": {"predicted_demand": rollback_value},
         "drift": drift,
     }
 

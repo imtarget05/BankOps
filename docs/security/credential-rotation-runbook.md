@@ -440,16 +440,20 @@ chạy `--check-env` + `--check-provider` sau khi phát hành secret mới.
 | 11 | Cập nhật file local (`.env`, `.env.production`, `backend/.env`) | Owner | dán tay (file gitignored) | `--check-env` PASS |
 | 12 | Bật GitHub secret scanning + push protection | Owner (repo settings) | `https://github.com/imtarget05/QuanLyKho/settings/security_analysis` | ảnh chụp màn hình setting |
 | 13 | Duyệt & thực hiện rewrite history | Owner (repo admin) | `git filter-repo --replace-text <file>` + `git push --force --mirror origin` | `git log --all -S<giá trị cũ>` → 0 kết quả |
-| 14 | Fix `admin_users.py:351` (default PIN không gate demo) | Worker khác (PR) | PR riêng | test: tạo user ở production → `pin_hash is None` |
-| 15 | Fix `scripts/sync_github_secrets.sh` (in giá trị secret; thiếu 4 biến) | Worker khác (PR) | PR riêng | `rg set_secret scripts/sync_github_secrets.sh` |
-| 16 | Bổ sung 3 key còn thiếu vào `infra/k8s/base/secret-template.yaml` + `.env.example` | Worker khác (PR) | PR riêng | `rg BANKOPS_SIGNING_KEY infra/k8s/base/secret-template.yaml` |
-| 17 | Gỡ shim `SECRET_KEY` ở `backend/entrypoint.sh:10-14` | Worker khác (PR, **sau** #4) | PR riêng | log entrypoint không còn nhánh fallback |
+| 14 | Fix `admin_users.py:351` (default PIN không gate demo) | **Agent đã làm** (wave code-hygiene 2026-10-21) | `backend/app/api/routes/admin_users.py` | `backend/tests/test_admin_user_default_pin_gate.py` → non-demo ⇒ `pin_hash is None` |
+| 15 | Fix `scripts/sync_github_secrets.sh` (in giá trị secret; thiếu 4 biến) | **Agent đã làm** (wave code-hygiene 2026-10-21) | `scripts/sync_github_secrets.sh` | `backend/tests/test_sync_github_secrets_script.py` → 5 test pass |
+| 16 | Bổ sung 3 key còn thiếu vào `infra/k8s/base/secret-template.yaml` + `.env.example` | **Agent đã làm** (wave code-hygiene 2026-10-21) | `infra/k8s/base/secret-template.yaml`, `backend/.env.example` | `backend/tests/test_k8s_secret_template.py` + `test_sync_github_secrets_script.py` → pass |
+| 17 | Gỡ shim `SECRET_KEY` ở `backend/entrypoint.sh:10-14` | **Agent đã làm** (wave code-hygiene 2026-10-21) | `backend/entrypoint.sh` | `backend/tests/test_entrypoint_signing_key.py` → production/staging fail-fast, demo chỉ fallback kèm cảnh báo lớn |
+| 17b | Sửa `scripts/setup_secrets_and_deploy.sh` (ghi đè file khi thiếu biến; thiếu key chuẩn; in giá trị) | **Agent đã làm** (wave code-hygiene 2026-10-21) | `scripts/setup_secrets_and_deploy.sh` | `backend/tests/test_setup_secrets_script.py` → thiếu biến ⇒ exit 1 + file KHÔNG bị đụng; đủ biến ⇒ ghi đủ key chuẩn, không ghi `SECRET_KEY` |
 | 18 | Chạy `--check-env` + `--check-provider` + `--check-artifacts` | Owner (máy có secret store) | xem mục 10 | **cả 3 exit 0** |
 | 19 | Mở/đóng G2 | Owner | — | bảng mục 12 đầy đủ cột Evidence |
 
 > **Agent (SRE/automation) không làm:** #1–#13 (cần tài khoản provider / repo admin).
 > Agent **đã làm** ở wave này: audit references, inventory, `verify_secret_rotation.py`,
 > mở rộng `check_no_secrets.py`, wire CI secret-scan fail, tài liệu runbook.
+>
+> **Wave code-hygiene 2026-10-21 (agent đã làm):** #14, #15, #16, #17, #17b, và
+> bật **GitHub secret scanning + push protection** (xem §13).
 
 ---
 
@@ -462,7 +466,7 @@ chạy `--check-env` + `--check-provider` sau khi phát hành secret mới.
 |---|---|---|---|---|
 | 1 | `BANKOPS_SIGNING_KEY` đã rotate + token cũ 401 | **ĐÃ XONG.** Fingerprint mới `73b8…(len=64, sha256=b348ebd0)`. Token ký bằng key cũ (dev cũ + `SECRET_KEY` legacy cũ) → `GET /api/v1/auth/me` = **401**; `POST /api/v1/auth/login` = **200** (key mới). File: `backend/.env:37`, `infra/k8s/base/secret-production.yaml:19`, GH secret `BANKOPS_SIGNING_KEY` | Agent (DECISION 3) | 2026-10-21 |
 | 2 | `BANKOPS_SIGNING_KEY` đã có trong k8s Secret | **ĐÃ XONG (manifest).** Key `BANKOPS_SIGNING_KEY` đã thêm vào `infra/k8s/base/secret-production.yaml:19`. *Áp dụng lên cluster thật:* `kubectl -n bankops-prod create secret generic bankops-secrets --from-literal=BANKOPS_SIGNING_KEY="$NEW" --dry-run=client -o yaml \| kubectl apply -f -` (owner) | Agent (manifest) / Owner (cluster) | 2026-10-21 |
-| 3 | `SECRET_KEY` đã gỡ khỏi k8s / GitHub / `.env.production` | **CHƯA ĐÓNG (đã đổi end-state).** Wave 2026-10-21 chọn *rotate giá trị* thay vì *gỡ tên* (shim `entrypoint.sh:10-14` còn). Fingerprint mới `3c96…(len=64, sha256=dc5064b5)`; token ký bằng `SECRET_KEY` cũ → **401**. Còn mở: gỡ tên sau khi PR #25 (gỡ shim) merge | Agent (rotate) / Owner (gỡ tên) | 2026-10-21 |
+| 3 | `SECRET_KEY` đã gỡ khỏi k8s / GitHub / `.env.production` | **CHƯA ĐÓNG (đã đổi end-state).** Wave 2026-10-21 chọn *rotate giá trị* thay vì *gỡ tên*. Fingerprint mới `3c96…(len=64, sha256=dc5064b5)`; token ký bằng `SECRET_KEY` cũ → **401**. **Cập nhật 2026-10-21 (wave code-hygiene):** shim đã bị *giảm rủi ro* — `entrypoint.sh` **fail-fast** ở production/staging khi thiếu `BANKOPS_SIGNING_KEY`, `scripts/setup_secrets_and_deploy.sh` **không ghi** `SECRET_KEY` nữa, `scripts/sync_github_secrets.sh` **không sync** `SECRET_KEY` nữa. Còn mở (owner): gỡ tên `SECRET_KEY` khỏi k8s Secret / GitHub secret / `.env.production` | Agent (rotate + code) / Owner (gỡ tên) | 2026-10-21 |
 | 4 | `BANKOPS_SESSION_SECRET` đã rotate (salted/plain fingerprint) | **ĐÃ XONG.** Fingerprint mới `7Qx3…(len=64, sha256=4f456353)`. `settings.session_secret` khớp fingerprint mới; app khởi động OK; login 200 (không có session server-side ⇒ không mất session nào). File: `backend/.env:18`, `secret-production.yaml:20`, GH secret `BANKOPS_SESSION_SECRET` | Agent (DECISION 3) | 2026-10-21 |
 | 5 | `SMTP_PASSWORD` đã rotate | **CẦN OWNER.** Giá trị cũ đã **gỡ khỏi đĩa** (`.env:21`, `backend/.env:26` → `CHANGE_ME_SMTP_PASSWORD`), nhưng **app password cũ vẫn còn hiệu lực ở Google** (đã probe: vẫn login được). App password mới phải tạo ở `https://myaccount.google.com/apppasswords` rồi set: `gh secret set SMTP_PASSWORD --repo imtarget05/QuanLyKho` + k8s + Render dashboard | Owner | — |
 | 6 | Gmail app password **cũ** trả 535 | **CẦN OWNER — ĐÃ ĐO, ĐANG SỐNG.** Probe SMTP 2026-10-21 (`SMTP_OLD_PASSWORD`): **old app password STILL LOGS IN** (`smtp_password FAIL - not revoked`) ⇒ app password đã lộ trong git history **vẫn hiệu lực**. Owner xoá ở `https://myaccount.google.com/apppasswords`, rồi chạy lại `SMTP_USER=… SMTP_OLD_PASSWORD=… python3 scripts/verify_secret_rotation.py --check-provider` → phải báo `smtp_password PASS (535)` | Owner | — |
@@ -478,14 +482,69 @@ chạy `--check-env` + `--check-provider` sau khi phát hành secret mới.
 | 16 | `--check-artifacts` exit 0 | **ĐÃ XONG — exit 0** (quét `logs/`, `artifacts/`, `test-results/`, `reports/`, `mlruns/`, `backend/.pytest_cache/` + `OLD_SECRET_*` cho giá trị cũ: không tìm thấy secret nào) | Agent | 2026-10-21 |
 | 17 | `python3 scripts/check_no_secrets.py` exit 0 | **ĐÃ XONG — exit 0** (không có secret trong file tracked) | Agent | 2026-10-21 |
 | 18 | `python3 scripts/check_no_secrets.py --local` không còn finding | **ĐÃ XONG — exit 0.** Sau khi rotate, `--local` chỉ còn *cảnh báo cấu trúc* (file local gitignored có gán secret: `backend/.env`, `.env.production`) + các URL DB dev; **không** còn giá trị cũ nào trên đĩa (đã quét toàn bộ cây file: 0 kết quả với key/session/SECRET_KEY/SMTP/CF/GPG cũ; PIN cũ chỉ còn ở dạng hằng demo công khai `123456` trong code/docs) | Agent | 2026-10-21 |
-| 19 | GitHub secret scanning **Enabled** | **CẦN OWNER** — `https://github.com/imtarget05/QuanLyKho/settings/security_analysis` | Owner | — |
-| 20 | GitHub push protection **Enabled** | **CẦN OWNER** — `https://github.com/imtarget05/QuanLyKho/settings/security_analysis/push_protection` | Owner | — |
+| 19 | GitHub secret scanning **Enabled** | **ĐÃ XONG.** `gh api repos/imtarget05/QuanLyKho --jq .security_and_analysis` → `"secret_scanning": {"status":"enabled"}`. Đã `PATCH` idempotent (2026-10-21) để chốt trạng thái. *Lưu ý:* endpoint chuyên dụng `GET/PATCH /repos/imtarget05/QuanLyKho/secret-scanning/secret-scanning` trả **404** (repo **public** → endpoint đó dành cho repo có GitHub Advanced Security / Secret Protection; repo public dùng cờ `security_and_analysis`) | Agent | 2026-10-21 |
+| 20 | GitHub push protection **Enabled** | **ĐÃ XONG.** Cùng response `security_and_analysis` → `"secret_scanning_push_protection": {"status":"enabled"}`. Endpoint `GET /repos/imtarget05/QuanLyKho/secret-scanning/push-protection` → **404** (xem ghi chú dòng 19) | Agent | 2026-10-21 |
 | 21 | Git history đã rewrite (nếu quyết định) + mọi clone đã đồng bộ | **CHƯA** — cần phê duyệt riêng (`git filter-repo` + `push --force --mirror`) | Owner | — |
-| 22 | PR fix `admin_users.py:351` đã merge | **CHƯA** — file của worker khác; đây là default PIN **không gate demo** còn chạy ở production | Worker khác | — |
-| 23 | PR fix `sync_github_secrets.sh` đã merge | **ĐÃ XONG (in-file, chưa commit).** Nhánh fallback không còn in giá trị secret (chỉ in tên biến) + đã thêm `BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `SMTP_PASSWORD`, `SUPERVISOR_PIN` vào danh sách sync | Agent | 2026-10-21 |
-| 24 | PR bổ sung key vào `secret-template.yaml` / `.env.example` đã merge | **CHƯA** — file của worker khác | Worker khác | — |
-| 25 | PR gỡ shim `entrypoint.sh` đã merge | **CHƯA** — chặn bởi #3 (gỡ `SECRET_KEY` khỏi mọi store) | Worker khác | — |
+| 22 | PR fix `admin_users.py:351` đã merge | **ĐÃ XONG (code + test).** `backend/app/api/routes/admin_users.py` giờ gán `pin_hash = get_password_hash(DEMO_SUPERVISOR_PIN) if settings.is_demo_mode else None` — ngoài demo mode user mới **không** có PIN sẵn. Test: `backend/tests/test_admin_user_default_pin_gate.py` (2 test: non-demo ⇒ `pin_hash is None`; demo ⇒ có PIN) | Agent | 2026-10-21 |
+| 23 | PR fix `sync_github_secrets.sh` đã merge | **ĐÃ XONG.** Nhánh fallback (khi chưa cài `gh`) **không còn in giá trị** — chỉ in TÊN biến (ghi literal, không nội suy); đã thêm `BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `SMTP_PASSWORD`, `SUPERVISOR_PIN`; **không** sync `SECRET_KEY` (legacy) nữa. Test: `backend/tests/test_sync_github_secrets_script.py` (5 test) | Agent | 2026-10-21 |
+| 24 | PR bổ sung key vào `secret-template.yaml` / `.env.example` đã merge | **ĐÃ XONG.** `infra/k8s/base/secret-template.yaml` khai báo đủ `BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `SMTP_USER`, `SMTP_PASSWORD`, `SUPERVISOR_PIN` (placeholder `CHANGE_ME_…`) + ghi rõ `SECRET_KEY` là **DEPRECATED, không làm fallback âm thầm**. `backend/.env.example` khai báo `BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `SUPERVISOR_PIN` (placeholder) + nhắc `SECRET_KEY` là legacy. Test: `backend/tests/test_k8s_secret_template.py` + `backend/tests/test_sync_github_secrets_script.py` | Agent | 2026-10-21 |
+| 25 | PR gỡ shim `entrypoint.sh` đã merge | **ĐÃ XONG (code + test).** `backend/entrypoint.sh`: `BANKOPS_SIGNING_KEY` thiếu ⇒ **FAIL-FAST** (exit 1, không start server) ở `APP_ENV=production|staging` (hoặc `APP_ENV` unset ⇒ coi như production); chỉ ở `APP_ENV=demo|dev|test` mới fallback `SECRET_KEY` **kèm cảnh báo lớn** (không âm thầm). Test: `backend/tests/test_entrypoint_signing_key.py` (5 test, chạy script thật với `alembic`/`uvicorn` giả trong PATH) | Agent | 2026-10-21 |
 
 > **G2 chỉ đóng được khi mọi dòng trên đã đầy cột Evidence.**
 > Trước wave này, **G2 chưa đóng được**: chưa credential nào được rotate, mọi
 > `--check-env` / `--check-provider` đều FAIL.
+
+---
+
+## 13. Wave code-hygiene 2026-10-21 — kết quả và trạng thái còn lại
+
+### 13.1. Phần code đã sửa (agent đã làm, có test)
+
+| # | File | Thay đổi | Bằng chứng (test) |
+|---|---|---|---|
+| 1 | `backend/app/api/routes/admin_users.py` | PIN mặc định **chỉ** gán khi `settings.is_demo_mode`; ngoài demo mode ⇒ `pin_hash = None` | `backend/tests/test_admin_user_default_pin_gate.py` (2 test) |
+| 2 | `backend/entrypoint.sh` | Gỡ fallback âm thầm: thiếu `BANKOPS_SIGNING_KEY` ⇒ **FAIL-FAST** (production/staging/`APP_ENV` unset) hoặc fallback legacy **kèm cảnh báo lớn** (demo/dev/test) | `backend/tests/test_entrypoint_signing_key.py` (5 test) + `backend/tests/test_entrypoint_failfast.py` (5 test) |
+| 3 | `infra/k8s/base/secret-template.yaml` | Khai báo đủ key chuẩn (`BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `SMTP_USER`, `SMTP_PASSWORD`, `SUPERVISOR_PIN`); `SECRET_KEY` ghi rõ **DEPRECATED / không làm fallback âm thầm** | `backend/tests/test_k8s_secret_template.py` (4 test) |
+| 4 | `backend/.env.example` | Khai báo `BANKOPS_SIGNING_KEY`, `BANKOPS_SESSION_SECRET`, `SUPERVISOR_PIN` (placeholder) + nhắc `SECRET_KEY` là legacy/DEPRECATED (không khai báo giá trị) | `backend/tests/test_sync_github_secrets_script.py` (5 test) |
+| 5 | `scripts/setup_secrets_and_deploy.sh` | Ghi **đủ** key chuẩn vào `secret-production.yaml` + `.env.production`; thêm `--from-env`; **không ghi đè file** khi thiếu biến bắt buộc (exit 1 + danh sách tên biến thiếu); **không in giá trị** ra stdout; **không ghi** `SECRET_KEY`; không dùng `SECRET_KEY` làm fallback | `backend/tests/test_setup_secrets_script.py` (6 test) |
+| 6 | `scripts/sync_github_secrets.sh` | Nhánh fallback (không có `gh`) chỉ in **tên** biến; thêm 4 biến chuẩn; **không** sync `SECRET_KEY` (legacy) | `backend/tests/test_sync_github_secrets_script.py` (5 test) |
+
+### 13.2. GitHub secret scanning + push protection (3 repo)
+
+Câu lệnh kiểm chứng (không in giá trị secret):
+
+```bash
+gh api repos/imtarget05/QuanLyKho --jq .security_and_analysis
+```
+
+| Repo | Secret scanning | Push protection | Bằng chứng / ghi chú |
+|---|---|---|---|
+| `imtarget05/QuanLyKho` | **enabled** | **enabled** | `security_and_analysis.secret_scanning.status=enabled` và `security_and_analysis.secret_scanning_push_protection.status=enabled`; `PATCH` idempotent 2026-10-21 |
+| `imtarget05/AKS-SRE-Platform` | **enabled** | **enabled** | Cùng cách kiểm chứng, `PATCH` idempotent 2026-10-21 |
+| `imtarget05/OpsBridge` | **không kiểm chứng được** | **không kiểm chứng được** | `gh api repos/imtarget05/OpsBridge` → **404 Not Found**: repo này **không tồn tại** (hoặc không truy cập được) trong account `imtarget05` ⇒ **CẦN OWNER xác nhận tên repo** |
+
+> **Ghi chú kỹ thuật:** endpoint chuyên dụng
+> `GET|PATCH /repos/{owner}/{repo}/secret-scanning/secret-scanning` và
+> `.../push-protection` trả **404 Not Found** cho các repo public ở trên — endpoint
+> đó dành cho repo có **GitHub Advanced Security / Secret Protection**. Repo
+> **public** dùng cờ `security_and_analysis` trong chính object của repo, và cờ đó
+> đã **enabled** cho cả `secret_scanning` lẫn `secret_scanning_push_protection`.
+
+### 13.3. Kết luận: cổng "secrets gate" **FAIL**
+
+Trạng thái tại 2026-10-21 (sau wave code-hygiene):
+
+| Cổng | Trạng thái | Lý do |
+|---|---|---|
+| `scripts/check_no_secrets.py` | **PASS** (exit 0) | không có credential trong file tracked |
+| `verify_secret_rotation.py --self-test` | **PASS** (exit 0) | cơ chế tự kiểm chứng |
+| `verify_secret_rotation.py --check-env` | **FAIL** | 3 credential **CẦN OWNER** (`smtp_password`, `cloudflare_api_token`, `backup_gpg_passphrase`) chưa có fingerprint mới + `database_url` (P3, ngoài scope) |
+| `verify_secret_rotation.py --check-provider` | **FAIL** | app password Gmail cũ **vẫn login được**; Cloudflare token cũ **vẫn `active`** (không tự revoke được: `GET /user/tokens` 403, `DELETE` 403 code 9109) |
+| GitHub secret scanning + push protection | **PASS** (2/3 repo; repo thứ 3 không tồn tại) | §13.2 |
+
+⇒ **Cổng secrets gate vẫn FAIL.** Phần **code** đã sạch (không còn default PIN,
+không còn fallback legacy âm thầm, template/script đủ key chuẩn, secret scanning
++ push protection đã bật), nhưng **3 credential còn sống ở provider** và chỉ
+**chủ tài khoản** mới gỡ được (Gmail app password, Cloudflare API token, GPG
+passphrase). Xem bảng cột Evidence ở mục 12 và §6 của
+`docs/security/secret-rotation-inventory-2026-10-20.md`.
