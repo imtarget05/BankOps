@@ -38,7 +38,14 @@ SOURCE_FILES = (
     "09-integrations-jobs.md",
     "12-glossary.md",
 )
-_STOP = {"cho", "cua", "cac", "voi", "trong", "khi", "nhung", "duoc", "theo", "khong", "khotrasua", "nhu", "mot"}
+_STOP = {
+    "cho", "cua", "cac", "voi", "trong", "khi", "nhung", "duoc", "theo",
+    "khong", "khotrasua", "nhu", "mot", "thoi", "hom", "nay", "noi", "the",
+    "nao", "bao", "nhieu", "day", "do", "tai", "qua", "lai", "den", "ve",
+    "hay", "hoac", "neu", "thi", "ma", "chua", "roi", "rat", "lam",
+    "minh", "ban", "anh", "chi", "em", "ong", "ba", "sao", "dau", "co",
+    "chut", "dung", "biet", "xem", "cho"
+}
 
 BUILTIN_SOP_KNOWLEDGE = [
     {
@@ -120,7 +127,8 @@ def retrieve(message: str, limit: int = 3) -> list[dict[str, str]]:
             heading_matches = len(query & _terms(heading))
             content_matches = len(query & _terms(content))
             score = heading_matches * 3 + content_matches
-            if score:
+            # Require minimum relevance score of 3 to avoid single incidental word collisions
+            if score >= 3:
                 matches.append((score, {"source": f"docs/{filename}", "section": heading, "content": content[:1200]}))
 
     # Built-in SOP rules fallback when docs folder is incomplete or for standard operational questions
