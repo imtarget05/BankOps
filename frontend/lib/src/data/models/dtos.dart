@@ -625,14 +625,37 @@ class ReconciliationRun {
   const ReconciliationRun({
     required this.id,
     required this.status,
+    required this.scope,
     required this.startedAt,
     this.exceptions = const [],
+    this.exceptionCount = 0,
+    this.openExceptionCount = 0,
+    this.autoFixed = false,
   });
+
+  factory ReconciliationRun.fromJson(Map<String, dynamic> json) {
+    return ReconciliationRun(
+      id: json['id'] as String,
+      status: json['status'] as String,
+      scope: json['scope'] as String? ?? 'cash',
+      startedAt: DateTime.parse(json['startedAt'] as String),
+      exceptions: (json['exceptions'] as List? ?? const [])
+          .cast<String>()
+          .toList(),
+      exceptionCount: json['exception_count'] as int? ?? 0,
+      openExceptionCount: json['open_exception_count'] as int? ?? 0,
+      autoFixed: json['auto_fixed'] as bool? ?? false,
+    );
+  }
 
   final String id;
   final String status;
+  final String scope;
   final DateTime startedAt;
   final List<String> exceptions;
+  final int exceptionCount;
+  final int openExceptionCount;
+  final bool autoFixed;
 }
 
 /// Kết quả thẩm định rủi ro Maker-Checker AI Copilot.

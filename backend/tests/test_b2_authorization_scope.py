@@ -274,3 +274,129 @@ class TestReconciliationCashboxScope:
                     )
             _sql("DELETE FROM cash_boxes WHERE id = :b", b=box_b)
             _sql("DELETE FROM iam_user_roles WHERE user_id = :id", id=user_id)
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation exception counters must respect the caller's accessible scope.
+# ---------------------------------------------------------------------------
+class TestReconciliationExceptionCounterScope:
+    @staticmethod
+    def _make_cashbox(code: str, branch_id: str) -> str:
+        box_id = str(uuid.uuid4())
+        _sql(
+            "INSERT INTO cash_boxes (id, code, name, currency, active, branch_id) "
+            "VALUES (:id, :c, :n, 'VND', true, :b)",
+            id=box_id, c=code, n=code, b=branch_id,
+        )
+        return box_id
+
+    def _plant_unbalanced_journal(self, cashbox_id: str, maker_id: str) -> str:
+        req_id = str(uuid.uuid4())
+        _sql(
+            "INSERT INTO cash_requests (id, cashbox_id, kind, amount, status, maker_id, "
+            "created_by, version) VALUES (:id, :b, 'receipt', 100, 'posted', :m, :m, 1)",
+            id=req_id, b=cashbox_id, m=maker_id,
+        )
+        journal_id = str(uuid.uuid4())
+        _sql(
+            "INSERT INTO cash_journals (id, request_id, posted_at, correlation_id) "
+            "VALUES (:id, :r, now(), :c)",
+            id=journal_id, r=req_id,
+            c=f"scope-test-{uuid.uuid4().hex[:8]}",
+        )
+        _sql(
+            "INSERT INTO cash_entries (id, journal_id, account_code, debit, credit) "
+            "VALUES (:id, :j, 'SIM_CASH:TEST', 100, 0)",
+            id=str(uuid.uuid4()), j=journal_id,
+        )
+        return journal_id
+
+
+
+    def test_dashboard_exception_counters_respect_cashbox_scope(self, client):
+        username = f"w2_exc_cash_{uuid.uuid4().hex[:8]}"
+        user_id = _ensure_user(username, "cash_sim_operator", BRANCH_A)
+        headers = _login(client, username)
+
+        box_b = self._make_cashbox(f"EXC-BOX-B-{uuid.uuid4().hex[:6]}", BRANCH_B)
+        journal_b = None
+        try:
+            journal_b = self._plant_unbalanced_journal(box_b, user_id)
+
+            resp = client.post(
+                "/reconciliations",
+                headers={**headers, "Idempotency-Key": str(uuid.uuid4())},
+                json={"scope": "cash"},
+            )
+            assert resp.status_code == 201, resp.text
+            assert f"journal:{journal_b}" not in [
+                e["subject"] for e in resp.json()["exceptions"]
+            ], "branch-B journal exception must not appear for branch-A user"
+
+            dash = client.get("/dashboard/summary", headers=headers)
+            assert dash.status_code == 200, dash.text
+            counters = dash.json()["reconciliation_counters"]
+            assert counters["total_exceptions"] == 0, (
+                f"branch-A user must see 0 total exceptions, got {counters['total_exceptions']}"
+            )
+            assert counters["cash_exceptions"] == 0
+            assert counters["open_exceptions"] == 0
+        finally:
+            if journal_b:
+                request_rows = _rows(
+                    "SELECT request_id FROM cash_journals WHERE id = :j", j=journal_b
+                )
+                _sql("DELETE FROM cash_entries WHERE journal_id = :j", j=journal_b)
+                _sql("DELETE FROM cash_journals WHERE id = :j", j=journal_b)
+                if request_rows:
+                    _sql(
+                        "DELETE FROM cash_requests WHERE id = :r",
+                        r=str(request_rows[0][0]),
+                    )
+            _sql("DELETE FROM cash_boxes WHERE id = :b", b=box_b)
+            _sql("DELETE FROM iam_user_roles WHERE user_id = :id", id=user_id)
+
+    def test_dashboard_exception_counters_admin_sees_all(self, client):
+        admin_username = f"w2_exc_admin_{uuid.uuid4().hex[:8]}"
+        admin_id = _ensure_user(admin_username, "admin", BRANCH_HO)
+        _sql("INSERT INTO iam_user_roles (user_id, role_code) VALUES (:id, 'cash_sim_operator')", id=admin_id)
+        admin_headers = _login(client, admin_username)
+
+        box_b = self._make_cashbox(f"EXC-ADMIN-B-{uuid.uuid4().hex[:6]}", BRANCH_B)
+        journal_b = None
+        try:
+            journal_b = self._plant_unbalanced_journal(box_b, admin_id)
+
+            resp = client.post(
+                "/reconciliations",
+                headers={**admin_headers, "Idempotency-Key": str(uuid.uuid4())},
+                json={"scope": "cash"},
+            )
+            assert resp.status_code == 201, resp.text
+            subjects = [e["subject"] for e in resp.json()["exceptions"]]
+            assert f"journal:{journal_b}" in subjects, (
+                "admin must see branch-B journal exception"
+            )
+
+            dash = client.get("/dashboard/summary", headers=admin_headers)
+            assert dash.status_code == 200, dash.text
+            counters = dash.json()["reconciliation_counters"]
+            assert counters["total_exceptions"] >= 1, (
+                f"admin must see >= 1 total exceptions, got {counters['total_exceptions']}"
+            )
+            assert counters["cash_exceptions"] >= 1
+            assert counters["open_exceptions"] >= 1
+        finally:
+            if journal_b:
+                request_rows = _rows(
+                    "SELECT request_id FROM cash_journals WHERE id = :j", j=journal_b
+                )
+                _sql("DELETE FROM cash_entries WHERE journal_id = :j", j=journal_b)
+                _sql("DELETE FROM cash_journals WHERE id = :j", j=journal_b)
+                if request_rows:
+                    _sql(
+                        "DELETE FROM cash_requests WHERE id = :r",
+                        r=str(request_rows[0][0]),
+                    )
+            _sql("DELETE FROM cash_boxes WHERE id = :b", b=box_b)
+            _sql("DELETE FROM iam_user_roles WHERE user_id = :id", id=admin_id)
