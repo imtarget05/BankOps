@@ -166,9 +166,9 @@ jobs:
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           QLK_INGEST_DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           QLK_INGEST_ALLOW_ANY_DB: "1"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "${{ runner.temp }}/mlflow-s11/mlruns"
         run: poetry run python -m pytest tests/test_airflow_ingest_tasks.py -v --no-header --tb=short
 
       - name: Run Alembic migrations
@@ -220,9 +220,9 @@ jobs:
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           QLK_INGEST_DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           QLK_INGEST_ALLOW_ANY_DB: "1"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "${{ runner.temp }}/mlflow-s11/mlruns"
         run: |
           # pipefail: `airflow dags test` fail ⇒ step fail (không được xanh vacuous
           # vì `tee` trả 0).
@@ -302,9 +302,9 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "${{ runner.temp }}/mlflow-s11/mlruns"
           MODEL_NAME: "DemandForecastModel"
         run: poetry run pytest tests/test_ml_training.py tests/test_ml_registry.py -v --no-header --tb=short
 
@@ -312,7 +312,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
           MODEL_NAME: "DemandForecastModel"
         run: |
           set -euo pipefail
@@ -327,16 +327,16 @@ jobs:
       - name: MLflow registry gate (fail-closed)
         working-directory: backend
         env:
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
           MODEL_NAME: "DemandForecastModel"
-          E2E_EVIDENCE_PATH: "$RUNNER_TEMP/s11-evidence/e2e-registry.json"
+          E2E_EVIDENCE_PATH: "${{ runner.temp }}/s11-evidence/e2e-registry.json"
         run: poetry run python scripts/e2e_verify.py
 
       - name: FastAPI Serving Smoke Test
         working-directory: backend
         env:
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
           # `scripts/smoke_test.py` nằm ở GỐC repo; nó import `app.*` ⇒ cần
           # backend trên PYTHONPATH.
           PYTHONPATH: ${{ github.workspace }}/backend
@@ -369,8 +369,12 @@ jobs:
             ${{ runner.temp }}/mlflow-s11/
           retention-days: 30
 
+      # NOTE: step này CHỈ được chạy khi mọi step trước đó xanh. Trước đây nó
+      # dùng `if: always()` ⇒ log in ra "S11 CLOUD CI E2E VERIFIED" ngay cả khi
+      # job FAIL, tự mâu thuẫn với bằng chứng. Giờ: xanh ⇒ thông báo VERIFIED;
+      # đỏ ⇒ thông báo FAILED ở step riêng.
       - name: Announce CLOUD_CI_E2E_VERIFIED
-        if: always()
+        if: success()
         run: |
           echo "========================================"
           echo "S11 CLOUD CI E2E VERIFIED"
@@ -379,7 +383,18 @@ jobs:
           echo "Status: ${{ job.status }}"
           echo "========================================"
 
+      - name: Announce CLOUD_CI_E2E_FAILED
+        if: failure()
+        run: |
+          echo "========================================"
+          echo "S11 CLOUD CI E2E FAILED"
+          echo "Run: ${{ github.run_id }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Status: ${{ job.status }}"
+          echo "========================================"
+
       - name: Export gate result
         id: gate-result
+        if: success()
         run: |
           echo "gate=cloud_ci_e2e_verified" >> $GITHUB_OUTPUT
