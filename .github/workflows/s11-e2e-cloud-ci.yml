@@ -68,6 +68,7 @@ jobs:
 
       - name: Prepare Airflow DAG temp dirs
         run: |
+          mkdir -p "$RUNNER_TEMP/mlflow-s11"
           mkdir -p "$RUNNER_TEMP/mlflow-s11/mlruns"
           mkdir -p "$RUNNER_TEMP/s11-evidence"
 
