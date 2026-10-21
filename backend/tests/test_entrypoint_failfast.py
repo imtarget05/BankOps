@@ -51,6 +51,11 @@ def _run_entrypoint(tmp_path: Path, alembic_exit: int, extra_env: dict | None = 
         **os.environ,
         "PATH": f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}",
         "DATABASE_URL": "postgresql+psycopg2://fake:fake@127.0.0.1:5432/fake",
+        # `entrypoint.sh` fail-fast khi thiếu `BANKOPS_SIGNING_KEY` ở
+        # production/staging. Test này chỉ kiểm tra hành vi MIGRATION nên chạy
+        # ở chế độ demo (biến môi trường được set tường minh, không phụ thuộc
+        # môi trường CI).
+        "APP_ENV": "demo",
     }
     env.update(extra_env or {})
     proc = subprocess.run(
@@ -129,6 +134,7 @@ def test_missing_database_url_skips_migration_but_starts_server(tmp_path):
     env = {
         **os.environ,
         "PATH": f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}",
+        "APP_ENV": "demo",
     }
     env.pop("DATABASE_URL", None)
     proc = subprocess.run(

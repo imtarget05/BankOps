@@ -5,18 +5,41 @@ set -e
 # `app/config.py` mặc định `APP_ENV=production`: server thiếu
 # `BANKOPS_SIGNING_KEY` thì KHÔNG được khởi động (token ký bằng secret
 # ephemeral sẽ hết hạn sau mỗi lần restart).
-# Secret trong k8s/HF đang đặt tên legacy là `SECRET_KEY` -> dùng làm signing
-# key khi chưa cấp `BANKOPS_SIGNING_KEY` riêng.
 #
-# LEGACY FALLBACK: `SECRET_KEY` là tên CŨ của secret deploy. Template
-# (`infra/k8s/base/secret-template.yaml`) đã khai báo `BANKOPS_SIGNING_KEY`
-# (tên đúng mà `app/config.py` đọc) -> deploy mới KHÔNG cần dựa vào shim này.
-# Shim chỉ còn để cluster cũ (chưa cấp lại secret) khởi động được; sẽ bỏ được
-# khi mọi secret đã đổi sang `BANKOPS_SIGNING_KEY`.
-if [ -z "${BANKOPS_SIGNING_KEY:-}" ] && [ -n "${SECRET_KEY:-}" ]; then
-    echo "[Entrypoint] BANKOPS_SIGNING_KEY chưa set -> dùng SECRET_KEY (LEGACY fallback: tên cũ của secret deploy)."
-    BANKOPS_SIGNING_KEY="$SECRET_KEY"
-    export BANKOPS_SIGNING_KEY
+# `SECRET_KEY` là tên CŨ (legacy) của secret deploy. KHÔNG được dùng nó làm
+# fallback ÂM THẦM: 2 tên / 1 giá trị ⇒ rotate `BANKOPS_SIGNING_KEY` ở một
+# nơi thì nơi kia vẫn giữ giá trị cũ (xem
+# `docs/security/secret-rotation-inventory-2026-10-20.md` §4).
+#
+# - `APP_ENV` = production|staging (hoặc KHÔNG set -> coi như production):
+#   FAIL-FAST, không start server.
+# - `APP_ENV` = demo|dev|test: fallback legacy **kèm CẢNH BÁO LỚN** (chỉ để
+#   môi trường dev/demo khởi động được; tuyệt đối không dùng ở production).
+if [ -z "${BANKOPS_SIGNING_KEY:-}" ]; then
+    APP_ENV_VALUE="${APP_ENV:-production}"
+    case "$APP_ENV_VALUE" in
+        demo|dev|test|local)
+            if [ -n "${SECRET_KEY:-}" ]; then
+                echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                echo "[Entrypoint] WARNING (DEPRECATED): 'SECRET_KEY' là tên CŨ (legacy) của secret deploy."
+                echo "[Entrypoint]          'BANKOPS_SIGNING_KEY' chưa set nên đang fallback sang 'SECRET_KEY'"
+                echo "[Entrypoint]          (APP_ENV=${APP_ENV_VALUE}). 2 tên / 1 giá trị = rủi ro rotate lệch."
+                echo "[Entrypoint]          Hãy cấp 'BANKOPS_SIGNING_KEY' (k8s Secret / GitHub Secret) rồi bỏ 'SECRET_KEY'."
+                echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                BANKOPS_SIGNING_KEY="$SECRET_KEY"
+                export BANKOPS_SIGNING_KEY
+            else
+                echo "[Entrypoint] WARNING: 'BANKOPS_SIGNING_KEY' chưa set (APP_ENV=${APP_ENV_VALUE})"
+                echo "[Entrypoint]          -> app sẽ dùng secret EPHEMERAL (token hết hạn sau mỗi lần restart)."
+            fi
+            ;;
+        *)
+            echo "[Entrypoint] FATAL: thiếu 'BANKOPS_SIGNING_KEY' (APP_ENV=${APP_ENV_VALUE}) -> DỪNG khởi động server." >&2
+            echo "[Entrypoint]        KHÔNG dùng fallback legacy 'SECRET_KEY' ở môi trường này (2 tên / 1 giá trị khiến rotate bị lệch)." >&2
+            echo "[Entrypoint]        Hãy cấp 'BANKOPS_SIGNING_KEY' trong k8s Secret / GitHub Secret rồi deploy lại." >&2
+            exit 1
+            ;;
+    esac
 fi
 
 # --- Migrations: FAIL FAST -----------------------------------------------
