@@ -150,6 +150,7 @@ jobs:
         run: poetry run pytest tests/test_ml_training.py tests/test_ml_registry.py -v --no-header --tb=short
 
       - name: Promote model to Production
+        working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
           MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
@@ -157,16 +158,17 @@ jobs:
         run: |
           set -e
           echo "=== Promoting model to Production ==="
-          poetry run python promote_model.py
+          poetry run python ../promote_model.py
 
       - name: FastAPI Serving Smoke Test
+        working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
           MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
           MODEL_NAME: "DemandForecastModel"
         run: |
           echo "=== FastAPI Serving Smoke Test ==="
-          poetry run python scripts/smoke_test.py
+          poetry run python ../scripts/smoke_test.py
 
       - name: Drift Detection Check
         working-directory: backend
