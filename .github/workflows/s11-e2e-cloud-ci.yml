@@ -79,8 +79,8 @@ jobs:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
           QLK_INGEST_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
           QLK_INGEST_ALLOW_ANY_DB: "1"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "${{ runner.temp }}/mlflow-s11/mlruns"
           AIRFLOW_HOME: ${{ runner.temp }}/airflow-home
         run: |
           set -e
@@ -143,9 +143,9 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
-          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "${{ runner.temp }}/mlflow-s11/mlruns"
           MODEL_NAME: "DemandForecastModel"
         run: poetry run pytest tests/test_ml_training.py tests/test_ml_registry.py -v --no-header --tb=short
 
@@ -153,7 +153,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: "postgresql+psycopg2://bankops:bankops@localhost:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          MLFLOW_TRACKING_URI: "sqlite:///${{ runner.temp }}/mlflow-s11/mlflow.db"
           MODEL_NAME: "DemandForecastModel"
         run: |
           set -e
