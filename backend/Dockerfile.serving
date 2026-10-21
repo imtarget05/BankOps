@@ -47,6 +47,12 @@ COPY --from=builder /usr/local /usr/local
 COPY app/ app/
 COPY Dockerfile.serving .
 
+# Create writable data directories and symlink mlruns and artifacts to writable volumes
+RUN mkdir -p /data/mlruns /tmp /home/appuser \
+    && ln -sf /data/mlruns /app/mlruns \
+    && ln -sf /tmp /app/artifacts \
+    && chown -R 1000:1000 /app /data /home/appuser
+
 # Switch to non-root user
 # Dùng numeric UID:GID (1000:1000) — kubelet chỉ verify được non-root khi
 # image khai báo user dạng số, không verify được user name ("appuser").

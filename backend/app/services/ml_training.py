@@ -68,6 +68,16 @@ def train_demand_forecast_model(train: pd.DataFrame, test: pd.DataFrame, experim
     Returns dict with model, metrics, and mlflow run info.
     """
 
+    import os
+
+    artifact_root = os.getenv("MLFLOW_ARTIFACT_ROOT", "/data/mlruns" if os.path.exists("/data") else "./mlruns")
+    client = mlflow.tracking.MlflowClient()
+    exp = client.get_experiment_by_name(experiment_name)
+    if exp is None:
+        try:
+            client.create_experiment(experiment_name, artifact_location=f"{artifact_root}/{experiment_name}")
+        except Exception:
+            pass
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run() as run:
@@ -129,13 +139,15 @@ def train_demand_forecast_model(train: pd.DataFrame, test: pd.DataFrame, experim
         mlflow.sklearn.log_model(model, "model", registered_model_name="DemandForecastModel")
 
         # Log sample data artifact
-        Path("artifacts").mkdir(exist_ok=True)
-        train.head(10).to_csv("artifacts/train_data_sample.csv", index=False)
-        mlflow.log_artifact("artifacts/train_data_sample.csv")
+        temp_dir = Path("/tmp/artifacts") if Path("/tmp").exists() else Path("artifacts")
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        sample_file = temp_dir / "train_data_sample.csv"
+        train.head(10).to_csv(sample_file, index=False)
+        mlflow.log_artifact(str(sample_file))
 
         # Cleanup
         import shutil
-        shutil.rmtree("artifacts", ignore_errors=True)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
         result = {
             "run_id": run.info.run_id,
