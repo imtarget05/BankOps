@@ -7,6 +7,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+
 from conftest import fetch_all_balances
 
 DEMO_PASSWORD = "DemoPass123!"
