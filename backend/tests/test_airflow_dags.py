@@ -26,16 +26,14 @@ def _validate_dag_file(dag_file: Path) -> bool:
         return False
 
 
-# Run validation for each DAG file on session scope
-@pytest.fixture(scope="session", autouse=True)
-def validate_all_dags():
-    """Validate all DAG files on test session start."""
-    results = {}
-    for dag_file in sorted(DAGS_DIR.glob("*.py")):
-        if dag_file.name.startswith("_") or dag_file.name.startswith("."):
-            continue
-        valid = _validate_dag_file(dag_file)
-        results[dag_file.name] = valid
-        if not valid:
-            pytest.fail(f"DAG file {dag_file.name} failed validation", pytrace=False)
-    return results
+# One test per DAG file
+for dag_file in sorted(DAGS_DIR.glob("*.py")):
+    if dag_file.name.startswith("_") or dag_file.name.startswith("."):
+        continue
+    name = dag_file.stem
+    exec(
+        f"def test_{name}():\n"
+        "    \"\"\"Validate {dag_file.name}.\"\"\"\n"
+        "    valid = _validate_dag_file(dag_file)\n"
+        "    assert valid, f\"DAG file {dag_file.name} failed validation\"\n",
+    )
