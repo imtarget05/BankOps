@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - 'backend/tests/test_ml_training.py'
-      - 'backend/tests/test_e2e_verify.py'
       - 'backend/tests/test_ml_registry.py'
       - 'backend/tests/test_inference_api.py'
       - 'backend/tests/test_drift_detection.py'
@@ -17,6 +16,15 @@ on:
       - 'backend/app/api/inference.py'
       - 'backend/alembic/**'
       - 'backend/pyproject.toml'
+      - 'infra/airflow/**'
+      - '.github/workflows/s11-e2e-cloud-ci.yml'
+
+env:
+  PYTHON_VERSION: "3.11"
+  # DB service của CI (disposable). KHÔNG phải DB dev `bankops`.
+  CI_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
+  # DB metadata của Airflow — tách riêng khỏi DB ứng dụng.
+  CI_AIRFLOW_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test_airflow"
 
 jobs:
   cloud-ci-e2e-verified:
@@ -46,59 +54,190 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          export PATH="$HOME/.local/bin:$PATH"
+        # poetry-plugin-export: workflow cần `poetry export` để dựng venv Airflow
+        # cô lập từ đúng bộ dependency đã khoá.
+        run: pip install poetry poetry-plugin-export
 
-      - name: Install Airflow (isolated metadata DB)
-        run: |
-          python -m pip install --quiet "apache-airflow==2.10.4" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.11.txt"
-          export AIRFLOW_HOME="$RUNNER_TEMP/airflow-home"
-          mkdir -p "$AIRFLOW_HOME"
-          echo "AIRFLOW_HOME=$AIRFLOW_HOME" >> $GITHUB_ENV
-          airflow db migrate
+      # ---------------------------------------------------------------------
+      # FIX 1 — dependency phải được cài TRƯỚC mọi step chạy test.
+      # Trước đây step "Install dependencies" nằm SAU step "Airflow DAG run",
+      # nên `poetry run python -m pytest` chạy trong venv chưa có dependency.
+      # ---------------------------------------------------------------------
+      - name: Install backend dependencies (Poetry venv)
+        working-directory: backend
+        run: poetry install --no-interaction --no-ansi
 
-      - name: Prepare Airflow DAG temp dirs
+      - name: Export backend requirements (locked)
+        working-directory: backend
+        run: poetry export -o "$RUNNER_TEMP/backend-requirements.txt" --without-hashes --with dev
+
+      # ---------------------------------------------------------------------
+      # Môi trường Airflow — TÁCH BIỆT khỏi venv backend, vì:
+      #   * Airflow 2.10.4 yêu cầu `sqlalchemy<2.0`, còn backend yêu cầu
+      #     `sqlalchemy>=2.0.35,<2.1` (ORM dùng `Mapped[]`) ⇒ không thể cài
+      #     chung một venv;
+      #   * vì vậy mọi test Airflow đều chạy trong venv CÓ Airflow, không cài
+      #     Airflow vào system python rồi để pytest `importorskip` (CI xanh
+      #     vacuous — đúng lỗi đã bị G2 chỉ ra).
+      # ---------------------------------------------------------------------
+      - name: Create isolated Airflow runtime venv (apache-airflow 3.3.2)
+        run: |
+          set -e
+          python -m venv "$RUNNER_TEMP/airflow-runtime"
+          "$RUNNER_TEMP/airflow-runtime/bin/pip" install --upgrade pip
+          "$RUNNER_TEMP/airflow-runtime/bin/pip" install -r "$RUNNER_TEMP/backend-requirements.txt"
+          "$RUNNER_TEMP/airflow-runtime/bin/pip" install \
+            "apache-airflow==3.3.2" \
+            "apache-airflow-providers-standard==1.20.1"
+          "$RUNNER_TEMP/airflow-runtime/bin/python" -c \
+            "import airflow, sqlalchemy; print('airflow', airflow.__version__, '| sqlalchemy', sqlalchemy.__version__)"
+
+      - name: Create Airflow 2.10.4 compatibility venv
+        # Cổng tương thích: test DAG phải chạy được với Airflow 2.10.4 (version
+        # branch từng pin) — 2.10.4 không chứa được app code (SQLAlchemy <2.0)
+        # nên chỉ dùng để chạy test CẤU TRÚC DAG.
+        run: |
+          set -e
+          python -m venv "$RUNNER_TEMP/airflow-2104"
+          "$RUNNER_TEMP/airflow-2104/bin/pip" install --upgrade pip
+          "$RUNNER_TEMP/airflow-2104/bin/pip" install "apache-airflow==2.10.4" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.11.txt"
+          "$RUNNER_TEMP/airflow-2104/bin/pip" install "pytest==8.3.5"
+          "$RUNNER_TEMP/airflow-2104/bin/python" -c "import airflow; print('airflow', airflow.__version__)"
+
+      - name: Prepare run directories
         run: |
           mkdir -p "$RUNNER_TEMP/mlflow-s11/mlruns"
           mkdir -p "$RUNNER_TEMP/s11-evidence"
+          mkdir -p "$RUNNER_TEMP/airflow-home"
 
-      - name: Airflow DAG run (isolated container metadata DB)
+      - name: Create Airflow metadata database (service Postgres, không phải DB dev)
+        env:
+          PGPASSWORD: bankops
+        run: |
+          set -e
+          psql -h postgres -U bankops -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname='bankops_test_airflow'" | grep -q 1 \
+            || psql -h postgres -U bankops -d postgres -c "CREATE DATABASE bankops_test_airflow;"
+          psql -h postgres -U bankops -d postgres -tAc \
+            "SELECT datname FROM pg_database WHERE datname IN ('bankops','bankops_test','bankops_test_airflow')"
+
+      - name: Initialise Airflow metadata DB
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow-home
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/infra/airflow/dags
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+          AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${{ env.CI_AIRFLOW_DATABASE_URL }}
+        run: |
+          "$RUNNER_TEMP/airflow-runtime/bin/airflow" db migrate
+
+      # ---------------------------------------------------------------------
+      # FIX 2 — DAG test chạy trong môi trường CÓ Airflow (không vacuous).
+      # QLK_REQUIRE_AIRFLOW=1 ⇒ thiếu Airflow là FAIL, không phải skip.
+      # ---------------------------------------------------------------------
+      - name: Airflow DAG structure tests (Airflow 3.3.2 runtime env)
         working-directory: backend
         env:
-          PATH: "/home/runner/.local/bin:$PATH"
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          QLK_INGEST_DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
+          QLK_REQUIRE_AIRFLOW: "1"
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+        run: |
+          "$RUNNER_TEMP/airflow-runtime/bin/python" -m pytest tests/test_airflow_dags.py \
+            -v --no-header --tb=short
+
+      - name: Airflow DAG structure tests (Airflow 2.10.4 compatibility gate)
+        working-directory: backend
+        env:
+          QLK_REQUIRE_AIRFLOW: "1"
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+        run: |
+          "$RUNNER_TEMP/airflow-2104/bin/python" -m pytest tests/test_airflow_dags.py \
+            -v --no-header --tb=short
+
+      - name: Airflow ingest task tests (DB + MLflow side effects)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+          QLK_INGEST_DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           QLK_INGEST_ALLOW_ANY_DB: "1"
           MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+        run: poetry run python -m pytest tests/test_airflow_ingest_tasks.py -v --no-header --tb=short
+
+      - name: Run Alembic migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+        run: poetry run alembic upgrade head
+
+      - name: Seed database
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+          APP_ENV: demo
+          DEMO_MODE: "true"
+        run: poetry run python -m app.seed
+
+      # ---------------------------------------------------------------------
+      # FIX 3 — chạy DAG THẬT trong CI (`airflow dags test`), DB đích là
+      # service Postgres của CI, không phải DB dev.
+      # ---------------------------------------------------------------------
+      - name: Airflow DAG run thật (airflow dags test)
+        working-directory: backend
+        env:
           AIRFLOW_HOME: ${{ runner.temp }}/airflow-home
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/infra/airflow/dags
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+          AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${{ env.CI_AIRFLOW_DATABASE_URL }}
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+          QLK_INGEST_DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+          QLK_INGEST_ALLOW_ANY_DB: "1"
+          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
+        run: |
+          # pipefail: `airflow dags test` fail ⇒ step fail (không được xanh vacuous
+          # vì `tee` trả 0).
+          set -euo pipefail
+          for dag_id in inventory_ingestion expense_ingestion supplier_ingestion; do
+            echo "=== airflow dags test ${dag_id} ==="
+            "$RUNNER_TEMP/airflow-runtime/bin/airflow" dags test "${dag_id}" "$(date +%Y-%m-%d)" \
+              2>&1 | tee "$RUNNER_TEMP/s11-evidence/${dag_id}.log"
+          done
+
+      - name: Ghi bằng chứng DAG run (machine-readable)
+        working-directory: backend
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow-home
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/infra/airflow/dags
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
         run: |
           set -e
-          poetry run python -m pytest tests/test_airflow_dags.py tests/test_airflow_ingest_tasks.py -v --no-header --tb=short
-          # Run the real DAG end-to-end on the isolated metadata DB (no scheduler needed).
-          airflow dags test inventory_ingestion "$(date +%Y-%m-%d)" \
-            --dagfile-path "$GITHUB_WORKSPACE/infra/airflow/dags/inventory_ingestion.py"
-          # Machine-readable DAG-run artifact (task list + config on this SHA).
-          poetry run python - <<'PY'
-          import json, os
+          "$RUNNER_TEMP/airflow-runtime/bin/python" - <<'PY'
+          import json, os, sys
           from pathlib import Path
-          import sys
-          sys.path.insert(0, "infra/airflow/dags")
+
+          import airflow
+
+          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "infra", "airflow", "dags"))
           import inventory_ingestion as dag_module
+
           dag = dag_module.dag
+          # Airflow 2.x: schedule_interval; Airflow 3.x: schedule.
+          schedule = getattr(dag, "schedule", None)
+          if schedule is None:
+              schedule = getattr(dag, "schedule_interval", None)
           payload = {
               "dag_id": dag.dag_id,
               "tasks": sorted(dag.task_ids),
               "task_count": len(dag.task_ids),
               "catchup": dag.catchup,
               "max_active_runs": dag.max_active_runs,
-              "schedule": str(dag.schedule),
+              "schedule": str(schedule),
+              "airflow_version": airflow.__version__,
               "sha": os.environ.get("GITHUB_SHA", ""),
           }
           out = Path(os.environ["RUNNER_TEMP"]) / "s11-evidence" / "dag-run.json"
@@ -106,30 +245,10 @@ jobs:
           print(out.read_text(encoding="utf-8"))
           PY
 
-      - name: Install dependencies
-        working-directory: backend
-        env:
-          PATH: "/home/runner/.local/bin:$PATH"
-        run: poetry install --no-interaction --no-ansi
-
-      - name: Run Alembic migrations
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: poetry run alembic upgrade head
-
-      - name: Seed database
-        working-directory: backend
-        env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          APP_ENV: demo
-          DEMO_MODE: "true"
-        run: poetry run python -m app.seed
-
       - name: Run ML Training
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           QLK_INGEST_MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           QLK_INGEST_MLFLOW_ARTIFACT_DIR: "$RUNNER_TEMP/mlflow-s11/mlruns"
@@ -139,38 +258,54 @@ jobs:
       - name: Promote model to Production
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
           MODEL_NAME: "DemandForecastModel"
         run: |
-          set -e
+          set -euo pipefail
           echo "=== Promoting model to Production ==="
-          poetry run python promote_model.py
+          # `promote_model.py` nằm ở GỐC repo (không phải backend/) và dùng
+          # tracking URI tương đối `./mlflow.db` ⇒ chạy với cwd là thư mục
+          # chứa MLflow store của CI, cùng interpreter của venv Poetry.
+          VENV_PY="$(poetry env info --path)/bin/python"
+          cd "$RUNNER_TEMP/mlflow-s11"
+          "$VENV_PY" "$GITHUB_WORKSPACE/promote_model.py"
+
+      - name: MLflow registry gate (fail-closed)
+        working-directory: backend
+        env:
+          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          MODEL_NAME: "DemandForecastModel"
+          E2E_EVIDENCE_PATH: "$RUNNER_TEMP/s11-evidence/e2e-registry.json"
+        run: poetry run python scripts/e2e_verify.py
 
       - name: FastAPI Serving Smoke Test
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-          MLFLOW_TRACKING_URI: "sqlite:///./mlflow.db"
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+          MLFLOW_TRACKING_URI: "sqlite:///$RUNNER_TEMP/mlflow-s11/mlflow.db"
+          # `scripts/smoke_test.py` nằm ở GỐC repo; nó import `app.*` ⇒ cần
+          # backend trên PYTHONPATH.
+          PYTHONPATH: ${{ github.workspace }}/backend
           MODEL_NAME: "DemandForecastModel"
         run: |
           echo "=== FastAPI Serving Smoke Test ==="
-          poetry run python scripts/smoke_test.py
+          poetry run python "$GITHUB_WORKSPACE/scripts/smoke_test.py"
 
       - name: Drift Detection Check
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
-        run: poetry run pytest tests/test_drift_detection.py tests/test_e2e_verify.py -v --no-header --tb=short
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
+        run: poetry run pytest tests/test_drift_detection.py -v --no-header --tb=short
 
       - name: E2E Verification Summary
         working-directory: backend
         env:
-          DATABASE_URL: "postgresql+psycopg2://bankops:bankops@postgres:5432/bankops_test"
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
         run: |
           echo "=== S11 machine-readable evidence ==="
           cat "$RUNNER_TEMP/s11-evidence/dag-run.json"
-          cat "$RUNNER_TEMP/s11-evidence/e2e-chain.json"
+          cat "$RUNNER_TEMP/s11-evidence/e2e-registry.json"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
