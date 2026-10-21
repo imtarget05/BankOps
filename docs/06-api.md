@@ -25,6 +25,7 @@ Base `/api/v1`; JSON UTF-8; UTC ISO-8601; UUID string; money decimal as string (
 | POST `/reconciliations`, GET `/reconciliations/{id}` | operator/auditor | chạy/xem |
 | GET `/audit-events` | audit.read | lọc; không edit |
 | GET `/health/live`, `/health/ready` | infra | readiness DB/worker tùy ngữ cảnh |
+| POST `/ai/reorder-point`, POST `/ai/anomaly` | inventory.read | tối ưu điểm đặt hàng + phát hiện bất thường nhu cầu (Phase 2) |
 
 Pagination `limit` 1..100 + opaque `cursor`; filter có whitelist; sort ổn định `created_at,id`. Không trả raw secret, password hash hoặc raw exception.
 
@@ -50,6 +51,32 @@ Response mẫu integrations (staging preview, không còn `simulation: true`):
 
 ```json
 {"run_id":"uuid","status":"staged","deduplicated":false,"fingerprint":"sha256...","valid_count":1,"invalid_count":0,"rows":[...],"mapping_version":1}
+```
+
+Response mẫu AI forecasting (Phase 2):
+
+```http
+POST /api/v1/ai/reorder-point
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"forecast_values":[40,50,60,50,45,55,50,45,55,50],"lead_time_days":7,"service_level":0.95,"current_stock":100}
+```
+
+```json
+{"reorder_point":373.84,"safety_stock":23.84,"avg_daily_demand":50.0,"std_demand":5.4772,"z_score":1.6449,"lead_time_days":7.0,"service_level":0.95,"needs_order":true,"suggested_order_quantity":273.84,"current_stock":100.0,"risk_level":"critical"}
+```
+
+```http
+POST /api/v1/ai/anomaly
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"actual_demand":200,"expected_demand":100,"std_demand":10}
+```
+
+```json
+{"is_anomaly":true,"z_score":10.0,"direction":"spike","severity":"high","expected_demand":100.0,"actual_demand":200.0,"threshold_z":2.5,"reason":"Demand 10.00σ above expected (spike)"}
 ```
 
 Connection detail trả về schema, last_tested_at, last_error:

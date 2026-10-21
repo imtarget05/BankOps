@@ -53,6 +53,18 @@ def calculate_reorder_point(
     """
     if not forecast_values:
         raise ValueError("forecast_values must not be empty")
+    if lead_time_days <= 0:
+        raise ValueError("lead_time_days must be greater than 0")
+    if not 0 < service_level < 1:
+        raise ValueError("service_level must be between 0 and 1 (exclusive)")
+    if current_stock < 0:
+        raise ValueError("current_stock must not be negative")
+    if min_order_quantity < 0:
+        raise ValueError("min_order_quantity must not be negative")
+    if max_stock < 0:
+        raise ValueError("max_stock must not be negative")
+    if max_stock > 0 and current_stock > max_stock:
+        raise ValueError("current_stock must not exceed max_stock")
 
     avg_demand = sum(forecast_values) / len(forecast_values)
     variance = sum((x - avg_demand) ** 2 for x in forecast_values) / len(forecast_values)
@@ -110,6 +122,8 @@ def _risk_level(
     if needs_order:
         return "warning"
     return "healthy"
+
+
 def detect_anomaly(
     actual_demand: float,
     expected_demand: float,
@@ -131,6 +145,9 @@ def detect_anomaly(
             "z_score": Decimal("0.0"),
             "direction": "unknown",
             "severity": "none",
+            "expected_demand": Decimal(str(round(expected_demand, 4))),
+            "actual_demand": Decimal(str(round(actual_demand, 4))),
+            "threshold_z": threshold_z,
             "reason": "Zero variance in forecast; cannot detect anomaly.",
         }
 

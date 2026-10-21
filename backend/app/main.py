@@ -19,6 +19,7 @@ from app.api.routes import (
     activity,
     admin_users,
     ai,
+    ai_forecasting,
     approvals,
     auth,
     auth_google,
@@ -274,6 +275,7 @@ register_error_handlers(app)
 
 def _mount_routes(target: FastAPI | APIRouter, *, include_in_schema: bool = True) -> None:
     target.include_router(ai.router, tags=["ai"], include_in_schema=include_in_schema)
+    target.include_router(ai_forecasting.router, tags=["ai-forecasting"], include_in_schema=include_in_schema)
     target.include_router(health.router, prefix="/health", tags=["health"], include_in_schema=include_in_schema)
     target.include_router(auth.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)
     target.include_router(auth_google.router, prefix="/auth", tags=["auth"], include_in_schema=include_in_schema)

@@ -18,15 +18,6 @@ from app.services.reorder_point import (
 )
 
 
-import pytest
-
-from app.services.reorder_point import (
-    _risk_level,
-    calculate_reorder_point,
-    detect_anomaly,
-)
-
-
 class TestCalculateReorderPoint:
     """T-01: Reorder point math correctness (no DB, no MLflow)."""
 
@@ -140,3 +131,56 @@ class TestRiskLevel:
             current_stock=Decimal("100"),
             reorder_point=Decimal("50"),
         ) == "healthy"
+
+
+class TestInputValidation:
+    """T-04: Invalid inputs must be rejected with a clear error."""
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"forecast_values": [], "lead_time_days": 3},
+            {"forecast_values": [10, 12], "lead_time_days": 0},
+            {"forecast_values": [10, 12], "lead_time_days": -1},
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "service_level": 0,
+            },
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "service_level": 1.0,
+            },
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "service_level": 1.5,
+            },
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "current_stock": -1,
+            },
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "min_order_quantity": -1,
+            },
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "max_stock": -1,
+            },
+            {
+                "forecast_values": [10, 12],
+                "lead_time_days": 3,
+                "current_stock": 100,
+                "max_stock": 50,
+            },
+        ],
+    )
+    def test_invalid_input_raises_value_error(self, kwargs):
+        with pytest.raises(ValueError):
+            calculate_reorder_point(**kwargs)
+
