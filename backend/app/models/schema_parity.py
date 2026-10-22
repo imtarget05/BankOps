@@ -33,34 +33,37 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.models.cash_sim import CashBalance, CashBox
 
 # --- cash_boxes.branch_id (migration 024) ---------------------------------
-CashBox.__table__.append_column(
-    Column(
-        "branch_id",
-        UUID(as_uuid=True),
-        ForeignKey("org_branches.id", ondelete="SET NULL"),
-        nullable=True,
+if "branch_id" not in CashBox.__table__.columns:
+    CashBox.__table__.append_column(
+        Column(
+            "branch_id",
+            UUID(as_uuid=True),
+            ForeignKey("org_branches.id", ondelete="SET NULL"),
+            nullable=True,
+        )
     )
-)
-CashBox.__table__.append_constraint(
-    Index("ix_cash_boxes_branch_id", "branch_id")
-)
+    CashBox.__table__.append_constraint(
+        Index("ix_cash_boxes_branch_id", "branch_id")
+    )
 
 # --- cash_balances.created_at / updated_at (migration 002) ----------------
-CashBalance.__table__.append_column(
-    Column(
-        "created_at",
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=text("now()"),
+if "created_at" not in CashBalance.__table__.columns:
+    CashBalance.__table__.append_column(
+        Column(
+            "created_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("now()"),
+        )
     )
-)
-CashBalance.__table__.append_column(
-    Column(
-        "updated_at",
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=text("now()"),
+if "updated_at" not in CashBalance.__table__.columns:
+    CashBalance.__table__.append_column(
+        Column(
+            "updated_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("now()"),
+        )
     )
-)
 
 __all__ = ["CashBalance", "CashBox"]
