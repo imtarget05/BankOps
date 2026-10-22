@@ -29,6 +29,7 @@ class CashBox(Base, TimestampMixin):
     name: str = Column(String(256), nullable=False)
     currency: str = Column(String(8), default="VND", nullable=False)
     active: bool = Column(Boolean, default=True, nullable=False)
+    branch_id = Column(UUID(as_uuid=True), ForeignKey("org_branches.id"), nullable=True)
 
     def __repr__(self):
         return f"<CashBox {self.code}>"

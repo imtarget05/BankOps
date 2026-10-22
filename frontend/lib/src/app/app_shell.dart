@@ -90,6 +90,11 @@ class _AppShellState extends State<AppShell> {
   String? _inventoryInitialStockFilter;
   String? _inventoryInitialViewMode;
   String? _inventoryInitialLocationId;
+  String? _inventoryInitialSearchQuery;
+  String? _inventoryInitialItemId;
+  String? _pendingStockLocationId;
+  String? _pendingStockItemId;
+  double? _pendingStockQuantity;
   int _inventoryNavKey = 0;
   /// Tạm thời ẩn chat bot trợ lý theo yêu cầu người dùng
   static const bool _enableAiAssistant = false;
@@ -350,28 +355,48 @@ class _AppShellState extends State<AppShell> {
           key: ValueKey('inventory-$_inventoryNavKey'),
           mode: InventoryTabMode.stock,
           onNavigate: _go,
-          onCreateStockRequest: () => _go(3, autoOpenStock: true),
+          onCreateStockRequest: ({locationId, itemId, suggestedQty}) => _go(
+            3,
+            autoOpenStock: true,
+            initialStockLocationId: locationId,
+            initialStockItemId: itemId,
+            initialStockQuantity: suggestedQty,
+          ),
           initialCategory: _inventoryInitialCategory,
           initialStockFilter: _inventoryInitialStockFilter,
           initialViewMode: _inventoryInitialViewMode,
           initialLocationId: _inventoryInitialLocationId,
+          initialSearchQuery: _inventoryInitialSearchQuery,
+          initialItemId: _inventoryInitialItemId,
         );
       case 2:
         return InventoryScreen(
           mode: InventoryTabMode.shiftWork,
           onNavigate: _go,
-          onCreateStockRequest: () => _go(3, autoOpenStock: true),
+          onCreateStockRequest: ({locationId, itemId, suggestedQty}) => _go(
+            3,
+            autoOpenStock: true,
+            initialStockLocationId: locationId,
+            initialStockItemId: itemId,
+            initialStockQuantity: suggestedQty,
+          ),
         );
       case 3:
         return RequestsScreen(
           key: ValueKey('requests-$_requestsNavId'),
           initialOpenCreateStock: _autoOpenStockRequest,
           initialOpenCreateCash: _autoOpenCashRequest,
+          initialLocationId: _pendingStockLocationId,
+          initialItemId: _pendingStockItemId,
+          initialQuantity: _pendingStockQuantity,
           onInitialOpenHandled: () {
             if (mounted) {
               setState(() {
                 _autoOpenStockRequest = false;
                 _autoOpenCashRequest = false;
+                _pendingStockLocationId = null;
+                _pendingStockItemId = null;
+                _pendingStockQuantity = null;
               });
             }
           },
@@ -437,8 +462,15 @@ class _AppShellState extends State<AppShell> {
   Future<void> _openSearch() async {
     final repo = _repository;
     if (repo == null) return;
-    final tab = await showGlobalSearch(context, repo);
-    if (tab != null && mounted) _go(tab);
+    final res = await showGlobalSearch(context, repo);
+    if (res != null && mounted) {
+      _go(
+        res.tabIndex,
+        searchQuery: res.query,
+        initialStockItemId: res.itemId,
+        locationId: res.locationId,
+      );
+    }
   }
 
   /// Điều hướng có kiểm tra quyền hiển thị theo vai trò (RoleVisibility).
@@ -451,6 +483,10 @@ class _AppShellState extends State<AppShell> {
     String? stockFilter,
     String? viewMode,
     String? locationId,
+    String? initialStockItemId,
+    String? initialStockLocationId,
+    double? initialStockQuantity,
+    String? searchQuery,
   }) {
     final session = SessionScope.maybeOf(context);
     final roles = RoleVisibility.rolesOf(session?.user);
@@ -466,11 +502,16 @@ class _AppShellState extends State<AppShell> {
         _inventoryInitialStockFilter = stockFilter;
         _inventoryInitialViewMode = viewMode;
         _inventoryInitialLocationId = locationId;
+        _inventoryInitialSearchQuery = searchQuery;
+        _inventoryInitialItemId = initialStockItemId;
       }
       if (autoOpenStock || autoOpenCash) {
         _requestsNavId++;
         _autoOpenStockRequest = autoOpenStock;
         _autoOpenCashRequest = autoOpenCash;
+        _pendingStockLocationId = initialStockLocationId;
+        _pendingStockItemId = initialStockItemId;
+        _pendingStockQuantity = initialStockQuantity;
       }
     });
   }
@@ -1152,6 +1193,31 @@ class _AppShellState extends State<AppShell> {
     );
 
     final bodyWithTicker = _withLiveTicker(body);
+    final auth = Provider.of<AuthService?>(context);
+    final isSandbox = auth?.isOfflineSession ?? false;
+    final sandboxBanner = isSandbox
+        ? Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: const Color(0xFFFEF3C7),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, size: 18, color: Color(0xFFB45309)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Chế độ Reviewer Sandbox (Mô Phỏng 3 Phút) — Dữ liệu mẫu in-memory, không ghi cơ sở dữ liệu thật.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : null;
 
     Widget mainBody;
     if (layout.isWide) {
@@ -1162,6 +1228,7 @@ class _AppShellState extends State<AppShell> {
           Expanded(
             child: Column(
               children: [
+                if (sandboxBanner != null) sandboxBanner,
                 OfflineBanner(pending: OfflineHub.instance.pending),
                 _topBar(session: session),
                 Expanded(child: bodyWithTicker),
@@ -1177,7 +1244,14 @@ class _AppShellState extends State<AppShell> {
             children: [
               _navRail(width: 88, session: session),
               const VerticalDivider(width: 8, thickness: 1),
-              Expanded(child: bodyWithTicker),
+              Expanded(
+                child: Column(
+                  children: [
+                    if (sandboxBanner != null) sandboxBanner,
+                    Expanded(child: bodyWithTicker),
+                  ],
+                ),
+              ),
             ],
           ),
           Positioned(
@@ -1191,7 +1265,12 @@ class _AppShellState extends State<AppShell> {
     } else {
       mainBody = Stack(
         children: [
-          bodyWithTicker,
+          Column(
+            children: [
+              if (sandboxBanner != null) sandboxBanner,
+              Expanded(child: bodyWithTicker),
+            ],
+          ),
           Positioned(
             top: 0,
             left: 0,

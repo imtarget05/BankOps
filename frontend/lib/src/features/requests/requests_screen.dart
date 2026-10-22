@@ -22,11 +22,17 @@ class RequestsScreen extends StatefulWidget {
     super.key,
     this.initialOpenCreateStock = false,
     this.initialOpenCreateCash = false,
+    this.initialLocationId,
+    this.initialItemId,
+    this.initialQuantity,
     this.onInitialOpenHandled,
   });
 
   final bool initialOpenCreateStock;
   final bool initialOpenCreateCash;
+  final String? initialLocationId;
+  final String? initialItemId;
+  final double? initialQuantity;
   final VoidCallback? onInitialOpenHandled;
 
   @override
@@ -47,7 +53,12 @@ class _RequestsScreenState extends State<RequestsScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           widget.onInitialOpenHandled?.call();
-          _openCreateStockDialog(data);
+          _openCreateStockDialog(
+            data,
+            initialLocationId: widget.initialLocationId,
+            initialItemId: widget.initialItemId,
+            initialQuantity: widget.initialQuantity,
+          );
         }
       });
     } else if (widget.initialOpenCreateCash) {
@@ -157,7 +168,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
     );
     final item = ApprovalItem(
       id: r.id,
-      kind: 'Kho nguyên liệu (${r.kind.name})',
+      kind: 'Kho nguyên liệu (${r.kind.label})',
       maker: r.createdByName,
       impact: '${totalQty.toInt()} đơn vị nguyên liệu',
       detail: r.reason,
@@ -323,6 +334,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
     _RequestsData data, {
     RequestKind defaultKind = RequestKind.receipt,
     bool isSpoilage = false,
+    String? initialLocationId,
+    String? initialItemId,
+    double? initialQuantity,
   }) async {
     if (data.locations.isEmpty || data.items.isEmpty) return;
 
@@ -333,6 +347,10 @@ class _RequestsScreenState extends State<RequestsScreen> {
         items: data.items,
         initialKind: defaultKind,
         isSpoilage: isSpoilage,
+        initialLocationId: initialLocationId,
+        initialItemId: initialItemId,
+        initialQuantity: initialQuantity,
+        isFromAlert: initialLocationId != null || initialItemId != null,
       ),
     );
 
@@ -1535,14 +1553,21 @@ class _RequestsScreenState extends State<RequestsScreen> {
   Widget _statusBadge(RequestStatus status) {
     Color bg = const Color(0xFF64748B).withValues(alpha: 0.12);
     Color fg = const Color(0xFF475467);
-    String label = status.name.toUpperCase();
+    String label = switch (status) {
+      RequestStatus.draft => 'BẢN NHÁP',
+      RequestStatus.pending => 'CHỜ DUYỆT',
+      RequestStatus.returned => 'CẦN SỬA',
+      RequestStatus.approved => 'ĐÃ DUYỆT',
+      RequestStatus.posted => 'ĐÃ GHI SỔ',
+      RequestStatus.rejected => 'TỪ CHỐI',
+      RequestStatus.cancelled => 'ĐÃ HỦY',
+    };
     if (status == RequestStatus.posted || status == RequestStatus.approved) {
       bg = const Color(0xFF059669).withValues(alpha: 0.12);
       fg = const Color(0xFF059669);
     } else if (status == RequestStatus.returned) {
       bg = const Color(0xFFD97706).withValues(alpha: 0.12);
       fg = const Color(0xFFD97706);
-      label = 'CẦN SỬA';
     } else if (status == RequestStatus.rejected) {
       bg = const Color(0xFFDC2626).withValues(alpha: 0.12);
       fg = const Color(0xFFDC2626);

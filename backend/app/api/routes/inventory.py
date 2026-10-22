@@ -1656,8 +1656,8 @@ async def _deduct_stock_fefo(
                 id=uuid.uuid4(),
                 location_id=location_id,
                 item_id=item.id,
-                lot_no="TON-DAU-KY",
-                expiry_date=date(2099, 12, 31),
+                lot_no="TON-DAU-KY-CHUA-KIEM-DINH",
+                expiry_date=None,  # F&B policy: không gắn hạn 2099 ảo; xếp nulls_last để ưu tiên xuất lô có HSD rõ ràng
                 quantity=Decimal(str(bal.quantity)),
                 unit_cost=Decimal(str(item.cost_price or 0)),
             )
@@ -2873,6 +2873,7 @@ async def create_stocktake(
             return cached
 
     location_id = _uuid(payload.get("location_id"), "location_id")
+    await _require_location_scope(db, user, location_id)
     loc = (await db.execute(select(Location).where(Location.id == location_id))).scalars().first()
     if not loc:
         raise AppError(404, "LOCATION_NOT_FOUND", "Không tìm thấy kho kiểm kê")
@@ -3065,6 +3066,7 @@ async def update_stocktake_lines(
     ).scalar_one_or_none()
     if not st:
         raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    await _require_location_scope(db, user, st.location_id)
     if st.status != "open":
         raise AppError(409, "STOCKTAKE_LOCKED", f"Ca đã {st.status}, không được sửa — phải tạo Phiếu điều chỉnh kiểm kê")
     if str(st.maker_id) != str(user.id):
@@ -3175,6 +3177,7 @@ async def submit_stocktake(
     ).scalar_one_or_none()
     if not st:
         raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    await _require_location_scope(db, user, st.location_id)
     if st.status != "open":
         raise AppError(409, "STATE_CONFLICT", f"Không thể submit từ trạng thái {st.status}")
     if str(st.maker_id) != str(user.id):
@@ -3226,6 +3229,7 @@ async def approve_stocktake(
     ).scalar_one_or_none()
     if not st:
         raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    await _require_location_scope(db, user, st.location_id)
     cached = _replay(key, operation)
     if cached is not None:
         return cached
@@ -3347,6 +3351,7 @@ async def reject_stocktake(
     ).scalar_one_or_none()
     if not st:
         raise AppError(404, "STOCKTAKE_NOT_FOUND", "Không tìm thấy đợt kiểm kê")
+    await _require_location_scope(db, user, st.location_id)
     if st.status != "submitted":
         raise AppError(409, "STATE_CONFLICT", f"Không thể từ chối từ trạng thái {st.status}")
     if str(st.maker_id) == str(user.id):

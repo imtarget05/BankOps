@@ -95,7 +95,9 @@ class StockRequestDialog extends StatefulWidget {
     this.initialKind = RequestKind.receipt,
     this.initialLocationId,
     this.initialItemId,
+    this.initialQuantity,
     this.isSpoilage = false,
+    this.isFromAlert = false,
   });
 
   final List<InventoryLocation> locations;
@@ -103,7 +105,9 @@ class StockRequestDialog extends StatefulWidget {
   final RequestKind initialKind;
   final String? initialLocationId;
   final String? initialItemId;
+  final double? initialQuantity;
   final bool isSpoilage;
+  final bool isFromAlert;
 
   @override
   State<StockRequestDialog> createState() => _StockRequestDialogState();
@@ -116,9 +120,10 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
   String? _sourceLocationId;
   String? _destLocationId;
 
-  final _supplierCtrl = TextEditingController(text: 'Công ty Cung ứng Nguyên liệu Trà Sữa Phúc Long');
+  final _supplierCtrl = TextEditingController();
   final _invoiceNoCtrl = TextEditingController();
   final _reasonCtrl = TextEditingController();
+  TextEditingController? _autocompleteReasonCtrl;
 
   DateTime _receivedAt = DateTime.now();
   final List<_FormStockLine> _lines = [];
@@ -137,16 +142,23 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
     }
     if (widget.locations.isNotEmpty) {
       _sourceLocationId = widget.initialLocationId ?? widget.locations.first.id;
-      if (widget.locations.length > 1) {
-        _destLocationId = widget.locations[1].id;
-      } else {
-        _destLocationId = widget.locations.first.id;
-      }
+      _destLocationId = widget.initialLocationId ??
+          (widget.locations.length > 1 ? widget.locations[1].id : widget.locations.first.id);
+    }
+
+    if (widget.isFromAlert) {
+      _supplierCtrl.text = _supplierSuggestions.first;
+      _reasonCtrl.text = 'Bổ sung tồn kho an toàn theo cảnh báo định mức';
+    } else {
+      _updateDefaultReason();
     }
 
     // Khởi tạo dòng đầu tiên
-    _addLine(initialItemId: widget.initialItemId);
-    _updateDefaultReason();
+    _addLine(
+      initialItemId: widget.initialItemId,
+      initialQuantity: widget.initialQuantity,
+      isPrefilled: widget.isFromAlert,
+    );
   }
 
   @override
@@ -162,7 +174,7 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
 
   void _updateDefaultReason() {
     if (_kind == RequestKind.receipt) {
-      _reasonCtrl.text = 'Nhập hàng từ nhà cung cấp';
+      _reasonCtrl.text = '';
     } else {
       switch (_subKind) {
         case 'spoilage':
@@ -180,9 +192,10 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
           break;
       }
     }
+    _autocompleteReasonCtrl?.text = _reasonCtrl.text;
   }
 
-  void _addLine({String? initialItemId}) {
+  void _addLine({String? initialItemId, double? initialQuantity, bool isPrefilled = false}) {
     if (widget.items.isEmpty) return;
     final item = (initialItemId != null)
         ? widget.items.firstWhere((i) => i.id == initialItemId,
@@ -192,12 +205,26 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
     final defaultPrice = (item.costPrice != null && item.costPrice! > 0)
         ? item.costPrice!.toStringAsFixed(0)
         : '50000';
+
+    String qtyText = '';
+    if (initialQuantity != null) {
+      qtyText = initialQuantity == initialQuantity.roundToDouble()
+          ? initialQuantity.toInt().toString()
+          : initialQuantity.toString();
+    } else if (isPrefilled || _kind == RequestKind.payment) {
+      qtyText = '1';
+    }
+
+    final priceText = isPrefilled ? defaultPrice : '';
+    final lotText = isPrefilled
+        ? 'LOT-${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().year.toString().substring(2)}'
+        : '';
+
     final line = _FormStockLine(
       itemId: item.id,
-      qtyCtrl: TextEditingController(text: '1'),
-      priceCtrl: TextEditingController(text: defaultPrice),
-      lotCtrl: TextEditingController(
-          text: 'LOT-${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().year.toString().substring(2)}'),
+      qtyCtrl: TextEditingController(text: qtyText),
+      priceCtrl: TextEditingController(text: priceText),
+      lotCtrl: TextEditingController(text: lotText),
       expiry: DateTime.now().add(const Duration(days: 90)),
     );
     setState(() => _lines.add(line));
@@ -265,10 +292,11 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
           return 'Kho xuất và kho đích không được trùng nhau';
         }
       }
-      if (_subKind == 'spoilage' && _reasonCtrl.text.trim().isEmpty) {
+      final reasonText = (_autocompleteReasonCtrl?.text ?? _reasonCtrl.text).trim();
+      if (_subKind == 'spoilage' && reasonText.isEmpty) {
         return 'Xuất hủy / hao hụt bắt buộc phải nêu rõ lý do';
       }
-      if (_subKind == 'internal' && _reasonCtrl.text.trim().isEmpty) {
+      if (_subKind == 'internal' && reasonText.isEmpty) {
         return 'Xuất dùng nội bộ bắt buộc phải nêu rõ lý do';
       }
       for (var i = 0; i < _lines.length; i++) {
@@ -282,12 +310,157 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
     return null;
   }
 
+  InventoryLocation? _findLocation(String? id) {
+    if (id == null) return null;
+    try {
+      return widget.locations.firstWhere((l) => l.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _outboundLabel(String subKind) => switch (subKind) {
+        'spoilage' => 'Hủy / Hao hụt',
+        'internal' => 'Nội bộ',
+        'transfer' => 'Chuyển kho',
+        _ => 'Bán hàng / Pha chế',
+      };
+
+  Future<bool?> _showReviewDialog() {
+    final theme = Theme.of(context);
+    final isReceipt = _kind == RequestKind.receipt;
+    final locName = isReceipt
+        ? (_findLocation(_destLocationId)?.name ?? _destLocationId ?? 'Kho nhận')
+        : (_findLocation(_sourceLocationId)?.name ?? _sourceLocationId ?? 'Kho xuất');
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              Icons.assignment_turned_in_outlined,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Xác nhận tạo phiếu kho',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Loại phiếu: ${isReceipt ? "Nhập kho NCC" : "Xuất kho (${_outboundLabel(_subKind)})"}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Kho áp dụng: $locName', style: const TextStyle(fontSize: 12.5)),
+                      if (isReceipt && _supplierCtrl.text.trim().isNotEmpty)
+                        Text('Nhà cung cấp: ${_supplierCtrl.text.trim()}',
+                            style: const TextStyle(fontSize: 12.5)),
+                      if (_reasonCtrl.text.trim().isNotEmpty)
+                        Text('Lý do: ${_reasonCtrl.text.trim()}',
+                            style: const TextStyle(fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Danh sách nguyên liệu (${_lines.length}):',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                for (var i = 0; i < _lines.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Text('${i + 1}. ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            _findItem(_lines[i].itemId)?.name ?? _lines[i].itemId,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        Text(
+                          '${_lines[i].quantity} ${_findItem(_lines[i].itemId)?.unit ?? ""}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                const Divider(height: 20),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    Text(
+                      'Tổng số lượng: ${_totalQuantity.toStringAsFixed(1)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (isReceipt && _totalReceiptAmount > 0)
+                      Text(
+                        'Tổng tiền: ${AppFormat.money(_totalReceiptAmount.toStringAsFixed(0), currency: "VND")}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: Color(0xFF2563EB),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Quay lại sửa'),
+          ),
+          FilledButton(
+            key: const Key('stock-confirm-save-btn'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xác nhận lưu'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     final err = _validate();
     if (err != null) {
       setState(() => _errorMessage = err);
       return;
     }
+
+    final confirmed = await _showReviewDialog();
+    if (confirmed != true || !mounted) return;
 
     setState(() {
       _errorMessage = null;
@@ -1210,11 +1383,14 @@ class _StockRequestDialogState extends State<StockRequestDialog> {
           },
           onSelected: (val) => _reasonCtrl.text = val,
           fieldViewBuilder: (ctx, ctrl, focus, onSubmitted) {
+            _autocompleteReasonCtrl = ctrl;
             return TextField(
               key: const Key('stock-reason-input'),
               controller: ctrl,
               focusNode: focus,
-              onChanged: (v) => _reasonCtrl.text = v,
+              onChanged: (v) {
+                _reasonCtrl.text = v;
+              },
               decoration: InputDecoration(
                 labelText: isRequired
                     ? 'Lý do / Diễn giải cụ thể (BẮT BUỘC) *'

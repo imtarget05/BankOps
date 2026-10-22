@@ -25,8 +25,8 @@ void main() {
                 builder: (context) => FilledButton(
                   key: const Key('open-search-btn'),
                   onPressed: () async {
-                    navigatedTo =
-                        await showGlobalSearch(context, repo);
+                    final res = await showGlobalSearch(context, repo);
+                    navigatedTo = res?.tabIndex;
                   },
                   child: const Text('Mở tìm kiếm'),
                 ),
@@ -74,8 +74,8 @@ void main() {
                 builder: (context) => FilledButton(
                   key: const Key('open-search-btn'),
                   onPressed: () async {
-                    navigatedTo =
-                        await showGlobalSearch(context, repo);
+                    final res = await showGlobalSearch(context, repo);
+                    navigatedTo = res?.tabIndex;
                   },
                   child: const Text('Mở tìm kiếm'),
                 ),

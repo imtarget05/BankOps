@@ -4,24 +4,45 @@ import '../../data/models/dtos.dart';
 import '../../data/repositories/bankops_repository.dart';
 
 /// Một kết quả tìm kiếm — bấm vào nhảy tới tab tương ứng trong AppShell.
+class GlobalSearchResult {
+  const GlobalSearchResult({
+    required this.tabIndex,
+    this.itemId,
+    this.query,
+    this.locationId,
+  });
+
+  final int tabIndex;
+  final String? itemId;
+  final String? query;
+  final String? locationId;
+}
+
 class SearchHit {
   const SearchHit({
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.tabIndex,
+    this.itemId,
+    this.query,
+    this.locationId,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final int tabIndex;
+  final String? itemId;
+  final String? query;
+  final String? locationId;
 }
 
 /// Mở dialog tìm kiếm toàn cục (nút kính lúp hoặc `Ctrl+K`).
-/// Trả về tab index cần chuyển tới, `null` nếu người dùng đóng dialog.
-Future<int?> showGlobalSearch(BuildContext context, BankOpsRepository repo) {
-  return showDialog<int>(
+/// Trả về kết quả tìm kiếm với tab index và thông tin nguyên liệu/kho nếu có.
+Future<GlobalSearchResult?> showGlobalSearch(
+    BuildContext context, BankOpsRepository repo) {
+  return showDialog<GlobalSearchResult>(
     context: context,
     builder: (_) => _GlobalSearchDialog(repo: repo),
   );
@@ -125,7 +146,12 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onTap: () => Navigator.of(context).pop(hit.tabIndex),
+                          onTap: () => Navigator.of(context).pop(GlobalSearchResult(
+                            tabIndex: hit.tabIndex,
+                            itemId: hit.itemId,
+                            query: hit.query,
+                            locationId: hit.locationId,
+                          )),
                         );
                       },
                     );
@@ -178,7 +204,8 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
             key: Key('global-search-quick-${link.$3}'),
             avatar: Icon(link.$1, size: 18),
             label: Text(link.$2),
-            onPressed: () => Navigator.of(context).pop(link.$3),
+            onPressed: () => Navigator.of(context)
+                .pop(GlobalSearchResult(tabIndex: link.$3)),
           ),
       ],
     );
@@ -251,6 +278,8 @@ class _SearchIndex {
           subtitle: 'Vật tư · Đơn vị: ${item.unit}',
           icon: Icons.inventory_2_outlined,
           tabIndex: 1,
+          itemId: item.id,
+          query: item.name,
         ));
         if (++count >= _perGroup) break;
       }
@@ -263,6 +292,8 @@ class _SearchIndex {
           subtitle: 'Kho / địa điểm',
           icon: Icons.warehouse_outlined,
           tabIndex: 1,
+          locationId: loc.id,
+          query: loc.name,
         ));
         if (++count >= _perGroup) break;
       }

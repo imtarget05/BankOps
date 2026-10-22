@@ -117,7 +117,11 @@ def assess_request_heuristic(data: dict) -> dict:
 
 def _assessment_payload(response_text: str) -> dict:
     """Parse a bounded JSON assessment; reject free-form model output."""
-    result = json.loads(response_text)
+    raw = response_text.strip()
+    match = re.search(r'\{[\s\S]*\}', raw)
+    if match:
+        raw = match.group(0)
+    result = json.loads(raw)
     if not isinstance(result, dict):
         raise ValueError('Assessment must be a JSON object')
     risk_level = result.get('risk_level')

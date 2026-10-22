@@ -717,11 +717,37 @@ class _LoginScreenState extends State<LoginScreen> {
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           ),
         ),
+        const SizedBox(height: 12),
+
+        // Lối vào Reviewer Sandbox 3 phút (Dành cho nhà tuyển dụng & đánh giá portfolio)
+        OutlinedButton.icon(
+          key: const Key('login-reviewer-sandbox-btn'),
+          onPressed: _busy
+              ? null
+              : () async {
+                  setState(() => _busy = true);
+                  try {
+                    await auth.enterReviewerSandbox();
+                  } finally {
+                    if (mounted) setState(() => _busy = false);
+                  }
+                },
+          icon: const Icon(Icons.science_outlined, color: Color(0xFFD97706)),
+          label: const Text(
+            'Trải Nghiệm Reviewer Sandbox (3 Phút — Dữ Liệu Mẫu)',
+            style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+          ),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            side: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+            backgroundColor: const Color(0xFFFFFBEB),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
         const SizedBox(height: 16),
 
-        // Quick shift accounts — hiển thị ở debug HOẶC khi web chạy ở chế độ demo
-        // (chưa cấu hình API remote) để nhân viên/quản lý có thể đăng nhập ngay.
-        if (kDebugMode || auth.apiBaseUrl.isEmpty)
+        // Quick shift accounts — hiển thị ở debug HOẶC web demo để đánh giá nhanh.
+        if (kIsWeb || kDebugMode || auth.apiBaseUrl.isEmpty)
           Row(
             children: [
               Expanded(
@@ -746,8 +772,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           .withValues(alpha: 0.6))),
             ],
           ),
-        if (kDebugMode || auth.apiBaseUrl.isEmpty) const SizedBox(height: 10),
-        if (kDebugMode || auth.apiBaseUrl.isEmpty)
+        if (kIsWeb || kDebugMode || auth.apiBaseUrl.isEmpty) const SizedBox(height: 10),
+        if (kIsWeb || kDebugMode || auth.apiBaseUrl.isEmpty)
           Wrap(
             spacing: 8,
             runSpacing: 8,

@@ -37,6 +37,8 @@ SOURCE_FILES = (
     "08-security.md",
     "09-integrations-jobs.md",
     "12-glossary.md",
+    "gap-register.md",
+    "gap-summary.md",
 )
 _STOP = {
     "cho", "cua", "cac", "voi", "trong", "khi", "nhung", "duoc", "theo",

@@ -5,16 +5,17 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.auth_utils import (
+    get_accessible_location_ids,
     get_user_capabilities,
     get_user_from_token_string,
     require_capability,
 )
 from app.database import get_db
-from app.models.cash_sim import CashRequest
+from app.models.cash_sim import CashBox, CashRequest
 from app.models.iam import User
 from app.models.inventory import (
     InventoryRequest,
@@ -38,20 +39,24 @@ async def get_approval_inbox(
         str(u.id): (u.display_name_demo or u.username)
         for u in (await db.execute(select(User))).scalars().all()
     }
-    inv_rows = (
-        await db.execute(
-            select(InventoryRequest)
-            .where(InventoryRequest.status == "submitted")
-            .order_by(InventoryRequest.submitted_at.asc())
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+
+    inv_stmt = select(InventoryRequest).where(InventoryRequest.status == "submitted")
+    if allowed_location_ids is not None:
+        inv_stmt = inv_stmt.where(
+            or_(
+                InventoryRequest.source_id.in_(allowed_location_ids),
+                InventoryRequest.dest_id.in_(allowed_location_ids),
+            )
         )
-    ).scalars().all()
-    cash_rows = (
-        await db.execute(
-            select(CashRequest)
-            .where(CashRequest.status == "submitted")
-            .order_by(CashRequest.submitted_at.asc())
+    inv_rows = (await db.execute(inv_stmt.order_by(InventoryRequest.submitted_at.asc()))).scalars().all()
+
+    cash_stmt = select(CashRequest).where(CashRequest.status == "submitted")
+    if getattr(current_user, "branch_id", None) is not None:
+        cash_stmt = cash_stmt.join(CashBox, CashRequest.cashbox_id == CashBox.id).where(
+            CashBox.branch_id == current_user.branch_id
         )
-    ).scalars().all()
+    cash_rows = (await db.execute(cash_stmt.order_by(CashRequest.submitted_at.asc()))).scalars().all()
 
     inv_ids = [r.id for r in inv_rows]
     qty_by_req: dict = {}
@@ -107,13 +112,10 @@ async def get_approval_inbox(
         )
 
     # Ca kiểm kê theo ca đang chờ duyệt (SRS §3.3)
-    stocktake_rows = (
-        await db.execute(
-            select(Stocktake)
-            .where(Stocktake.status == "submitted")
-            .order_by(Stocktake.created_at.asc())
-        )
-    ).scalars().all()
+    st_stmt = select(Stocktake).where(Stocktake.status == "submitted")
+    if allowed_location_ids is not None:
+        st_stmt = st_stmt.where(Stocktake.location_id.in_(allowed_location_ids))
+    stocktake_rows = (await db.execute(st_stmt.order_by(Stocktake.created_at.asc()))).scalars().all()
 
     for st in stocktake_rows:
         if str(st.maker_id) == str(current_user.id):

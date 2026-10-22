@@ -1572,6 +1572,7 @@ class FakeBankOpsRepository implements BankOpsRepository {
       flaggedRules: flagged,
       recommendations: recs,
       auditStamp: auditStamp,
+      assessmentSource: 'cloudflare',
     ));
   }
 

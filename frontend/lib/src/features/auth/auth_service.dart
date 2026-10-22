@@ -318,6 +318,14 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Kích hoạt phiên Reviewer Sandbox 3 phút (dùng FakeBankOpsRepository in-memory, không chạm DB máy chủ).
+  Future<bool> enterReviewerSandbox({String role = 'manager'}) async {
+    final offlineUser = role == 'staff'
+        ? _offlineDemoUser('staff_morning', 'DemoPass123!')!
+        : _offlineDemoUser('manager_demo', 'DemoPass123!')!;
+    return await _activateOfflineSession(offlineUser);
+  }
+
   /// Đăng nhập bằng username + password (dùng cho tài khoản demo hoặc nhân viên).
   Future<bool> signInWithPassword({
     required String username,

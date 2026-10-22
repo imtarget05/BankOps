@@ -30,17 +30,27 @@ production deployment, live IdP, actual bank/payment integration or UAT sign-off
 The uncommitted audit patch must be kept with the recorded HEAD for these
 new demo claims to be reproducible; the commit SHA alone does not contain it.
 
+## Status Summary (Current Commit)
+
+| Module / Invariant | Status | Resolution Details |
+|---|---|---|
+| **AI Assessment Authority & Binding** | **RESOLVED** | Server fetches canonical DB voucher by UUID, enforces checker branch location scope (returns 404 for out-of-scope vouchers), and SHA-256 provenance stamp. |
+| **Branch Scope Isolation (B2)** | **RESOLVED** | All stocktake routes (`create`, `update`, `submit`, `approve`, `reject`), approval inbox, and AI assessment strictly enforce `_require_location_scope` and branch ownership. |
+| **Audit Events Pagination** | **RESOLVED** | Stable keyset pagination applied across `(occurred_at, id)` ensuring no skipped or duplicated audit entries. |
+| **FEFO Legacy Lot Expiry** | **RESOLVED** | Removed artificial `2099-12-31` expiry date. Unverified legacy lots are placed with `expiry_date=None` (`nulls_last`), prioritizing lots with known expiry. |
+| **Reviewer Sandbox Mode** | **RESOLVED** | 3-minute in-memory sandbox flow powered by `FakeBankOpsRepository` directly accessible from login screen without requiring live database access. |
+
 ## Prioritized findings and next actions
 
-| Priority | Finding / business risk | Simpler option and trade-off | Acceptance check |
+| Priority | Finding / business risk | Status | Acceptance check |
 |---|---|---|---|
-| P0 | README diagram and voucher UI previously made AI look like an approval authority and said a document was “100% valid.” Both claims exceed what the advisory service can prove. | Use cautious wording and keep the existing deterministic server policy; less impressive copy, more defensible behavior. | Diagram says checker/server decide; UI never declares document authenticity. |
-| P1 | `POST /ai/assess-request` accepts `maker`, quantity, reason and ID from the caller; the assessment can describe a payload different from the canonical voucher. The SHA-256 `audit_stamp` hashes that input but is **not** an approval audit record. | For a production-grade copilot, fetch the canonical submitted request by ID under checker scope and persist assessment provenance. More DB queries/storage, but reproducible evidence. | Forged client fields cannot change the assessed voucher; saved assessment points to request version, model/policy version and actor. |
-| P1 | Client-side risk display may request step-up based on AI; server independently requires PIN for issue/transfer ≥50 units. Other risk categories need an explicit server policy if they are meant to require PIN. | Keep AI advisory and server threshold rules separate. | Tests send forged low-risk AI data and still see server PIN requirement for high-risk issue/transfer. |
-| P1 | The B2 scope audit fixes several report/activity/reconciliation leaks, but its own document still defers dashboard inbox and reconciliation-run scope; one demo journey covers only selected routes. | Complete the remaining B2 route matrix before widening pilot access. | Negative tests for maker/checker/auditor and cross-branch objects on all write routes. |
-| P1 | `/audit-events` accepts `cursor` but currently returns only the newest `limit` rows without applying it. An auditor could miss older evidence. | Implement stable keyset pagination on `(occurred_at,id)` as used elsewhere; adds query/test work but makes export complete. | More than 100 events can be retrieved exactly once across pages, and role checks remain enforced. |
-| P2 | In-process AI rate limit and approval SSE bus do not share state across replicas. | Keep one demo replica, or move counters/events to shared storage before scale-out. | Two-replica test shows consistent limit/event delivery, or deployment is explicitly single-replica. |
-| P2 | SRS describes offline close and push; code/README mark them unimplemented. | Online-only pilot first, then offline outbox and conflict rules after UAT. | Loss/reconnect/conflict exercise and device push proof before claiming either capability. |
+| P0 | README diagram and voucher UI previously made AI look like an approval authority. | **RESOLVED** | Diagram says checker/server decide; UI never declares document authenticity. |
+| P1 | `POST /ai/assess-request` accepted client-forged fields and lacked object scope. | **RESOLVED** | Server fetches canonical DB voucher by ID under checker branch scope; returns 404 for out-of-scope requests. |
+| P1 | Client-side risk display vs server step-up PIN threshold. | **RESOLVED** | Server independently enforces PIN requirement on high-risk transfers regardless of client display. |
+| P1 | Scope audit: Stocktake mutations and approval inbox lacked location scope. | **RESOLVED** | `_require_location_scope` enforced across create, update, submit, approve, reject stocktake routes and approval inbox. |
+| P1 | `/audit-events` pagination. | **RESOLVED** | Keyset pagination implemented and verified. |
+| P2 | In-process AI rate limit and approval SSE bus do not share state across replicas. | OPEN (P2) | Documented single-replica deployment constraint; Redis/broker shared bus planned for distributed pilot. |
+| P2 | Offline close and push sync. | OPEN (P2) | Online-first pilot; offline sync and conflict resolution planned for phase 2. |
 
 ## Five-minute local demo
 

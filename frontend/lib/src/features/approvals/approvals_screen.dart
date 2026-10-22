@@ -31,11 +31,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   final Set<String> _selected = {};
   final Map<String, AiRiskAssessment> _assessments = {};
   DataSyncController? _syncController;
+  List<AppUser>? _cachedUsers;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final repo = RepositoryScope.of(context);
+    repo.loadUsers().then((users) {
+      if (mounted) setState(() => _cachedUsers = users);
+    }).catchError((_) {});
     _future ??= repo.getApprovalInbox().then((items) {
         _loadAiAssessments(items, repo);
         return items;
@@ -111,6 +115,59 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     if (_isCash(item) && val >= 500000000) return true;
     if (!_isCash(item) && val >= 50) return true;
     return false;
+  }
+
+  bool _isAiSource(AiRiskAssessment? a) =>
+      a != null && (a.assessmentSource == 'cloudflare' || a.assessmentSource == 'ai');
+
+  String _formatMakerName(String maker) {
+    if (_cachedUsers != null) {
+      for (final u in _cachedUsers!) {
+        if (u.id == maker || u.username == maker) {
+          return u.displayName;
+        }
+      }
+    }
+    switch (maker) {
+      case '00000000-0000-4000-8000-000000000001':
+        return 'Bình Tân (Admin)';
+      case 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1':
+        return 'Nguyễn Thị Mai (Pha Chế)';
+      case 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2':
+        return 'Trần Văn Quản Lý (Cửa Hàng Trưởng)';
+      case 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3':
+        return 'Lê Khánh Chi (Kiểm Soát)';
+      case 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7':
+        return 'Lê Hoàng Nam (Quản Lý)';
+      case 'usr-maker-1':
+        return 'Nguyễn Thị Mai (Pha Chế)';
+      case 'usr-checker-1':
+        return 'Trần Văn Quản Lý (Cửa Hàng Trưởng)';
+      case 'admin':
+        return 'Trần Văn Quản Lý (Cửa Hàng Trưởng)';
+      case 'staff':
+        return 'Nguyễn Thị Mai (Pha Chế)';
+      default:
+        if (RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+            .hasMatch(maker)) {
+          return 'Nhân viên (${maker.substring(0, 8)})';
+        }
+        return maker;
+    }
+  }
+
+  String _formatImpact(String raw) {
+    var s = raw;
+    s = s.replaceAll('Kho (receipt)', 'Kho (Nhập kho)');
+    s = s.replaceAll('Kho (issue)', 'Kho (Xuất kho)');
+    s = s.replaceAll('receipt', 'Nhập kho');
+    s = s.replaceAll('issue', 'Xuất kho');
+    s = s.replaceAll('POSTED', 'ĐÃ GHI SỔ');
+    s = s.replaceAll('PENDING', 'CHỜ DUYỆT');
+    s = s.replaceAll('SUBMITTED', 'ĐÃ GỬI');
+    s = s.replaceAll('APPROVED', 'ĐÃ DUYỆT');
+    s = s.replaceAll('REJECTED', 'TỪ CHỐI');
+    return s;
   }
 
   Future<String?> _showDualControlPinDialog(
@@ -435,9 +492,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
 
   Widget _buildRiskLevelBadge(AiRiskAssessment? assessment) {
     final color = _riskColor(assessment);
+    final isAi = _isAiSource(assessment);
     final label = assessment == null
-        ? 'AI ĐANG THẨM ĐỊNH'
-        : 'AI RỦI RO ${assessment.riskLevel.toUpperCase()} (${assessment.riskScore}/100)';
+        ? 'ĐANG THẨM ĐỊNH'
+        : (isAi
+            ? 'AI RỦI RO ${assessment.riskLevel.toUpperCase()} (${assessment.riskScore}/100)'
+            : 'QUY TẮC: RỦI RO ${assessment.riskLevel.toUpperCase()} (${assessment.riskScore}/100)');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -452,7 +512,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
           Icon(
             assessment?.isHighRisk == true
                 ? Icons.shield_rounded
-                : Icons.verified_user_outlined,
+                : (isAi
+                    ? Icons.verified_user_outlined
+                    : Icons.rule_folder_outlined),
             size: 13,
             color: color,
           ),
@@ -478,6 +540,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     final assessment = _assessments[item.id];
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isAi = _isAiSource(assessment);
 
     showModalBottomSheet<void>(
       context: context,
@@ -514,28 +577,33 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.auto_awesome,
-                      color: Color(0xFF2563EB), size: 22),
+                  child: Icon(
+                    isAi ? Icons.auto_awesome : Icons.rule_folder_outlined,
+                    color: const Color(0xFF2563EB),
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Đánh giá rủi ro bằng AI',
-                        style: TextStyle(
+                      Text(
+                        isAi
+                            ? 'Đánh giá rủi ro bằng AI'
+                            : 'Đánh giá rủi ro theo quy tắc kiểm soát',
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w800),
                       ),
                       Text(
-                        'Phiếu: ${item.id} · Người lập: ${item.maker}',
+                        'Phiếu: ${item.id} · Người lập: ${_formatMakerName(item.maker)}',
                         style: TextStyle(
                             fontSize: 12,
                             color: theme.colorScheme.onSurfaceVariant),
                       ),
                       if (assessment != null)
                         Text(
-                          assessment.assessmentSource == 'cloudflare'
+                          isAi
                               ? 'AI Cloudflare · tư vấn, không quyết định phê duyệt'
                               : 'Thẩm định dự phòng theo quy tắc · AI chưa khả dụng',
                           style: TextStyle(
@@ -706,6 +774,336 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   ],
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showApprovalLinesSheet(ApprovalItem item) {
+    final repo = RepositoryScope.of(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF059669).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded,
+                      color: Color(0xFF059669), size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Chi tiết chứng từ · ${item.id}',
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Người lập: ${_formatMakerName(item.maker)} · ${_formatImpact(item.impact)}',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Đóng',
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Expanded(
+              child: FutureBuilder<List<dynamic>>(
+                future: Future.wait([
+                  repo.getStockRequests().catchError((_) => <StockRequest>[]),
+                  repo.getCashRequests().catchError((_) => <CashRequest>[]),
+                  repo.getLocations().catchError((_) => <InventoryLocation>[]),
+                ]),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: LoadingView());
+                  }
+                  final stockList =
+                      (snapshot.data?[0] as List<StockRequest>?) ?? [];
+                  final cashList =
+                      (snapshot.data?[1] as List<CashRequest>?) ?? [];
+                  final locations =
+                      (snapshot.data?[2] as List<InventoryLocation>?) ?? [];
+
+                  final stockReq =
+                      stockList.where((s) => s.id == item.id).firstOrNull;
+                  final cashReq =
+                      cashList.where((c) => c.id == item.id).firstOrNull;
+
+                  if (stockReq != null) {
+                    final locMap = {for (final l in locations) l.id: l.name};
+                    final srcLoc =
+                        locMap[stockReq.locationId] ?? stockReq.locationId;
+                    final destLoc = stockReq.destinationLocationId != null
+                        ? locMap[stockReq.destinationLocationId] ??
+                            stockReq.destinationLocationId
+                        : null;
+
+                    return ListView(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Loại phiếu: ${stockReq.kind == RequestKind.receipt ? "Nhập kho" : "Xuất kho"} (${stockReq.subKindLabel})',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 13),
+                              ),
+                              if (stockReq.effectiveSupplier != null &&
+                                  stockReq.effectiveSupplier!.isNotEmpty)
+                                Text(
+                                    'Nhà cung cấp: ${stockReq.effectiveSupplier}',
+                                    style: const TextStyle(fontSize: 12)),
+                              if (stockReq.invoiceNo != null &&
+                                  stockReq.invoiceNo!.isNotEmpty)
+                                Text('Số hóa đơn: ${stockReq.invoiceNo}',
+                                    style: const TextStyle(fontSize: 12)),
+                              Text(
+                                'Kho xuất/nhận: $srcLoc${destLoc != null ? ' ➔ $destLoc' : ''}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              if (stockReq.reason.isNotEmpty)
+                                Text(
+                                  'Lý do: ${stockReq.reason}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Danh sách dòng hàng:',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 8),
+                        if (stockReq.items.isEmpty)
+                          const Text('Không có chi tiết dòng hàng.')
+                        else
+                          for (final line in stockReq.items)
+                            Container(
+                              key: Key('approval-line-${line.itemId}'),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant
+                                      .withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          line.itemName ?? line.itemId,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 12,
+                                          runSpacing: 4,
+                                          children: [
+                                            if (line.lotNo != null &&
+                                                line.lotNo!.isNotEmpty)
+                                              Text(
+                                                'Số lô: ${line.lotNo}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: theme.colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                            if (line.expiryDate != null &&
+                                                line.expiryDate!.isNotEmpty)
+                                              Text(
+                                                'HSD: ${line.expiryDate}',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: theme.colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                            if (line.unitPrice != null &&
+                                                line.unitPrice!.isNotEmpty)
+                                              Text(
+                                                'Đơn giá: ${line.unitPrice} đ',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: theme.colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${line.quantity} ${line.unit ?? ''}'
+                                            .trim(),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13,
+                                            color: Color(0xFF059669)),
+                                      ),
+                                      if (line.totalAmount > 0)
+                                        Text(
+                                          '${line.totalAmount.toStringAsFixed(0)} đ',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: theme.colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                      ],
+                    );
+                  }
+
+                  if (cashReq != null) {
+                    return ListView(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Loại chi/thu: ${cashReq.kind == RequestKind.payment ? 'Chi quỹ tiền mặt' : 'Thu nộp quỹ'}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 13),
+                              ),
+                              Text(
+                                'Số tiền: ${cashReq.amount} ${cashReq.currency}',
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF059669)),
+                              ),
+                              Text('Lý do: ${cashReq.reason}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  // Fallback for stocktake or generic items
+                  return ListView(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Nội dung: ${item.detail}',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 8),
+                            Text('Tác động: ${_formatImpact(item.impact)}',
+                                style: const TextStyle(fontSize: 13)),
+                            if (item.approvalDetail != null) ...[
+                              const SizedBox(height: 8),
+                              Text('Dữ liệu bổ sung: ${item.approvalDetail}',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant)),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -1034,7 +1432,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                 ),
                                               ),
                                               TextSpan(
-                                                text: item.maker,
+                                                text: _formatMakerName(item.maker),
                                                 style: const TextStyle(
                                                   fontSize: 12.5,
                                                   fontWeight: FontWeight.w700,
@@ -1071,7 +1469,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                 ),
                                               ),
                                               TextSpan(
-                                                text: item.impact,
+                                                text: _formatImpact(item.impact),
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w900,
@@ -1085,7 +1483,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                         if (item.detail.isNotEmpty) ...[
                                           const SizedBox(height: 4),
                                           Text(
-                                            'Chi tiết: ${item.detail}',
+                                            'Chi tiết: ${_formatImpact(item.detail)}',
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: theme.colorScheme
@@ -1127,23 +1525,76 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                                             alpha: 0.25),
                                                   ),
                                                 ),
-                                                child: const Row(
+                                                child: Row(
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    Icon(Icons.auto_awesome,
+                                                    Icon(
+                                                        _isAiSource(_assessments[item.id])
+                                                            ? Icons.auto_awesome
+                                                            : Icons.rule_folder_outlined,
                                                         size: 12,
-                                                        color: Color(
+                                                        color: const Color(
                                                             0xFF2563EB)),
-                                                    SizedBox(width: 4),
+                                                    const SizedBox(width: 4),
                                                     Text(
-                                                      'Xem đánh giá AI',
-                                                      style: TextStyle(
+                                                      _isAiSource(_assessments[item.id])
+                                                          ? 'Xem đánh giá AI'
+                                                          : 'Xem thẩm định quy tắc',
+                                                      style: const TextStyle(
                                                         fontSize: 10.5,
                                                         fontWeight:
                                                             FontWeight.w700,
                                                         color:
                                                             Color(0xFF2563EB),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            InkWell(
+                                              key: Key(
+                                                  'btn-view-lines-${item.id}'),
+                                              onTap: () =>
+                                                  _showApprovalLinesSheet(
+                                                      item),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF059669)
+                                                      .withValues(alpha: 0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                            0xFF059669)
+                                                        .withValues(
+                                                            alpha: 0.25),
+                                                  ),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.list_alt_rounded,
+                                                        size: 12,
+                                                        color: Color(
+                                                            0xFF059669)),
+                                                    SizedBox(width: 4),
+                                                    Text(
+                                                      'Chi tiết dòng hàng',
+                                                      style: TextStyle(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color:
+                                                            Color(0xFF059669),
                                                       ),
                                                     ),
                                                   ],

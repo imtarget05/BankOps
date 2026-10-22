@@ -11,12 +11,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.auth_utils import get_current_user
+from app.api.routes.auth_utils import get_accessible_location_ids, get_current_user
 from app.config import settings
 from app.database import get_db
-from app.models.cash_sim import CashRequest
+from app.models.cash_sim import CashBox, CashRequest
 from app.models.iam import User
-from app.models.inventory import InventoryRequest, InventoryRequestLine
+from app.models.inventory import InventoryRequest, InventoryRequestLine, Stocktake
 from app.services.ai import assess_request, generate, stream_ollama
 from app.services.ai_retrieval import grounded_prompt, retrieve
 
@@ -63,11 +63,21 @@ async def assess(
     except (ValueError, TypeError, AttributeError):
         pass
 
+    allowed_location_ids = await get_accessible_location_ids(db, user)
+
     if rid is not None:
         inv_req = (
             await db.execute(select(InventoryRequest).where(InventoryRequest.id == rid))
         ).scalars().first()
         if inv_req is not None:
+            # Check location authorization
+            if allowed_location_ids is not None:
+                if (
+                    inv_req.source_id not in allowed_location_ids
+                    and inv_req.dest_id not in allowed_location_ids
+                ):
+                    raise HTTPException(404, "Không tìm thấy phiếu trong phạm vi được cấp quyền.")
+
             # Query line totals and maker identity from authoritative DB
             sums = (
                 await db.execute(
@@ -98,6 +108,11 @@ async def assess(
                 await db.execute(select(CashRequest).where(CashRequest.id == rid))
             ).scalars().first()
             if cash_req is not None:
+                if getattr(user, "branch_id", None) is not None:
+                    cbox = (await db.execute(select(CashBox).where(CashBox.id == cash_req.cashbox_id))).scalar_one_or_none()
+                    if cbox and cbox.branch_id is not None and cbox.branch_id != user.branch_id:
+                        raise HTTPException(404, "Không tìm thấy phiếu trong phạm vi được cấp quyền.")
+
                 maker_user = (
                     await db.execute(select(User).where(User.id == cash_req.maker_id))
                 ).scalars().first()
@@ -115,9 +130,29 @@ async def assess(
                 }
                 canonical_bound = True
                 request_version = cash_req.version
+            else:
+                st = (await db.execute(select(Stocktake).where(Stocktake.id == rid))).scalar_one_or_none()
+                if st is not None:
+                    if allowed_location_ids is not None and st.location_id not in allowed_location_ids:
+                        raise HTTPException(404, "Không tìm thấy phiếu trong phạm vi được cấp quyền.")
+                    maker_user = (await db.execute(select(User).where(User.id == st.maker_id))).scalars().first()
+                    maker_name = maker_user.username if maker_user else "Maker"
+                    payload = {
+                        "request_id": str(st.id),
+                        "kind": "stocktake",
+                        "amount_or_qty": "0",
+                        "maker": maker_name,
+                        "reason": st.note or "Kiểm kê ca",
+                        "context": {
+                            "request_version": 1,
+                            "status": st.status,
+                            "shift_code": st.shift_code,
+                        },
+                    }
+                    canonical_bound = True
 
-    if not canonical_bound and settings.app_env in ("production", "prod"):
-        raise HTTPException(404, f"Không tìm thấy phiếu '{body.request_id}' trong hệ thống.")
+    if not canonical_bound:
+        raise HTTPException(404, f"Không tìm thấy phiếu '{body.request_id}' trong phạm vi được cấp quyền.")
 
     async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
         result = await assess_request(payload, settings, client)
