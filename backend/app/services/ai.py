@@ -1,12 +1,14 @@
 import hashlib
 import json
 import re
+import time
 from pathlib import Path
 
 import httpx
 from fastapi import HTTPException
 
 from app.config import Settings
+from app.core.observability import flush_langfuse, record_ai_generation
 
 SYSTEM_PROMPT = Path(__file__).with_name('ai_system_prompt.txt').read_text().strip()
 UNAVAILABLE = 'Trợ lý AI chưa sẵn sàng. Vui lòng thử lại hoặc kiểm tra cấu hình máy chủ.'
