@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest.mock as mock
+
+import pytest
 from pydantic import SecretStr
 
 from app.config import Settings
@@ -112,7 +114,8 @@ def test_langfuse_client_enabled_with_keys(monkeypatch):
 @pytest.mark.asyncio
 async def test_ai_services_record_to_langfuse(monkeypatch):
     import httpx
-    from app.services.ai import assess_request, generate
+
+    from app.services.ai import generate
 
     reset_client_for_testing()
     settings = Settings(
