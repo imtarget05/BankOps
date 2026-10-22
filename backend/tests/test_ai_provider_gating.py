@@ -15,24 +15,63 @@ import socket
 import threading
 import time
 
+import uuid
+from decimal import Decimal
+
 import httpx
 import pytest
 from fastapi import HTTPException
 from pydantic import SecretStr
+from sqlalchemy import select
 
 from app.api.routes import ai as ai_routes
 from app.config import Settings
+from app.database import AsyncSessionLocal
+from app.models.iam import User
+from app.models.inventory import InventoryRequest, InventoryRequestLine, Item
 from app.services.ai import assess_request, generate, stream_ollama
 
 DEMO_PASSWORD = "DemoPass123!"
 
+GATE_REQUEST_ID = str(uuid.UUID("11111111-2222-3333-4444-555555555555"))
+
 BUSINESS_DATA = {
-    "request_id": "cr-gate-001",
+    "request_id": GATE_REQUEST_ID,
     "kind": "adjustment",
     "amount_or_qty": "35.000.000",
     "maker": "Trưởng ca Nguyễn Văn A",
     "reason": "Lệch kiểm kê ca sáng thiếu bột kem béo",
 }
+
+
+@pytest.fixture(autouse=True)
+async def seed_gate_request():
+    async with AsyncSessionLocal() as session:
+        admin_user = (await session.execute(select(User).where(User.username == "demo_admin"))).scalars().first()
+        if not admin_user:
+            return
+        existing = (await session.execute(select(InventoryRequest).where(InventoryRequest.id == uuid.UUID(GATE_REQUEST_ID)))).scalars().first()
+        if not existing:
+            item = (await session.execute(select(Item).limit(1))).scalars().first()
+            inv_req = InventoryRequest(
+                id=uuid.UUID(GATE_REQUEST_ID),
+                kind="adjustment",
+                status="submitted",
+                maker_id=admin_user.id,
+                reason="Lệch kiểm kê ca sáng thiếu bột kem béo",
+                version=1,
+                created_by=admin_user.id,
+            )
+            session.add(inv_req)
+            if item:
+                session.add(InventoryRequestLine(
+                    id=uuid.uuid4(),
+                    request_id=uuid.UUID(GATE_REQUEST_ID),
+                    item_id=item.id,
+                    quantity=Decimal("35.0"),
+                    direction="increase",
+                ))
+            await session.commit()
 
 
 def _login(client, username: str = "demo_admin") -> dict[str, str]:

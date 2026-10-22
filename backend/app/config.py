@@ -166,6 +166,12 @@ class Settings(BaseSettings):
     ai_requests_per_minute: int = Field(default=10, ge=1, le=100)
     supervisor_pin: SecretStr = SecretStr('')
 
+    # Langfuse AI Observability (opt-in)
+    langfuse_enabled: bool = Field(default=False)
+    langfuse_public_key: str = Field(default='')
+    langfuse_secret_key: SecretStr = SecretStr('')
+    langfuse_host: str = Field(default='https://cloud.langfuse.com')
+
     # Google Sign-In: OAuth client IDs are public identifiers (safe in code).
     # The web client *secret* must never be committed; it lives only in server
     # env for a future authorization-code exchange flow (not needed for the
