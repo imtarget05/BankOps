@@ -202,6 +202,7 @@ def _merge_assessment(data: dict, policy: dict, suggestion: dict, source: str, m
 
 
 async def assess_request(data: dict, settings: Settings, client: httpx.AsyncClient) -> dict:
+    t0 = time.monotonic()
     policy = assess_request_heuristic(data)
     if settings.ai_provider != 'cloudflare':
         # F1 — AI đã tắt (hoặc dùng provider khác): TUYỆT ĐỐI không gửi dữ liệu
@@ -216,7 +217,24 @@ async def assess_request(data: dict, settings: Settings, client: httpx.AsyncClie
         source = 'heuristic_fallback'
     else:
         source = 'cloudflare'
-    return _merge_assessment(data, policy, suggestion, source, settings.cloudflare_model)
+    result = _merge_assessment(data, policy, suggestion, source, settings.cloudflare_model)
+    elapsed = (time.monotonic() - t0) * 1000
+    record_ai_generation(
+        name="ai.assess_request",
+        model=result["model"],
+        input_data={"request_id": data.get("request_id"), "kind": data.get("kind")},
+        output_data={
+            "risk_level": result["risk_level"],
+            "risk_score": result["risk_score"],
+            "summary": result["summary"],
+        },
+        metadata={"assessment_source": result["assessment_source"], "provider": result["provider"]},
+        trace_id=str(data.get("request_id", "")),
+        latency_ms=elapsed,
+        settings=settings,
+    )
+    flush_langfuse(settings)
+    return result
 
 
 async def generate(message: str, settings: Settings, client: httpx.AsyncClient) -> dict:
@@ -251,6 +269,8 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
         }
     else:
         raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE})
+
+    t0 = time.monotonic()
     try:
         response = await client.post(url, headers=headers, json=payload, timeout=settings.ai_timeout_seconds)
         response.raise_for_status()
@@ -269,8 +289,31 @@ async def generate(message: str, settings: Settings, client: httpx.AsyncClient) 
         if not isinstance(answer, str) or not answer.strip():
             raise ValueError('Empty response')
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        elapsed = (time.monotonic() - t0) * 1000
+        record_ai_generation(
+            name="ai.generate_error",
+            model=model,
+            input_data=message,
+            output_data=None,
+            metadata={"provider": provider, "error": True},
+            latency_ms=elapsed,
+            settings=settings,
+        )
+        flush_langfuse(settings)
         # Never expose upstream bodies, credentials or prompts in logs/errors.
         raise HTTPException(503, {'code': AI_UNAVAILABLE_CODE, 'message': UNAVAILABLE}) from None
+
+    elapsed = (time.monotonic() - t0) * 1000
+    record_ai_generation(
+        name="ai.generate",
+        model=model,
+        input_data=message,
+        output_data=answer.strip(),
+        metadata={"provider": provider},
+        latency_ms=elapsed,
+        settings=settings,
+    )
+    flush_langfuse(settings)
     return {'answer': answer.strip(), 'provider': provider, 'model': model, 'simulation': True}
 
 
