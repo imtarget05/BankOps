@@ -3,6 +3,12 @@
 Provides non-blocking, opt-in tracing for AI operations (assess_request, generate).
 Fail-safe: when LANGFUSE_ENABLED is false or keys are not set, all tracing operations
 are silent no-ops and never raise exceptions or impede core inventory/banking flows.
+
+Singleton strategy:
+  The Langfuse client is initialized lazily and cached as a module-level singleton.
+  Caching is keyed on the (enabled, public_key, host) tuple so that config changes
+  (e.g. different test fixtures) trigger a fresh init rather than reusing stale state.
+  Call `reset_client_for_testing()` in test teardowns to force reinitialisation.
 """
 
 from __future__ import annotations
@@ -22,10 +28,12 @@ except ImportError:  # pragma: no cover
     Langfuse = None  # type: ignore[assignment,misc]
 
 _client: Any = None
-_client_initialized: bool = False
+_client_cache_key: tuple[bool, str, str] | None = None  # (enabled, pub_key, host)
 
 # Sensitive field patterns to redact in logged metadata or inputs
-_SENSITIVE_KEYS = {"password", "secret", "pin", "token", "authorization", "api_key", "supervisor_pin"}
+_SENSITIVE_KEYS = {
+    "password", "secret", "pin", "token", "authorization", "api_key", "supervisor_pin",
+}
 _CARD_OR_PIN_PATTERN = re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b")
 
 
@@ -48,38 +56,52 @@ def mask_sensitive_data(data: Any) -> Any:
     return data
 
 
-def get_langfuse_client(settings: Settings | None = None) -> Any:
-    """Retrieve or initialize singleton Langfuse client with fail-safe fallback."""
-    global _client, _client_initialized
-    if _client_initialized:
-        return _client
+def _resolve_config(settings: Settings | None) -> tuple[bool, str, str, str]:
+    """Resolve Langfuse connection config from settings or environment variables."""
+    if settings is not None:
+        enabled = settings.langfuse_enabled
+        pub_key = settings.langfuse_public_key or os.getenv("LANGFUSE_PUBLIC_KEY", "")
+        secret_key = settings.langfuse_secret_key.get_secret_value() if settings.langfuse_secret_key else ""
+        if not secret_key:
+            secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
+        host = settings.langfuse_host or os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    else:
+        enabled = os.getenv("LANGFUSE_ENABLED", "").lower() in ("1", "true", "yes")
+        pub_key = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+        secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
+        host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    return enabled, pub_key, secret_key, host
 
-    if Langfuse is None:
-        _client = None
-        _client_initialized = True
+
+def get_langfuse_client(settings: Settings | None = None) -> Any:
+    """Retrieve or initialize singleton Langfuse client with fail-safe fallback.
+
+    The singleton is keyed on (enabled, pub_key, host) so that different test
+    fixtures get independent clients rather than sharing stale state.
+    """
+    global _client, _client_cache_key
+
+    if Langfuse is None:  # pragma: no cover
         return None
 
-    # Load from settings if provided, else check environment
-    enabled = settings.langfuse_enabled if settings else os.getenv("LANGFUSE_ENABLED", "").lower() in ("1", "true", "yes")
-    pub_key = (settings.langfuse_public_key if settings else "") or os.getenv("LANGFUSE_PUBLIC_KEY", "")
-    secret_key = ""
-    if settings and settings.langfuse_secret_key:
-        secret_key = settings.langfuse_secret_key.get_secret_value()
-    if not secret_key:
-        secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
-    host = (settings.langfuse_host if settings else "") or os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    enabled, pub_key, secret_key, host = _resolve_config(settings)
+    cache_key = (enabled, pub_key, host)
 
+    if _client_cache_key == cache_key:
+        return _client
+
+    # Config changed or first call — reinitialise.
     if enabled and pub_key and secret_key:
         try:
             _client = Langfuse(public_key=pub_key, secret_key=secret_key, host=host)
-            logger.info("Langfuse tracing initialized (host=%s, pk=%s...)", host, pub_key[:8])
+            logger.info("Langfuse tracing initialised (host=%s, pk=%.8s…)", host, pub_key)
         except Exception as exc:  # pragma: no cover
-            logger.warning("Failed to initialize Langfuse client: %s", exc)
+            logger.warning("Failed to initialise Langfuse client: %s", exc)
             _client = None
     else:
         _client = None
 
-    _client_initialized = True
+    _client_cache_key = cache_key
     return _client
 
 
@@ -95,7 +117,7 @@ def record_ai_generation(
     latency_ms: float | None = None,
     settings: Settings | None = None,
 ) -> str | None:
-    """Record an AI generation span with sanitized inputs and outputs."""
+    """Record an AI generation span with sanitised inputs and outputs."""
     client = get_langfuse_client(settings)
     if client is None:
         return None
@@ -124,7 +146,7 @@ def record_ai_generation(
 
 
 def flush_langfuse(settings: Settings | None = None) -> None:
-    """Flush pending Langfuse events synchronously or queue them for ingestion."""
+    """Flush pending Langfuse events to the ingestion endpoint."""
     client = get_langfuse_client(settings)
     if client is None:
         return
@@ -135,7 +157,8 @@ def flush_langfuse(settings: Settings | None = None) -> None:
 
 
 def reset_client_for_testing() -> None:
-    """Reset the singleton client state (useful in test suites with monkeypatch)."""
-    global _client, _client_initialized
+    """Reset the singleton client state (call in test teardowns)."""
+    global _client, _client_cache_key
     _client = None
-    _client_initialized = False
+    _client_cache_key = None
+

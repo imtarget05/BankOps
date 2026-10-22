@@ -155,7 +155,7 @@ async def assess(
         raise HTTPException(404, f"Không tìm thấy phiếu '{body.request_id}' trong phạm vi được cấp quyền.")
 
     async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
-        result = await assess_request(payload, settings, client)
+        result = await assess_request(payload, settings, client, user_id=user.username)
         result["canonical_bound"] = canonical_bound
         result["request_version"] = request_version
         result["assessed_by"] = user.username

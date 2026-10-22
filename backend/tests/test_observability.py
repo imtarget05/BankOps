@@ -151,3 +151,75 @@ async def test_ai_services_record_to_langfuse(monkeypatch):
     assert mock_instance.flush.called
     reset_client_for_testing()
 
+
+@pytest.mark.asyncio
+async def test_assess_request_records_trace_for_heuristic_with_user_id(monkeypatch):
+    import httpx
+
+    from app.services.ai import assess_request
+
+    reset_client_for_testing()
+    settings = Settings(
+        database_url="sqlite://",
+        ai_provider="disabled",
+        langfuse_enabled=True,
+        langfuse_public_key="pk-lf-test",
+        langfuse_secret_key=SecretStr("sk-lf-test"),
+    )
+
+    mock_langfuse_cls = mock.MagicMock()
+    mock_instance = mock.MagicMock()
+    mock_langfuse_cls.return_value = mock_instance
+    monkeypatch.setattr("app.core.observability.Langfuse", mock_langfuse_cls)
+
+    data = {
+        "request_id": "REQ-100",
+        "kind": "adjustment",
+        "amount_or_qty": "35",
+        "maker": "Maker A",
+        "reason": "Lệch kiểm kê",
+    }
+
+    async with httpx.AsyncClient() as http_client:
+        result = await assess_request(data, settings, http_client, user_id="demo_checker")
+        assert result["risk_level"] in ("low", "medium", "high")
+        assert result["assessment_source"] == "heuristic_fallback"
+
+    assert mock_instance.generation.called
+    gen_call = mock_instance.generation.call_args.kwargs
+    assert gen_call["name"] == "ai.assess_request"
+    assert gen_call["user_id"] == "demo_checker"
+    assert gen_call["trace_id"] == "REQ-100"
+    assert gen_call["input"] == {"request_id": "REQ-100", "kind": "adjustment"}
+    assert gen_call["metadata"]["assessment_source"] == "heuristic_fallback"
+    assert mock_instance.flush.called
+    reset_client_for_testing()
+
+
+def test_config_change_reinitializes_client(monkeypatch):
+    reset_client_for_testing()
+    settings_1 = Settings(
+        database_url="sqlite://",
+        langfuse_enabled=True,
+        langfuse_public_key="pk-key-1",
+        langfuse_secret_key=SecretStr("sk-1"),
+    )
+    settings_2 = Settings(
+        database_url="sqlite://",
+        langfuse_enabled=True,
+        langfuse_public_key="pk-key-2",
+        langfuse_secret_key=SecretStr("sk-2"),
+    )
+
+    mock_langfuse_cls = mock.MagicMock()
+    monkeypatch.setattr("app.core.observability.Langfuse", mock_langfuse_cls)
+
+    client_1 = get_langfuse_client(settings_1)
+    client_2 = get_langfuse_client(settings_2)
+
+    assert mock_langfuse_cls.call_count == 2
+    assert client_1 is not None
+    assert client_2 is not None
+    reset_client_for_testing()
+
+

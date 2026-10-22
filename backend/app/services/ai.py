@@ -201,14 +201,59 @@ def _merge_assessment(data: dict, policy: dict, suggestion: dict, source: str, m
     }
 
 
-async def assess_request(data: dict, settings: Settings, client: httpx.AsyncClient) -> dict:
+def _record_assessment_trace(
+    result: dict,
+    data: dict,
+    elapsed_sec: float,
+    user_id: str | None,
+    settings: Settings,
+) -> None:
+    """Tách riêng việc ghi Langfuse trace để có thể test và tái sử dụng.
+
+    Được gọi bởi cả hai nhánh (heuristic_fallback và cloudflare) nên mọi
+    assessment đều có trace — kể cả khi AI provider là 'disabled' hoặc không
+    phải cloudflare.
+    """
+    record_ai_generation(
+        name='ai.assess_request',
+        model=result['model'],
+        # Chỉ ghi request_id + kind; không ghi amount/maker/reason để tránh
+        # rò dữ liệu nghiệp vụ nhạy cảm sang hệ thống bên ngoài.
+        input_data={'request_id': data.get('request_id'), 'kind': data.get('kind')},
+        output_data={
+            'risk_level': result['risk_level'],
+            'risk_score': result['risk_score'],
+            'summary': result['summary'],
+        },
+        metadata={
+            'assessment_source': result['assessment_source'],
+            'provider': result['provider'],
+        },
+        trace_id=str(data.get('request_id', '')),
+        user_id=user_id,
+        latency_ms=elapsed_sec * 1000,
+        settings=settings,
+    )
+    flush_langfuse(settings)
+
+
+async def assess_request(
+    data: dict,
+    settings: Settings,
+    client: httpx.AsyncClient,
+    user_id: str | None = None,
+) -> dict:
     t0 = time.monotonic()
     policy = assess_request_heuristic(data)
     if settings.ai_provider != 'cloudflare':
         # F1 — AI đã tắt (hoặc dùng provider khác): TUYỆT ĐỐI không gửi dữ liệu
         # phiếu (amount/maker/reason) ra ngoài hệ thống. Chỉ còn chính sách
         # xác định tại chỗ.
-        return _merge_assessment(data, policy, policy, 'heuristic_fallback', settings.cloudflare_model)
+        result = _merge_assessment(data, policy, policy, 'heuristic_fallback', settings.cloudflare_model)
+        # Bug-fix: ghi trace cho MỌI provider (bao gồm heuristic_fallback),
+        # không chỉ khi provider='cloudflare'.
+        _record_assessment_trace(result, data, time.monotonic() - t0, user_id, settings)
+        return result
     try:
         suggestion = await _cloudflare_assessment(data, settings, client)
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
@@ -218,22 +263,7 @@ async def assess_request(data: dict, settings: Settings, client: httpx.AsyncClie
     else:
         source = 'cloudflare'
     result = _merge_assessment(data, policy, suggestion, source, settings.cloudflare_model)
-    elapsed = (time.monotonic() - t0) * 1000
-    record_ai_generation(
-        name="ai.assess_request",
-        model=result["model"],
-        input_data={"request_id": data.get("request_id"), "kind": data.get("kind")},
-        output_data={
-            "risk_level": result["risk_level"],
-            "risk_score": result["risk_score"],
-            "summary": result["summary"],
-        },
-        metadata={"assessment_source": result["assessment_source"], "provider": result["provider"]},
-        trace_id=str(data.get("request_id", "")),
-        latency_ms=elapsed,
-        settings=settings,
-    )
-    flush_langfuse(settings)
+    _record_assessment_trace(result, data, time.monotonic() - t0, user_id, settings)
     return result
 
 
