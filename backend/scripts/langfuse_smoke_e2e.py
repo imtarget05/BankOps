@@ -13,6 +13,7 @@ import os
 import sys
 import time
 
+from dotenv import load_dotenv
 from pydantic import SecretStr
 
 from app.config import Settings
@@ -23,11 +24,17 @@ from app.core.observability import (
     reset_client_for_testing,
 )
 
+load_dotenv()
+
 
 async def main() -> int:
     pk = os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
     sk = os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
-    host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com").strip()
+    host = (
+        os.environ.get("LANGFUSE_HOST", "").strip()
+        or os.environ.get("LANGFUSE_BASE_URL", "").strip()
+        or "https://cloud.langfuse.com"
+    )
 
     if not pk or not sk:
         print("[ERROR] Missing credentials.")

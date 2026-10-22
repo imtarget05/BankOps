@@ -64,12 +64,17 @@ def _resolve_config(settings: Settings | None) -> tuple[bool, str, str, str]:
         secret_key = settings.langfuse_secret_key.get_secret_value() if settings.langfuse_secret_key else ""
         if not secret_key:
             secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
-        host = settings.langfuse_host or os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+        host = (
+            settings.langfuse_host
+            or os.getenv("LANGFUSE_HOST", "")
+            or os.getenv("LANGFUSE_BASE_URL", "")
+            or "https://cloud.langfuse.com"
+        )
     else:
         enabled = os.getenv("LANGFUSE_ENABLED", "").lower() in ("1", "true", "yes")
         pub_key = os.getenv("LANGFUSE_PUBLIC_KEY", "")
         secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
-        host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+        host = os.getenv("LANGFUSE_HOST", "") or os.getenv("LANGFUSE_BASE_URL", "") or "https://cloud.langfuse.com"
     return enabled, pub_key, secret_key, host
 
 

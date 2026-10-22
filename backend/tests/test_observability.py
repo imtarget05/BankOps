@@ -21,7 +21,7 @@ def test_mask_sensitive_data():
     sample = {
         "user": "Alice",
         "password": "SuperSecretPassword123!",
-        "auth_token": "Bearer sk-1234567890abcdef1234567890abcdef",
+        "auth_token": "Bearer token_example_sample_dummy_value",
         "notes": "Card is 4111 2222 3333 4444 here",
         "nested": {
             "pin": "1234",
