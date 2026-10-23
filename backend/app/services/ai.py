@@ -267,8 +267,8 @@ async def assess_request(
     return result
 
 
-async def generate(message: str, settings: Settings, client: httpx.AsyncClient) -> dict:
-    provider = settings.ai_provider
+async def generate(message: str, settings: Settings, client: httpx.AsyncClient, provider: str | None = None) -> dict:
+    provider = provider or settings.ai_provider
     messages = [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': message}]
     headers = {}
     if provider == 'cloudflare' and (not settings.cloudflare_account_id or not settings.cloudflare_api_token.get_secret_value()):

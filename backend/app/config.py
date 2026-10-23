@@ -86,6 +86,11 @@ class Settings(BaseSettings):
         ]
     )
 
+    ai_provider: Literal["cloudflare", "ollama", "modal_llm", "disabled"] = Field(
+        default="cloudflare",
+        description="LLM provider: cloudflare (Workers AI), ollama (local), modal_llm (Modal), disabled (no external calls)",
+    )
+
     @field_validator("allowed_origins", mode="after")
     @classmethod
     def _parse_allowed_origins(cls, v: list[str] | str) -> list[str]:

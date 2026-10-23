@@ -27,6 +27,10 @@ _windows: dict[str, tuple[float, int]] = {}
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     message: str = Field(min_length=1, max_length=2000)
+    provider: str | None = Field(
+        default=None,
+        description="AI provider: cloudflare, ollama, or disabled. Overrides default setting when provided.",
+    )
 
 
 class RequestAssessmentInput(BaseModel):
@@ -184,7 +188,7 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_user)):
         return {'answer': 'Chưa tìm thấy thông tin phù hợp trong tài liệu nghiệp vụ.', 'sources': [], 'simulation': True}
     try:
         async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
-            result = await generate(grounded_prompt(body.message, sources), settings, client)
+            result = await generate(grounded_prompt(body.message, sources), settings, client, provider=body.provider)
     except HTTPException:
         top = sources[0]
         answer = f"Theo tài liệu nghiệp vụ ({top['source']} · {top['section']}):\n{top['content']}"
@@ -208,12 +212,13 @@ async def chat_stream(body: ChatRequest, user: User = Depends(get_current_user))
             try:
                 async with httpx.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
                     prompt = grounded_prompt(body.message, sources)
-                    if settings.ai_provider == 'ollama':
+                    provider = body.provider or settings.ai_provider
+                    if provider == 'ollama':
                         async for token in stream_ollama(prompt, settings, client):
                             yield f"event: delta\ndata: {json.dumps({'text': token}, ensure_ascii=False)}\n\n"
                         yield 'event: done\ndata: {}\n\n'
                         return
-                    result = await generate(prompt, settings, client)
+                    result = await generate(prompt, settings, client, provider=provider)
                     answer = result['answer']
             except HTTPException:
                 top = sources[0]
