@@ -1,139 +1,80 @@
-name: Deploy
-
-# Tag-based deploys: prod-* → production, staging-* → staging.
-# Manual runs via workflow_dispatch (chọn environment).
-# Requires repo secret: CLOUDFLARE_API_TOKEN (least-privilege: Workers Scripts: Edit + Pages: Edit).
+name: Deploy QuanLyKho API
 
 on:
   push:
-    tags:
-      - 'prod-*'
-      - 'staging-*'
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - prod
-
-concurrency:
-  group: deploy-${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
-  cancel-in-progress: false
 
 env:
-  NODE_VERSION: '20'
-  FLUTTER_VERSION: '3.47.7'
-  WORKER_DIR: infra/cloudflare-worker
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/quanlykho-api
 
 jobs:
-  resolve:
+  build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      target: ${{ steps.set.outputs.target }}
-    steps:
-      - id: set
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref_name }}" == prod-* ]]; then
-            echo "target=prod" >> "$GITHUB_OUTPUT"
-          else
-            echo "target=staging" >> "$GITHUB_OUTPUT"
-          fi
-
-  verify:
-    needs: resolve
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.WORKER_DIR }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: ${{ env.WORKER_DIR }}/package-lock.json
-      - run: npm ci
-      - name: Type check
-        run: npm run typecheck
-      - name: Lint
-        run: npm run lint
-      - name: Dry-run deploy (binding validation)
-        run: |
-          if [ "${{ needs.resolve.outputs.target }}" = "prod" ]; then
-            npx wrangler deploy --dry-run
-          else
-            npx wrangler deploy --dry-run --env staging
-          fi
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  deploy:
-    needs: [resolve, verify]
+  deploy-azure-container-apps:
+    needs: build-and-push
     runs-on: ubuntu-latest
-    environment: ${{ needs.resolve.outputs.target == 'prod' && 'production' || 'staging' }}
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Verify required secrets are configured
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::Secret CLOUDFLARE_API_TOKEN chưa cấu hình (Settings → Secrets and variables → Actions)"
-            exit 1
-          fi
-      - uses: actions/setup-node@v4
+      - name: Azure Login
+        uses: azure/login@v2
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: ${{ env.WORKER_DIR }}/package-lock.json
-      - name: Install worker dependencies
-        working-directory: ${{ env.WORKER_DIR }}
-        run: npm ci
-      - uses: subosito/flutter-action@v2
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - name: Flutter pub get
-        working-directory: frontend
-        run: flutter pub get
-      - name: Resolve API base URL
-        id: apiurl
-        run: |
-          if [ "${{ needs.resolve.outputs.target }}" = "prod" ]; then
-            echo "url=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run" >> "$GITHUB_OUTPUT"
-            echo "site=quan-ly-kho-tra-sua" >> "$GITHUB_OUTPUT"
-          else
-            # Chưa có FastAPI staging riêng nên staging tạm dùng chung backend Modal.
-            # Deploy vào branch 'staging' = bản preview, KHÔNG đụng tới production.
-            echo "url=https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run" >> "$GITHUB_OUTPUT"
-            echo "site=quan-ly-kho-tra-sua" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Build Flutter Web (API_BASE_URL=${{ steps.apiurl.outputs.url }})
-        working-directory: frontend
-        run: |
-          flutter build web --release \
-            --dart-define=API_BASE_URL=${{ steps.apiurl.outputs.url }}
-      - name: Prepare Workers Assets bundle
-        run: |
-          rm -rf frontend/build/worker-assets
-          rsync -a --exclude='_redirects' frontend/build/web/ frontend/build/worker-assets/
-          cp infra/cloudflare-pages/_headers frontend/build/worker-assets/_headers
-      - name: Worker is legacy — không deploy
-        run: |
-          echo "Cloudflare Worker là mã legacy/compat (ADR-0001 Phase 2)."
-          echo "FastAPI trên Modal là API canonical; workflow này KHÔNG deploy Worker."
-          echo "Kiểm tra Worker chỉ chạy qua deploy-worker.yml (validate-only)."
-      - name: Deploy Workers Assets (${{ steps.apiurl.outputs.site }})
-        working-directory: ${{ env.WORKER_DIR }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy --config wrangler.tea-inventory.toml
-      - name: Smoke test (health/live)
-        run: |
-          curl -fsS -m 90 "${{ steps.apiurl.outputs.url }}/api/v1/health/live" | grep -q '"status":"alive"'
-          echo "Health check passed for ${{ needs.resolve.outputs.target }}"
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          containerAppName: quanlykho-api
+          image: ghcr.io/${{ github.repository }}/quanlykho-api:${{ github.sha }}
+          registryUrl: ghcr.io
+          registryUsername: ${{ github.actor }}
+          registryPassword: ${{ secrets.GITHUB_TOKEN }}
+          envVars: |
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SIGNING_KEY=${{ secrets.BANKOPS_SIGNING_KEY }}
+            JWT_ALGORITHM=HS256
+            CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+            CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+            SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }}
+            LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}
+            BANKOPS_SESSION_SECRET=${{ secrets.BANKOPS_SESSION_SECRET }}
+            BANKOPS_SIGNING_KEY=${{ secrets.BANKOPS_SIGNING_KEY }}
+            APP_ENV=production
+            DEMO_MODE=false

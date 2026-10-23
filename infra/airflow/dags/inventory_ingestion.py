@@ -3,7 +3,7 @@
 Chuỗi ingest thật (không có stub rỗng):
 
     read_source → parse_rows → validate_rows → load_staging
-                → train_demand_model → promote_demand_model
+                → train_demand_model → promote_demand_model → detect_drift
 
 * ``read_source``        – đọc file nguồn (mặc định ``backend/sample-data/inventory.json``).
 * ``parse_rows``         – parse bằng ``app.services.etl_engine.parse_raw_source`` (hàm thật).
@@ -12,6 +12,9 @@ Chuỗi ingest thật (không có stub rỗng):
 * ``train_demand_model`` – gọi ``app.services.ml_training.run_full_pipeline`` (MLflow thật).
 * ``promote_demand_model`` – gọi ``app.services.ml_registry.promote_model``, chỉ promote
   khi R² ≥ ngưỡng (0.7).
+* ``detect_drift``       – gọi ``app.services.drift_detection.analyze_drift``, so sánh
+  phân phối features cửa sổ tham chiếu vs hiện tại; output recommendation
+  (no_action / scheduled_retraining / data_preprocessing / investigate).
 
 Cấu hình qua biến môi trường (không hardcode path tuyệt đối):
 
@@ -22,6 +25,10 @@ Cấu hình qua biến môi trường (không hardcode path tuyệt đối):
 ``QLK_INGEST_STAGING_TABLE``     tên bảng staging (mặc định ``qlk_ingest_staging``)
 ``MLFLOW_TRACKING_URI``          tracking store MLflow
 ``QLK_INGEST_ML_N_PERIODS``      số kỳ huấn luyện (mặc định 120)
+``QLK_INGEST_DRIFT_REFERENCE_DAYS``    ngày lùi cho cửa sổ tham chiếu (mặc định 30)
+``QLK_INGEST_DRIFT_REFERENCE_WINDOW``  kích thước cửa sổ tham chiếu (mặc định 23)
+``QLK_INGEST_DRIFT_CURRENT_DAYS``      ngày lùi cho cửa sổ hiện tại (mặc định 7)
+``QLK_INGEST_DRIFT_CURRENT_WINDOW``    kích thước cửa sổ hiện tại (mặc định 7)
 ===========================  ====================================================
 """
 
@@ -50,6 +57,7 @@ from qlk_ingest.tasks import (  # noqa: E402
     read_source,
     train_demand_model,
     validate_rows,
+    detect_drift,
 )
 
 DATASET = "inventory"
@@ -100,5 +108,9 @@ with DAG(
         task_id="promote_demand_model",
         python_callable=promote_demand_model,
     )
+    detect = PythonOperator(
+        task_id="detect_drift",
+        python_callable=detect_drift,
+    )
 
-    read >> parse >> validate >> load >> train >> promote
+    read >> parse >> validate >> load >> train >> promote >> detect

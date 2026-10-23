@@ -1,25 +1,39 @@
-FROM python:3.11-slim
-
+# Build stage
+FROM python:3.11-slim AS builder
 WORKDIR /app
 
-# Install dependencies
-RUN pip install --no-cache-dir poetry
+# Install poetry
+RUN pip install --no-cache-dir poetry==1.8.3
 
-# Copy poetry files and install dependencies first (for caching)
+# Copy poetry files
 COPY pyproject.toml poetry.lock* ./
-RUN pip install --no-cache-dir poetry poetry-plugin-export && \
-    poetry export -o requirements.txt --without-hashes && \
-    pip install --no-cache-dir -r requirements.txt
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
 
-# Copy application code and documents
-COPY app ./app
-COPY docs ./docs
-COPY sample-data ./sample-data
-COPY alembic ./alembic
-COPY alembic.ini ./alembic.ini
-COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Runtime stage
+FROM python:3.11-slim AS runtime
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependencies from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application
+COPY . .
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash appuser && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-CMD ["./entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

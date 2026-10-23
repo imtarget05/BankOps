@@ -316,13 +316,8 @@ jobs:
           MODEL_NAME: "DemandForecastModel"
         run: |
           set -euo pipefail
-          echo "=== Promoting model to Production ==="
-          # `promote_model.py` nằm ở GỐC repo (không phải backend/) và dùng
-          # tracking URI tương đối `./mlflow.db` ⇒ chạy với cwd là thư mục
-          # chứa MLflow store của CI, cùng interpreter của venv Poetry.
-          VENV_PY="$(poetry env info --path)/bin/python"
-          cd "$RUNNER_TEMP/mlflow-s11"
-          "$VENV_PY" "$GITHUB_WORKSPACE/promote_model.py"
+          echo "=== Promoting model to Production (R² gate) ==="
+          poetry run python scripts/promote_model_cli.py
 
       - name: MLflow registry gate (fail-closed)
         working-directory: backend

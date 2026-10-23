@@ -278,6 +278,97 @@ def promote_demand_model(r2: float | None = None, **context: Any) -> dict[str, A
     }
 
 
+def detect_drift(
+    reference_days: int | None = None,
+    current_days: int | None = None,
+    **context: Any,
+) -> dict[str, Any]:
+    """Task: phát hiện data/concept drift trên dữ liệu staging (gọi ``app.services.drift_detection``).
+
+    So sánh phân phối features trong cửa sổ tham chiếu (reference_days) với cửa sổ hiện tại (current_days).
+    Trả về kết quả drift + recommendation (no_action / scheduled_retraining / data_preprocessing / investigate).
+    """
+    import pandas as pd
+
+    from app.services import drift_detection
+
+    # Resolve DB connection and staging table
+    database_url = cfg.resolve_database_url()
+    table_name = cfg.staging_table_name()
+
+    # Defaults: reference = 30 days ago to 7 days ago; current = last 7 days
+    ref_days_back = int(reference_days or os.environ.get("QLK_INGEST_DRIFT_REFERENCE_DAYS", "30"))
+    ref_window = int(os.environ.get("QLK_INGEST_DRIFT_REFERENCE_WINDOW", "23"))
+    cur_days_back = int(current_days or os.environ.get("QLK_INGEST_DRIFT_CURRENT_DAYS", "7"))
+    cur_window = int(os.environ.get("QLK_INGEST_DRIFT_CURRENT_WINDOW", "7"))
+
+    # Feature columns to monitor (inventory domain)
+    feature_cols = [
+        "quantity", "unit_price", "total_amount",
+        "stock_on_hand", "min_stock", "max_stock",
+    ]
+
+    import sqlalchemy as sa
+    from sqlalchemy import text
+
+    engine = staging.create_staging_engine(database_url)
+    try:
+        with engine.connect() as conn:
+            # Reference window
+            ref_query = text(f"""
+                SELECT {", ".join(feature_cols)}
+                FROM {table_name}
+                WHERE ingested_at >= CURRENT_DATE - :ref_days_back - :ref_window
+                  AND ingested_at < CURRENT_DATE - :ref_days_back
+                  AND dataset = :dataset
+            """)
+            ref_df = pd.read_sql(ref_query, conn, params={"ref_days_back": ref_days_back, "ref_window": ref_window, "dataset": "inventory"})
+
+            # Current window
+            cur_query = text(f"""
+                SELECT {", ".join(feature_cols)}
+                FROM {table_name}
+                WHERE ingested_at >= CURRENT_DATE - :cur_days_back - :cur_window
+                  AND ingested_at < CURRENT_DATE - :cur_days_back
+                  AND dataset = :dataset
+            """)
+            cur_df = pd.read_sql(cur_query, conn, params={"cur_days_back": cur_days_back, "cur_window": cur_window, "dataset": "inventory"})
+    finally:
+        engine.dispose()
+
+    if ref_df.empty or cur_df.empty:
+        return {
+            "drifted": False,
+            "reason": "insufficient_data",
+            "reference_rows": len(ref_df),
+            "current_rows": len(cur_df),
+        }
+
+    # Run drift analysis
+    result = drift_detection.analyze_drift(
+        reference_data=ref_df[feature_cols],
+        current_data=cur_df[feature_cols],
+        feature_cols=feature_cols,
+    )
+
+    # Push summary to XCom for visibility
+    return {
+        "drifted": result["drift_result"]["drifted"],
+        "drift_type": result["drift_result"]["drift_type"],
+        "overall_psi": result["drift_result"]["psi"],
+        "affected_features": result["drift_result"]["affected_features"],
+        "recommendation": result["recommendation"],
+        "reference_rows": len(ref_df),
+        "current_rows": len(cur_df),
+        "reference_days_back": ref_days_back,
+        "reference_window": ref_window,
+        "current_days_back": cur_days_back,
+        "current_window": cur_window,
+        "threshold_psi": drift_detection.PSI_THRESHOLD,
+        "ks_confirm_alpha": drift_detection.KS_CONFIRM_ALPHA,
+    }
+
+
 def dump_json(payload: Any) -> str:
     """Helper: pretty JSON (dùng cho log/evidence)."""
     return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
