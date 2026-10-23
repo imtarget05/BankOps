@@ -7,7 +7,6 @@ Directly implements and automates the 5 QA requirements specified in docs/qa/05-
 4. RBAC Leakage (Role enforcement, maker cannot access restricted data)
 5. Heuristic Fallback (Provider failure falls back safely, no 500 returned)
 """
-import pytest
 from starlette.testclient import TestClient
 
 DEMO_PASSWORD = "DemoPass123!"
@@ -142,13 +141,14 @@ def test_ai_qa_05_heuristic_fallback_when_provider_fails(client: TestClient, mon
     assert chat_body.get("simulation") is True
     assert "docs/05-workflows.md" in chat_body["sources"][0]["source"]
 
-    # 2. Assessment fallback test
+    # 2. Assessment fallback test — use a real seeded request by demo_maker
+    # (46b9dccd-3d43-45e6-b440-4c45a0b8304a is a receipt in submitted status)
     assess_resp = client.post(
         "/ai/assess-request",
         headers=headers,
         json={
-            "request_id": "REQ-HEURISTIC-TEST-001",
-            "kind": "adjustment",
+            "request_id": "46b9dccd-3d43-45e6-b440-4c45a0b8304a",
+            "kind": "receipt",
             "amount_or_qty": "15",
             "maker": "demo_maker",
             "reason": "Điều chỉnh lệch kiểm kê 15 túi trân châu",

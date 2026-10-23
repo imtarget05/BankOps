@@ -46,7 +46,7 @@ _STOP = {
     "nao", "bao", "nhieu", "day", "do", "tai", "qua", "lai", "den", "ve",
     "hay", "hoac", "neu", "thi", "ma", "chua", "roi", "rat", "lam",
     "minh", "ban", "anh", "chi", "em", "ong", "ba", "sao", "dau", "co",
-    "chut", "dung", "biet", "xem", "cho"
+    "chut", "dung", "biet", "xem"
 }
 
 BUILTIN_SOP_KNOWLEDGE = [

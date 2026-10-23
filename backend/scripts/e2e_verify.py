@@ -3,6 +3,12 @@
 The command writes a small JSON artifact that names the promoted model version.
 It intentionally does not train or bootstrap a model: S11 must prove that the
 training stage created a model before registry promotion can succeed.
+
+By default the S11 FULL chain runs (matching the S11 gate definition in
+``.github/workflows/s11-e2e-cloud-ci.yml``): promote → predict → drift →
+rollback → rollback inference (``verify_chain``). Setting
+``S11_FULL_CHAIN=0`` falls back to the registry-promote-only gate
+(``verify_registry``), which remains available for narrow registry checks.
 """
 
 from __future__ import annotations
@@ -136,7 +142,23 @@ def _write_evidence(result: dict[str, Any]) -> None:
 def main() -> int:
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///./mlflow.db")
     model_name = os.environ.get("MODEL_NAME", "DemandForecastModel")
-    result = verify_registry(tracking_uri=tracking_uri, model_name=model_name)
+    # S11 defined in .github/workflows/s11-e2e-cloud-ci.yml is the FULL
+    # fail-closed chain (registry promote + rollback + inference), so run
+    # verify_chain by default. S11_FULL_CHAIN=0 opts back into the
+    # registry-only gate.
+    full_chain = os.environ.get("S11_FULL_CHAIN", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+    if full_chain:
+        result = verify_chain(
+            tracking_uri=tracking_uri,
+            model_name=model_name,
+            predict_payload={"period": 1, "month": 6},
+        )
+    else:
+        result = verify_registry(tracking_uri=tracking_uri, model_name=model_name)
     _write_evidence(result)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "passed" else 1

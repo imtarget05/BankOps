@@ -36,7 +36,7 @@ có thể rỗng mà test vẫn xanh.  Bản này assert có ý nghĩa:
   báo lỗi, không được biến thành xanh vacuous.
 
 DAG covered:
-- ``inventory_ingestion``: read → parse → validate → load staging → train ML → promote
+- ``inventory_ingestion``: read → parse → validate → load staging → train ML → promote → detect drift
 - ``expense_ingestion`` / ``supplier_ingestion``: read → parse → validate → load staging
 """
 
@@ -96,6 +96,7 @@ INVENTORY_TASKS = [
     "load_staging",
     "train_demand_model",
     "promote_demand_model",
+    "detect_drift",
 ]
 INGEST_TASKS = ["read_source", "parse_rows", "validate_rows", "load_staging"]
 
@@ -121,6 +122,7 @@ EXPECTED_CALLABLES = {
     "load_staging",
     "train_demand_model",
     "promote_demand_model",
+    "detect_drift",
 }
 
 

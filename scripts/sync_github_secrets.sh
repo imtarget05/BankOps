@@ -56,6 +56,13 @@ if ! command -v gh >/dev/null 2>&1; then
     echo "   - BANKOPS_SESSION_SECRET"
     echo "   - SMTP_PASSWORD"
     echo "   - SUPERVISOR_PIN"
+    echo "   - ALLOWED_ORIGINS"
+    echo "   - AZURE_CLIENT_ID          (OIDC app registration client id)"
+    echo "   - AZURE_TENANT_ID          (Entra ID tenant id)"
+    echo "   - AZURE_SUBSCRIPTION_ID"
+    echo "   - AZURE_RESOURCE_GROUP"
+    echo "   - LANGFUSE_PUBLIC_KEY"
+    echo "   - LANGFUSE_SECRET_KEY"
     echo "   - API_BASE_URL:          https://imtarget05--quan-ly-kho-tra-sua-api.us-east.modal.run"
     echo ""
     echo "   Legacy (DEPRECATED) — xoá, KHÔNG set lại:"
@@ -94,6 +101,17 @@ set_secret "BANKOPS_SIGNING_KEY" "${BANKOPS_SIGNING_KEY:-}"
 set_secret "BANKOPS_SESSION_SECRET" "${BANKOPS_SESSION_SECRET:-}"
 set_secret "SMTP_PASSWORD" "${SMTP_PASSWORD:-}"
 set_secret "SUPERVISOR_PIN" "${SUPERVISOR_PIN:-}"
+set_secret "ALLOWED_ORIGINS" "${ALLOWED_ORIGINS:-}"
+# Azure OIDC (thay cho azure/login dùng `creds` JSON cũ trong deploy.yml): 3
+# giá trị định danh, KHÔNG phải client secret — federated credential cho issuer
+# https://token.actions.githubusercontent.com.
+set_secret "AZURE_CLIENT_ID" "${AZURE_CLIENT_ID:-}"
+set_secret "AZURE_TENANT_ID" "${AZURE_TENANT_ID:-}"
+set_secret "AZURE_SUBSCRIPTION_ID" "${AZURE_SUBSCRIPTION_ID:-}"
+set_secret "AZURE_RESOURCE_GROUP" "${AZURE_RESOURCE_GROUP:-}"
+# Serving observability (deploy.yml envVars LANGFUSE_*).
+set_secret "LANGFUSE_PUBLIC_KEY" "${LANGFUSE_PUBLIC_KEY:-}"
+set_secret "LANGFUSE_SECRET_KEY" "${LANGFUSE_SECRET_KEY:-}"
 # `SECRET_KEY` (tên LEGACY/DEPRECATED) KHÔNG được sync nữa: 2 tên / 1 giá trị
 # khiến rotate bị lệch, và `backend/entrypoint.sh` đã fail-fast ở production
 # khi thiếu `BANKOPS_SIGNING_KEY`. Xoá secret cũ ở GitHub:

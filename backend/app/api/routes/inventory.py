@@ -1714,6 +1714,11 @@ async def approve_request(
     """Duyệt + post trong một transaction (docs/06 cấm 202 cho approve)."""
     key = _require_key(request)
     req = await _load_request(db, request_id)
+    # Branch-scope guard: checker must have access to source/dest locations.
+    if req.source_id is not None:
+        await _require_location_scope(db, user, req.source_id)
+    if req.dest_id is not None:
+        await _require_location_scope(db, user, req.dest_id)
     cached = _replay(key, {"approve": str(req.id)})
     if cached is not None:
         return cached
@@ -2253,6 +2258,11 @@ async def reject_request(
     db: AsyncSession = Depends(get_db),
 ):
     req = await _load_request(db, request_id)
+    # Branch-scope guard: checker must have access to source/dest locations.
+    if req.source_id is not None:
+        await _require_location_scope(db, user, req.source_id)
+    if req.dest_id is not None:
+        await _require_location_scope(db, user, req.dest_id)
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
         raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt phiếu kho.")
@@ -2320,6 +2330,11 @@ async def return_request(
     db: AsyncSession = Depends(get_db),
 ):
     req = await _load_request(db, request_id)
+    # Branch-scope guard: checker must have access to source/dest locations.
+    if req.source_id is not None:
+        await _require_location_scope(db, user, req.source_id)
+    if req.dest_id is not None:
+        await _require_location_scope(db, user, req.dest_id)
     caps = await get_user_capabilities(db, user.id)
     if "inventory:approve_request" not in caps:
         raise AppError(403, "FORBIDDEN", "Bạn không có quyền phê duyệt phiếu kho.")
@@ -2621,15 +2636,18 @@ async def low_stock_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """Cảnh báo tồn thấp trà sữa (SRS §3.4): tồn cuối <= Min → đỏ, cần đặt hàng."""
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
     stmt = (
         select(Balance, StockLevel, Item, Location)
         .join(StockLevel, (StockLevel.location_id == Balance.location_id) & (StockLevel.item_id == Balance.item_id))
         .join(Item, Item.id == Balance.item_id)
         .join(Location, Location.id == Balance.location_id)
     )
+    if allowed_location_ids is not None:
+        stmt = stmt.where(StockLevel.location_id.in_(allowed_location_ids))
     if location_id:
         lid = _uuid(location_id, "location_id")
-        stmt = stmt.where(Balance.location_id == lid)
+        stmt = stmt.where(StockLevel.location_id == lid)
     rows = (await db.execute(stmt)).all()
     alerts = []
     for bal, lvl, item, loc in rows:
@@ -2665,20 +2683,23 @@ async def expiry_alerts(
     if days < 0 or days > 365:
         raise AppError(422, "INVALID_DAYS", "days phải trong 0..365")
     today = _hanoi_today()
+    allowed_location_ids = await get_accessible_location_ids(db, current_user)
+    # Đọc tồn hiện hành từ lot-balance (MỖI lô HSD) thay vì đường receipt posted
+    # cũ — đảm bảo số lượng phản chiếu tồn kho hiện tại, không phải lịch sử nhập.
     stmt = (
-        select(InventoryRequestLine, InventoryRequest, Item)
-        .join(InventoryRequest, InventoryRequest.id == InventoryRequestLine.request_id)
-        .join(Item, Item.id == InventoryRequestLine.item_id)
+        select(LotBalance, Item)
+        .join(Item, Item.id == LotBalance.item_id)
         .where(
-            InventoryRequest.kind == "receipt",
-            InventoryRequest.status == "posted",
-            InventoryRequestLine.expiry_date.is_not(None),
+            LotBalance.quantity > 0,
+            LotBalance.expiry_date.is_not(None),
         )
     )
+    if allowed_location_ids is not None:
+        stmt = stmt.where(LotBalance.location_id.in_(allowed_location_ids))
     rows = (await db.execute(stmt)).all()
     alerts = []
-    for line, _req, item in rows:
-        delta = (line.expiry_date - today).days
+    for lot, item in rows:
+        delta = (lot.expiry_date - today).days
         if delta <= days:
             alerts.append(
                 {
@@ -2686,12 +2707,12 @@ async def expiry_alerts(
                     "sku": item.sku,
                     "item_name": item.name,
                     "unit": item.unit,
-                    "lot_no": line.lot_no,
-                    "expiry_date": line.expiry_date.isoformat(),
+                    "lot_no": lot.lot_no,
+                    "expiry_date": lot.expiry_date.isoformat(),
                     "days_left": delta,
-                    "quantity": _format_qty(line.quantity),
+                    "quantity": _format_qty(lot.quantity),
                     "severity": "critical" if delta <= 0 else ("watch" if delta > 3 else "warning"),
-                    "message": f"Lô {line.lot_no or '?'} {item.name} HSD {line.expiry_date.isoformat()} (còn {delta} ngày)",
+                    "message": f"Lô {lot.lot_no or '?'} {item.name} HSD {lot.expiry_date.isoformat()} (còn {delta} ngày)",
                 }
             )
     alerts.sort(key=lambda a: (a["days_left"], a["sku"]))
@@ -2706,13 +2727,17 @@ async def put_stock_level(
     db: AsyncSession = Depends(get_db),
 ):
     """Thiết lập định mức tồn kho (min_qty, max_qty) theo (location_id, item_id)."""
+    location_id = _uuid(payload.get("location_id"), "location_id")
+    # Scope check là dòng chặn đầu tiên: 404 phải xảy ra TRƯỚC mọi side-effect,
+    # kể cả idempotency replay (replay không được bypass phạm vi chi nhánh).
+    await _require_location_scope(db, user, location_id)
+
     key = request.headers.get("Idempotency-Key")
     if key:
         cached = _replay(key, payload)
         if cached is not None:
             return cached
 
-    location_id = _uuid(payload.get("location_id"), "location_id")
     item_id = _uuid(payload.get("item_id"), "item_id")
 
     if "min_qty" not in payload:
@@ -2780,7 +2805,10 @@ async def list_stock_levels(
     db: AsyncSession = Depends(get_db),
 ):
     """Lấy danh sách các định mức tồn kho đã cấu hình."""
+    allowed_location_ids = await get_accessible_location_ids(db, user)
     stmt = select(StockLevel)
+    if allowed_location_ids is not None:
+        stmt = stmt.where(StockLevel.location_id.in_(allowed_location_ids))
     if location_id:
         stmt = stmt.where(StockLevel.location_id == _uuid(location_id, "location_id"))
     if item_id:
@@ -2808,6 +2836,7 @@ async def list_low_stock(
     db: AsyncSession = Depends(get_db),
 ):
     """So sánh số dư thực tế với định mức min_qty và trả về danh sách cảnh báo thiếu."""
+    allowed_location_ids = await get_accessible_location_ids(db, user)
     stmt = (
         select(StockLevel, Balance, Item, Location)
         .outerjoin(
@@ -2818,6 +2847,8 @@ async def list_low_stock(
         .join(Item, Item.id == StockLevel.item_id)
         .join(Location, Location.id == StockLevel.location_id)
     )
+    if allowed_location_ids is not None:
+        stmt = stmt.where(StockLevel.location_id.in_(allowed_location_ids))
     if location_id:
         stmt = stmt.where(StockLevel.location_id == _uuid(location_id, "location_id"))
     rows = (await db.execute(stmt)).all()
