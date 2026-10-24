@@ -141,13 +141,32 @@ def test_ai_qa_05_heuristic_fallback_when_provider_fails(client: TestClient, mon
     assert chat_body.get("simulation") is True
     assert "docs/05-workflows.md" in chat_body["sources"][0]["source"]
 
-    # 2. Assessment fallback test — use a real seeded request by demo_maker
-    # (46b9dccd-3d43-45e6-b440-4c45a0b8304a is a receipt in submitted status)
+    # 2. Assessment fallback test — use a real request by demo_maker
+    from datetime import date, timedelta
+    locs = client.get("/inventory/locations", headers=headers).json()["locations"]
+    loc = locs[0]["id"]
+    items = client.get("/inventory/items", headers=headers).json()["items"]
+    item = items[0]["id"]
+    import uuid
+    future = (date.today() + timedelta(days=30)).isoformat()
+    req = client.post(
+        "/inventory/requests",
+        headers={**headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "kind": "receipt",
+            "dest_id": loc,
+            "supplier": "NCC AI Test",
+            "lines": [{"item_id": item, "quantity": "15", "lot_no": "LOT-AI", "expiry_date": future}],
+        },
+    )
+    assert req.status_code == 201, req.text
+    req_id = req.json()["id"]
+
     assess_resp = client.post(
         "/ai/assess-request",
         headers=headers,
         json={
-            "request_id": "46b9dccd-3d43-45e6-b440-4c45a0b8304a",
+            "request_id": req_id,
             "kind": "receipt",
             "amount_or_qty": "15",
             "maker": "demo_maker",

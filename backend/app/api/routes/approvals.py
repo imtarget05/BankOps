@@ -9,13 +9,14 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.auth_utils import (
+    get_accessible_cashbox_ids,
     get_accessible_location_ids,
     get_user_capabilities,
     get_user_from_token_string,
     require_capability,
 )
 from app.database import get_db
-from app.models.cash_sim import CashBox, CashRequest
+from app.models.cash_sim import CashRequest
 from app.models.iam import User
 from app.models.inventory import (
     InventoryRequest,
@@ -51,11 +52,10 @@ async def get_approval_inbox(
         )
     inv_rows = (await db.execute(inv_stmt.order_by(InventoryRequest.submitted_at.asc()))).scalars().all()
 
+    allowed_cashbox_ids = await get_accessible_cashbox_ids(db, current_user)
     cash_stmt = select(CashRequest).where(CashRequest.status == "submitted")
-    if getattr(current_user, "branch_id", None) is not None:
-        cash_stmt = cash_stmt.join(CashBox, CashRequest.cashbox_id == CashBox.id).where(
-            CashBox.branch_id == current_user.branch_id
-        )
+    if allowed_cashbox_ids is not None:
+        cash_stmt = cash_stmt.where(CashRequest.cashbox_id.in_(allowed_cashbox_ids))
     cash_rows = (await db.execute(cash_stmt.order_by(CashRequest.submitted_at.asc()))).scalars().all()
 
     inv_ids = [r.id for r in inv_rows]

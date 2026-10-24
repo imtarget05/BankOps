@@ -88,7 +88,7 @@ class ApprovalInput(BaseModel):
 
 _SUBJECT = "inventory_request"
 _APPROVE_CAPS = ("inventory:create_request", "inventory:approve_request")
-_REQUEST_READ_CAPS = ("inventory:create_request", "inventory:approve_request")
+_REQUEST_READ_CAPS = ("inventory:create_request", "inventory:approve_request", "inventory:review")
 # Ghi lại quyết định của agent để reviewer đối chiếu (không dùng để đọc response).
 _write_caps = require_any_capability("inventory:create_request")
 _ZERO = Decimal("0")
@@ -361,12 +361,12 @@ async def _load_request(db: AsyncSession, request_id: str) -> InventoryRequest:
 
 
 async def _load_request_for_read(db, request_id: str, user) -> InventoryRequest:
-    """Maker reads own requests; approvers may only read their branch scope."""
+    """Maker reads own requests; approvers and reviewers may read within scope."""
     req = await _load_request(db, request_id)
     if str(req.maker_id) == str(user.id):
         return req
     caps = await get_user_capabilities(db, user.id)
-    if "inventory:approve_request" not in caps:
+    if "inventory:approve_request" not in caps and "inventory:review" not in caps:
         raise AppError(404, "NOT_FOUND", "Phiếu không tồn tại hoặc ngoài phạm vi của bạn")
     accessible_locations = await get_accessible_location_ids(db, user)
     if accessible_locations is not None and not (
