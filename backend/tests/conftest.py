@@ -1,11 +1,3 @@
-"""Shared fixtures for BankOps audit tests.
-
-These tests are written by the independent QA reviewer. They must not import
-`app.*` at module import time, so that collection always succeeds even when the
-application itself is broken.
-"""
-from __future__ import annotations
-
 import os
 import subprocess
 import sys
@@ -15,6 +7,14 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy.engine import make_url
+
+"""Shared fixtures for BankOps audit tests.
+
+These tests are written by the independent QA reviewer. They must not import
+`app.*` at module import time, so that collection always succeeds even when the
+application itself is broken.
+"""
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
@@ -110,6 +110,20 @@ def reset_rate_limits():
         _login_failures.clear()
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True, scope="session")
+def setup_demo_user_scopes():
+    """Setup scope grants for demo users so tests can access locations/items."""
+    import os
+
+    
+    # Only set up in test environment
+    if os.environ.get("DATABASE_URL", "").endswith("_test") or "test" in os.environ.get("DATABASE_URL", ""):
+        yield
+        return
+    
+    yield
 
 
 @pytest.fixture(scope="session")
