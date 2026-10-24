@@ -1,28 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: bankops-prod
-namePrefix: prod-
+namespace: quanlykho
 
 resources:
-- ../../base
+  - ../../base
+  - httproute.yaml
 
-patches:
-- patch: |-
-    - op: replace
-      path: /spec/rules/0/host
-      value: bankops.yourbank.com
-    - op: replace
-      path: /spec/tls/0/hosts/0
-      value: bankops.yourbank.com
-  target:
-    kind: Ingress
-    name: bankops-ingress
-
-# ArgoCD / GitHub Actions updates newTag on release
 images:
-- name: ghcr.io/imtarget05/bankops-api
-  newName: ghcr.io/imtarget05/bankops-api
-  newTag: sha-1bb494a
-- name: ghcr.io/imtarget05/bankops-frontend
-  newTag: v1.0.0
+  - name: ghcr.io/imtarget05/bankops-api
+    newName: ghcr.io/imtarget05/bankops-api
+    newTag: sha-1bb494a
+  - name: ghcr.io/imtarget05/bankops-frontend
+    newName: ghcr.io/imtarget05/bankops-frontend
+    newTag: v1.0.0
