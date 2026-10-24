@@ -99,7 +99,7 @@ def disposable_database_url() -> str:
     database_name = _create_isolated_database(server_url)
     url = (
         make_url(server_url)
-        .set(database=database_name)
+        .set(drivername="postgresql", database=database_name)
         .render_as_string(hide_password=False)
     )
     try:

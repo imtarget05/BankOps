@@ -141,17 +141,39 @@ def test_ai_qa_05_heuristic_fallback_when_provider_fails(client: TestClient, mon
     assert chat_body.get("simulation") is True
     assert "docs/05-workflows.md" in chat_body["sources"][0]["source"]
 
-    # 2. Assessment fallback test — use a real seeded request by demo_maker
-    # (46b9dccd-3d43-45e6-b440-4c45a0b8304a is a receipt in submitted status)
+    # 2. Assessment fallback test — dynamically create a submitted request by demo_maker
+    # so the test is hermetic and does not fail on missing seed data.
+    import uuid
+    loc_res = client.get("/inventory/locations", headers=headers)
+    loc_id = loc_res.json()["locations"][0]["id"] if loc_res.status_code == 200 and loc_res.json().get("locations") else "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1"
+    items_res = client.get("/inventory/items", headers=headers)
+    item_id = items_res.json()["items"][0]["id"] if items_res.status_code == 200 and items_res.json().get("items") else "cccccccc-cccc-4ccc-8ccc-ccccccccccc1"
+
+    created_req = client.post(
+        "/inventory/requests",
+        headers={**headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "kind": "receipt",
+            "dest_id": loc_id,
+            "reason": "Điều chỉnh lệch kiểm kê 50 túi trân châu",
+            "lines": [{"item_id": item_id, "quantity": "50"}],
+        },
+    )
+    if created_req.status_code in (200, 201):
+        target_req_id = created_req.json()["id"]
+        client.post(f"/inventory/requests/{target_req_id}/submit", headers={**headers, "Idempotency-Key": str(uuid.uuid4())}, json={})
+    else:
+        target_req_id = "46b9dccd-3d43-45e6-b440-4c45a0b8304a"
+
     assess_resp = client.post(
         "/ai/assess-request",
         headers=headers,
         json={
-            "request_id": "46b9dccd-3d43-45e6-b440-4c45a0b8304a",
+            "request_id": target_req_id,
             "kind": "receipt",
-            "amount_or_qty": "15",
+            "amount_or_qty": "50",
             "maker": "demo_maker",
-            "reason": "Điều chỉnh lệch kiểm kê 15 túi trân châu",
+            "reason": "Điều chỉnh lệch kiểm kê 50 túi trân châu",
         },
     )
     assert assess_resp.status_code == 200, assess_resp.text
