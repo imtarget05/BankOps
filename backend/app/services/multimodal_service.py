@@ -20,7 +20,6 @@ import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -154,7 +153,7 @@ def parse_invoice_text(text: str) -> InvoiceExtraction:
     if subtotal_m:
         subtotal = Decimal(re.sub(r"[^\d\.]", "", subtotal_m.group(1)))
     else:
-        subtotal = sum((l.line_total for l in line_items), Decimal("0"))
+        subtotal = sum((item.line_total for item in line_items), Decimal("0"))
 
     tax_m = re.search(
         r"(?:Thuế GTGT|VAT|Tax|Tiền thuế)(?:\s*\([^)]*\))?:\s*([\d\.,]+)",
@@ -223,7 +222,7 @@ def validate_invoice_math(extraction: InvoiceExtraction) -> ValidationReport:
                 f"= {expected_line} does not match stated line total {line.line_total}"
             )
 
-    sum_lines = sum((l.line_total for l in extraction.line_items), Decimal("0"))
+    sum_lines = sum((item.line_total for item in extraction.line_items), Decimal("0"))
     subtotal_diff = abs(sum_lines - extraction.subtotal)
     subtotal_valid = subtotal_diff <= Decimal("0.05")
     if not subtotal_valid:

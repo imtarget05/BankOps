@@ -16,7 +16,7 @@ from app.api.routes.auth_utils import (
     require_capability,
 )
 from app.database import get_db
-from app.models.cash_sim import CashBox, CashRequest
+from app.models.cash_sim import CashRequest
 from app.models.iam import User
 from app.models.inventory import (
     InventoryRequest,

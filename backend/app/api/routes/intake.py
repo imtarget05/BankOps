@@ -12,7 +12,6 @@ Guarantees:
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -23,7 +22,6 @@ from app.database import get_db
 from app.models.iam import User
 from app.schemas.invoice_intake import (
     CreateDraftFromExtractionRequest,
-    InvoiceExtraction,
     InvoiceIntakeResponse,
 )
 from app.services import multimodal_service
@@ -49,7 +47,7 @@ async def extract_invoice_document(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Lỗi phân tích tài liệu: {exc}",
-        )
+        ) from exc
 
     report = await multimodal_service.match_catalog_items(db, extraction)
     status_str = "extracted" if report.is_valid else "validation_failed"
@@ -90,7 +88,7 @@ async def create_draft_from_extraction(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
-        )
+        ) from exc
 
     return {
         "draft_request_id": str(req.id),
@@ -122,7 +120,7 @@ async def process_and_create_draft(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Lỗi phân tích tài liệu: {exc}",
-        )
+        ) from exc
 
     report = await multimodal_service.match_catalog_items(db, extraction)
     draft_id = None

@@ -15,19 +15,14 @@ Verifies:
 
 from __future__ import annotations
 
-import io
 import uuid
 from decimal import Decimal
-
-import pytest
 
 from app.schemas.invoice_intake import (
     InvoiceExtraction,
     InvoiceLineItem,
-    ValidationReport,
 )
 from app.services.multimodal_service import (
-    parse_invoice_bytes,
     parse_invoice_text,
     validate_invoice_math,
 )
