@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bankops-config
+  namespace: quanlykho
+data:
+  APP_ENV: "production"
+  LOG_LEVEL: "INFO"
+  PORT: "8000"
+  AI_PROVIDER: "disabled"
+  ALLOWED_ORIGINS: "*"
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8000"
